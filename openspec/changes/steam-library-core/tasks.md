@@ -41,9 +41,9 @@ Each unit uses a conventional commit (for example `feat(config): validate Steam 
 
 ## Phase 3: Tools / Stdio
 
-- [ ] 3.1 RED: test invalid search/appId/count never contacts Steam; GREEN: implement `src/tools/schemas.ts`; REFACTOR: share bounds.
-- [ ] 3.2 RED: contract-test five names, normalized outputs, safe errors; GREEN: implement `src/tools/register-steam-tools.ts`; REFACTOR: keep adapters thin.
-- [ ] 3.3 RED: test malformed frames, protocol-only stdout, shutdown errors, and no secrets; GREEN: implement `src/server.ts`/`src/index.ts`; REFACTOR: preserve injection.
+- [x] 3.1 RED: test invalid search/appId/count never contacts Steam; GREEN: implement `src/tools/schemas.ts`; REFACTOR: share bounds.
+- [x] 3.2 RED: contract-test five names, normalized outputs, safe errors; GREEN: implement `src/tools/register-steam-tools.ts`; REFACTOR: keep adapters thin.
+- [x] 3.3 RED: test malformed frames, protocol-only stdout, shutdown errors, and no secrets; GREEN: implement `src/server.ts`/`src/index.ts`; REFACTOR: preserve injection.
 
 ## Phase 4: Verification / Documentation
 
