@@ -47,5 +47,5 @@ Each unit uses a conventional commit (for example `feat(config): validate Steam 
 
 ## Phase 4: Verification / Documentation
 
-- [ ] 4.1 RED: add stdio E2E spawn and README setup/security tests; GREEN: complete `tests/**/*.test.ts`/`README.md`; REFACTOR: remove duplication.
-- [ ] 4.2 Run quality gates, record evidence, and push each verified commit; rollback only its named unit boundary.
+- [x] 4.1 RED: add stdio E2E spawn and README setup/security tests; GREEN: complete `tests/**/*.test.ts`/`README.md`; REFACTOR: remove duplication.
+- [x] 4.2 Run quality gates, record evidence, and push each verified commit; rollback only its named unit boundary.
