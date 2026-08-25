@@ -1,0 +1,43 @@
+schema: spec-driven
+
+context: |
+  Project: Steam Library MCP 2
+  Stack: Empty repository; intended public TypeScript MCP project (no manifest yet)
+  Architecture: Not established; implementation work has not started
+  Testing: No test runner or quality configuration detected
+  Persistence: Hybrid OpenSpec files plus Engram observations
+
+strict_tdd: false
+
+testing:
+  test_runner: null
+  test_command: ""
+  unit: false
+  integration: false
+  e2e: false
+  coverage: false
+  linter: false
+  type_checker: false
+  formatter: false
+  reason: "No source files, package manifest, test runner, or quality configuration exists yet."
+
+rules:
+  proposal:
+    - Define scope and non-goals before implementation.
+  specs:
+    - Use Given/When/Then scenarios and RFC 2119 keywords where applicable.
+  design:
+    - Document architecture decisions and rationale.
+  tasks:
+    - Group tasks by phase and keep each task independently verifiable.
+  apply:
+    guidelines:
+      - Follow conventions established by the implementation.
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Preserve archived changes as an audit trail.
