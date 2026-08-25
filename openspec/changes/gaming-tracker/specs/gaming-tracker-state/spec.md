@@ -55,6 +55,3 @@ Malformed input MUST return `{error:{code:'INVALID_INPUT',message}}` before Stea
 - GIVEN `appId` is missing, non-integer, or non-positive
 - WHEN any mark tool receives it
 - THEN validation fails before external or database access
-
-
-
