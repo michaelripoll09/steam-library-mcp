@@ -35,9 +35,9 @@ Each unit uses a conventional commit (for example `feat(config): validate Steam 
 
 ## Phase 2: Steam Access / Service
 
-- [ ] 2.1 RED: test URL encoding, 10-second abort, HTTP/JSON/DTO failures, and no failure caching; GREEN: implement `src/steam/schemas.ts`/`client.ts`; REFACTOR: isolate fetch/clock.
-- [ ] 2.2 RED: test TTL hit/expiry, SteamID keying, and failed refresh; GREEN: implement `src/cache/ttl-cache.ts`; REFACTOR: simplify expiry.
-- [ ] 2.3 RED: test normalization, search, lookup, recent count, and stats; GREEN: implement `src/services/steam-service.ts`; REFACTOR: isolate DTOs.
+- [x] 2.1 RED: test URL encoding, 10-second abort, HTTP/JSON/DTO failures, and no failure caching; GREEN: implement `src/steam/schemas.ts`/`client.ts`; REFACTOR: isolate fetch/clock.
+- [x] 2.2 RED: test TTL hit/expiry, SteamID keying, and failed refresh; GREEN: implement `src/cache/ttl-cache.ts`; REFACTOR: simplify expiry.
+- [x] 2.3 RED: test normalization, search, lookup, recent count, and stats; GREEN: implement `src/services/steam-service.ts`; REFACTOR: isolate DTOs.
 
 ## Phase 3: Tools / Stdio
 
