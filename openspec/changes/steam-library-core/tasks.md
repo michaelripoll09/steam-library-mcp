@@ -29,9 +29,9 @@ Each unit uses a conventional commit (for example `feat(config): validate Steam 
 
 ## Phase 1: Foundation / Strict TDD
 
-- [ ] 1.1 RED: add failing Vitest smoke test; GREEN: install Vitest and create package/ESM/TypeScript/quality configs; REFACTOR: set `openspec/config.yaml` strict_tdd=true and exact quality commands after installation.
-- [ ] 1.2 RED: test missing settings remediation and secret absence; GREEN: implement `src/config.ts`; REFACTOR: centralize constants/errors.
-- [ ] 1.3 RED: test stable models and hidden causes; GREEN: implement `src/domain/models.ts`/`src/errors.ts`; REFACTOR: enforce readonly and safe serialization.
+- [x] 1.1 RED: add failing Vitest smoke test; GREEN: install Vitest and create package/ESM/TypeScript/quality configs; REFACTOR: set `openspec/config.yaml` strict_tdd=true and exact quality commands after installation.
+- [x] 1.2 RED: test missing settings remediation and secret absence; GREEN: implement `src/config.ts`; REFACTOR: centralize constants/errors.
+- [x] 1.3 RED: test stable models and hidden causes; GREEN: implement `src/domain/models.ts`/`src/errors.ts`; REFACTOR: enforce readonly and safe serialization.
 
 ## Phase 2: Steam Access / Service
 
@@ -49,4 +49,3 @@ Each unit uses a conventional commit (for example `feat(config): validate Steam 
 
 - [ ] 4.1 RED: add stdio E2E spawn and README setup/security tests; GREEN: complete `tests/**/*.test.ts`/`README.md`; REFACTOR: remove duplication.
 - [ ] 4.2 Run quality gates, record evidence, and push each verified commit; rollback only its named unit boundary.
-
