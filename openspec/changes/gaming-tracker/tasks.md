@@ -34,7 +34,7 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: SQLite Persistence
 
-- [ ] 2.1 RED: test migration recovery, repeatability, checksum mismatch, unsupported newer version, and atomic failure; GREEN: create `src/tracker/sqlite/database.ts` and `migrations.ts`; REFACTOR: isolate immutable checksums and `BEGIN IMMEDIATE`.
+- [x] 2.1 RED: test migration recovery, repeatability, checksum mismatch, unsupported newer version, and atomic failure; GREEN: create `src/tracker/sqlite/database.ts` and `migrations.ts`; REFACTOR: isolate immutable checksums and `BEGIN IMMEDIATE`.
 - [ ] 2.2 RED: test parameter binding, unique partial `playing` index, ordering, and rollback; GREEN: create `tracker-repository.ts`; REFACTOR: expose transaction-scoped writer only.
 
 ## Phase 3: Service
