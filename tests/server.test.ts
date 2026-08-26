@@ -31,7 +31,7 @@ function createSteamClient(): SteamApiClient {
 }
 
 describe("MCP server composition", () => {
-  test("connects an injected Steam service through the metadata-extended MCP tools", async () => {
+  test("lists the complete thirteen-tool Steam, tracker, and metadata surface", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
       config,

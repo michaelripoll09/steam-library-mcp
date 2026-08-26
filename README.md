@@ -1,7 +1,7 @@
 # Steam Library MCP
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server for a
-single Steam library with explicit local game-progress tracking. It exposes eleven tools over stdio:
+single Steam library with explicit local game-progress tracking and owned-game metadata. It exposes thirteen tools over stdio:
 
 - `steam_get_library`
 - `steam_search_library`
@@ -10,8 +10,9 @@ single Steam library with explicit local game-progress tracking. It exposes elev
 - `steam_get_library_stats`
 - `gaming_get_backlog`, `gaming_get_current_game`, and `gaming_get_completed`
 - `gaming_mark_playing`, `gaming_mark_completed`, and `gaming_mark_dropped`
+- `steam_get_game_metadata` and `steam_query_library_metadata`
 
-The server does not modify Steam data or infer completion from playtime. Tracker state is explicit and local; IGDB metadata is not included.
+The server does not modify Steam data or infer completion from playtime. Tracker state is explicit and local; metadata only describes games the configured Steam user owns.
 
 ## Requirements
 
@@ -35,6 +36,9 @@ STEAM_API_KEY=replace-with-your-Steam-Web-API-key
 STEAM_ID=76561198000000000
 # Optional; defaults to .steam-library/tracker.sqlite
 TRACKER_DATABASE_PATH=.steam-library/tracker.sqlite
+# Optional free Twitch developer credentials for IGDB metadata tools
+IGDB_CLIENT_ID=replace-with-your-Twitch-client-id
+IGDB_CLIENT_SECRET=replace-with-your-Twitch-client-secret
 ```
 
 Start the stdio server with:
@@ -66,6 +70,8 @@ not expose Steam response payloads, request URLs, or stack traces.
 Library reads are cached for five minutes per configured SteamID. The server
 uses a 10-second upstream request timeout and returns actionable safe errors
 when Steam is unavailable or returns invalid data.
+
+IGDB metadata uses the free Twitch developer credential flow. When either IGDB credential is absent, both metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result; Steam and tracker tools continue to work. To roll back metadata, unset both IGDB variables and revert the metadata work-unit commits without touching Steam credentials or the tracker database.
 
 ## Local tracker storage and recovery
 

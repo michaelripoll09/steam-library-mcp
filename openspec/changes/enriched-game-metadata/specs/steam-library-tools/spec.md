@@ -4,13 +4,13 @@
 
 ### Requirement: Exact query tool surface
 
-The server MUST register exactly seven read-only tools: `steam_get_library`, `steam_search_library`, `steam_get_game`, `steam_get_recent_games`, `steam_get_library_stats`, `steam_get_game_metadata`, and `steam_query_library_metadata`. Metadata tools MUST remain discoverable even when IGDB configuration is invalid; no recommendation, ranking, mutation, tracker, or unowned-game tool may be registered.
-(Previously: Exactly five read-only library query tools were registered.)
+The server MUST register exactly thirteen tools: the five read-only Steam library tools, six existing explicit local tracker tools, and `steam_get_game_metadata` plus `steam_query_library_metadata`. Metadata tools MUST remain discoverable even when IGDB configuration is invalid; no recommendation, ranking, or unowned-game tool may be registered.
+(Previously: Eleven Steam and tracker tools were registered.)
 
 #### Scenario: Discovery
 - GIVEN a connected MCP client
 - WHEN it lists tools
-- THEN exactly those seven names appear, including metadata tools regardless of IGDB configuration
+- THEN exactly the complete thirteen-tool surface appears, including metadata tools regardless of IGDB configuration
 
 #### Scenario: Existing query contracts
 - GIVEN valid Steam data
