@@ -1,10 +1,15 @@
+import { TRACKER_ERROR_MESSAGES } from "./domain/tracker.js";
+
 export type AppErrorCode =
   | "CONFIG_INVALID"
   | "INPUT_INVALID"
   | "STEAM_UNAVAILABLE"
   | "STEAM_TIMEOUT"
   | "STEAM_RESPONSE_INVALID"
-  | "GAME_NOT_FOUND";
+  | "GAME_NOT_FOUND"
+  | "INVALID_INPUT"
+  | "OWNERSHIP_UNAVAILABLE"
+  | "PERSISTENCE_FAILURE";
 
 type SafeErrorPayload = Readonly<{
   code: AppErrorCode;
@@ -72,5 +77,23 @@ export class SteamResponseError extends AppError {
 export class GameNotFoundError extends AppError {
   constructor(appId: number) {
     super("GAME_NOT_FOUND", `No owned game was found for app ID ${appId}.`);
+  }
+}
+
+export class TrackerInputError extends AppError {
+  constructor() {
+    super("INVALID_INPUT", TRACKER_ERROR_MESSAGES.invalidInput);
+  }
+}
+
+export class TrackerOwnershipUnavailableError extends AppError {
+  constructor(cause?: unknown) {
+    super("OWNERSHIP_UNAVAILABLE", TRACKER_ERROR_MESSAGES.ownershipUnavailable, cause);
+  }
+}
+
+export class TrackerPersistenceError extends AppError {
+  constructor(cause?: unknown) {
+    super("PERSISTENCE_FAILURE", TRACKER_ERROR_MESSAGES.persistenceFailure, cause);
   }
 }
