@@ -6,14 +6,16 @@ import { describe, expect, test } from "vitest";
 const readme = () => readFileSync(join(process.cwd(), "README.md"), "utf8");
 
 describe("README release guidance", () => {
-  test("documents installation, required configuration, and the stdio launch command", () => {
+  test("documents installation, required configuration, and the local env-file launch command", () => {
     const content = readme();
 
     expect(content).toContain("npm install");
     expect(content).toContain("STEAM_API_KEY");
     expect(content).toContain("STEAM_ID");
     expect(content).toContain("npm run build");
-    expect(content).toContain("node dist/index.js");
+    expect(content).toContain("npm start");
+    expect(content).toContain(".env.example");
+    expect(content).toMatch(/shell.*take precedence/i);
   });
 
   test("documents the protocol and secret-handling boundaries without embedding credentials", () => {

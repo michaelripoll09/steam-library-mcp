@@ -29,7 +29,7 @@ npm install
 npm run build
 ```
 
-Set the required environment variables in your MCP client configuration or shell:
+For local development, copy `.env.example` to `.env` and set the required environment variables:
 
 ```sh
 STEAM_API_KEY=replace-with-your-Steam-Web-API-key
@@ -44,8 +44,13 @@ IGDB_CLIENT_SECRET=replace-with-your-Twitch-client-secret
 Start the stdio server with:
 
 ```sh
-node dist/index.js
+npm start
 ```
+
+`npm start` loads `.env` with Node's built-in env-file support. Values already set
+in the shell take precedence, so MCP clients can still provide credentials through
+their own environment configuration. Use `npm run dev` to rebuild and start in one
+command.
 
 For local development and verification, use:
 

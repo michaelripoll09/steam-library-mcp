@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "dev": "npm run build && npm run start",
+    "start": "node --env-file=.env dist/index.js",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
