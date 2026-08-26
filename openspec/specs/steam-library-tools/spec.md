@@ -2,22 +2,22 @@
 
 ## Purpose
 
-Expose exactly five read-only library tools.
+Expose Steam query tools alongside gaming tracker tools.
 
 ## Requirements
 
 ### Requirement: Exact query tool surface
 
-The server MUST register exactly `steam_get_library`, `steam_search_library`, `steam_get_game`, `steam_get_recent_games`, and `steam_get_library_stats`; each MUST validate arguments and return normalized output.
+The coordinated server MUST register the five Steam query tools—`steam_get_library`, `steam_search_library`, `steam_get_game`, `steam_get_recent_games`, and `steam_get_library_stats`—and MUST also register all six gaming tracker tools; each MUST validate arguments and return normalized output.
 
 #### Scenario: Discovery
 - GIVEN a connected MCP client
 - WHEN it lists tools
-- THEN exactly those five names appear, with no tracker, IGDB, mutation, or helper tool
+- THEN the five Steam names and all six gaming tracker names appear exactly once, with no undocumented tool
 
 #### Scenario: Query contracts
 - GIVEN valid Steam data
-- WHEN each query runs
+- WHEN each Steam query runs
 - THEN library/recent return normalized collections (library cached), search returns matches, game returns one or safe not-found, and stats returns aggregates
 
 #### Scenario: Recent-game count
@@ -32,7 +32,7 @@ The server MUST register exactly `steam_get_library`, `steam_search_library`, `s
 
 ### Requirement: Read-only input validation
 
-All tools MUST use the configured SteamID, be side-effect free, and reject invalid arguments before contacting Steam.
+All Steam tools MUST use the configured SteamID, be side-effect free, and reject invalid arguments before contacting Steam.
 
 #### Scenario: Invalid arguments
 - GIVEN an empty search term or non-positive app ID
