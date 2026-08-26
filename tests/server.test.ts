@@ -52,6 +52,12 @@ describe("MCP server composition", () => {
         { name: "steam_get_game" },
         { name: "steam_get_recent_games" },
         { name: "steam_get_library_stats" },
+        { name: "gaming_get_backlog" },
+        { name: "gaming_get_current_game" },
+        { name: "gaming_mark_playing" },
+        { name: "gaming_mark_completed" },
+        { name: "gaming_mark_dropped" },
+        { name: "gaming_get_completed" },
       ],
     });
     await expect(

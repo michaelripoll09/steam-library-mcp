@@ -44,5 +44,5 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4: MCP Integration / Release
 
-- [ ] 4.1 RED: test six strict schemas, empty envelopes, exact success/not-owned/error contracts, registration no-write, protocol-only stdout, and redaction of paths/SQL/secrets/provider payloads; GREEN: create `src/tools/register-gaming-tools.ts` and wire `src/server.ts`; REFACTOR: keep adapters thin.
+- [x] 4.1 RED: test six strict schemas, empty envelopes, exact success/not-owned/error contracts, registration no-write, protocol-only stdout, and redaction of paths/SQL/secrets/provider payloads; GREEN: create `src/tools/register-gaming-tools.ts` and wire `src/server.ts`; REFACTOR: keep adapters thin.
 - [ ] 4.2 RED: add stdio restart and migration-failure scenarios; GREEN: update `README.md` with local SQLite backup/recovery; REFACTOR: run full quality gates and push each verified unit.

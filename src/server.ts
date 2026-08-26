@@ -7,6 +7,13 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { createSteamService, type SteamService } from "./services/steam-service.js";
 import { createSteamApiClient, type FetchLike, type SteamApiClient } from "./steam/client.js";
 import { registerSteamTools, type ToolRegistrar } from "./tools/register-steam-tools.js";
+import { registerGamingTools } from "./tools/register-gaming-tools.js";
+import {
+  createGamingTrackerService,
+  type GamingTrackerService,
+} from "./tracker/gaming-tracker-service.js";
+import { openTrackerDatabase } from "./tracker/sqlite/database.js";
+import { SqliteTrackerRepository } from "./tracker/sqlite/tracker-repository.js";
 
 export type ServerOverrides = Readonly<{
   config?: AppConfig;
@@ -15,6 +22,7 @@ export type ServerOverrides = Readonly<{
   cache?: Cache<ReturnType<SteamService["getLibrary"]> extends Promise<infer T> ? T : never>;
   steamClient?: SteamApiClient;
   steamService?: SteamService;
+  gamingTrackerService?: GamingTrackerService;
 }>;
 
 type StartServerOptions = ServerOverrides &
@@ -31,9 +39,17 @@ export function createServer(overrides: ServerOverrides = {}): McpServer {
     overrides.steamClient ?? createSteamApiClient({ config, fetch: overrides.fetch });
   const steamService =
     overrides.steamService ?? createSteamService({ config, steamClient, cache, clock });
+  const gamingTrackerService =
+    overrides.gamingTrackerService ??
+    createGamingTrackerService({
+      clock,
+      ownershipLookup: { getOwnedGames: async () => (await steamService.getLibrary()).games },
+      repository: new SqliteTrackerRepository(openTrackerDatabase(config.trackerDatabasePath)),
+    });
   const server = new McpServer({ name: "steam-library-mcp", version: "0.1.0" });
 
   registerSteamTools(server as unknown as ToolRegistrar, steamService);
+  registerGamingTools(server as unknown as ToolRegistrar, gamingTrackerService);
   return server;
 }
 
