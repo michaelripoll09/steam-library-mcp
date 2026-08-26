@@ -44,6 +44,13 @@ export const MIGRATIONS = Object.freeze([
       )`,
     ],
   }),
+  createMigration({
+    version: 2,
+    name: "enforce-one-playing-entry",
+    statements: [
+      "CREATE UNIQUE INDEX one_playing_entry ON tracker_entries (status) WHERE status = 'playing'",
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
