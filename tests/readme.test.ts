@@ -23,4 +23,12 @@ describe("README release guidance", () => {
     expect(content).toMatch(/secret|credential|API key/i);
     expect(content).not.toContain("super-secret-steam-api-key");
   });
+
+  test("documents local tracker storage, backup, and recovery", () => {
+    const content = readme();
+    expect(content).toContain("TRACKER_DATABASE_PATH");
+    expect(content).toMatch(/backup/i);
+    expect(content).toMatch(/recovery|restore/i);
+    expect(content).toContain("gaming_mark_playing");
+  });
 });

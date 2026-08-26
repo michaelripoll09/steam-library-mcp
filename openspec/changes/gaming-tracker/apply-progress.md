@@ -14,6 +14,7 @@
 - [x] 3.1 Add ownership-gated mark validation and safe typed errors. Commit: pending this work unit.
 - [x] 3.2 Complete explicit lifecycle transitions and derived views. Commit: pending this work unit.
 - [x] 4.1 Register tracker MCP tools and server composition. Commit: pending this work unit.
+- [x] 4.2 Document local SQLite backup/recovery and complete quality gates. Commit: pending this work unit.
 
 ## TDD Cycle Evidence
 

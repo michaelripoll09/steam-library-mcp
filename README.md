@@ -1,16 +1,17 @@
 # Steam Library MCP
 
-A read-only [Model Context Protocol](https://modelcontextprotocol.io/) server for a
-single Steam library. It exposes exactly five library-query tools over stdio:
+A [Model Context Protocol](https://modelcontextprotocol.io/) server for a
+single Steam library with explicit local game-progress tracking. It exposes eleven tools over stdio:
 
 - `steam_get_library`
 - `steam_search_library`
 - `steam_get_game`
 - `steam_get_recent_games`
 - `steam_get_library_stats`
+- `gaming_get_backlog`, `gaming_get_current_game`, and `gaming_get_completed`
+- `gaming_mark_playing`, `gaming_mark_completed`, and `gaming_mark_dropped`
 
-The server does not modify Steam data, track personal game state, or provide IGDB
-metadata.
+The server does not modify Steam data or infer completion from playtime. Tracker state is explicit and local; IGDB metadata is not included.
 
 ## Requirements
 
@@ -32,6 +33,8 @@ Set the required environment variables in your MCP client configuration or shell
 ```sh
 STEAM_API_KEY=replace-with-your-Steam-Web-API-key
 STEAM_ID=76561198000000000
+# Optional; defaults to .steam-library/tracker.sqlite
+TRACKER_DATABASE_PATH=.steam-library/tracker.sqlite
 ```
 
 Start the stdio server with:
@@ -63,3 +66,11 @@ not expose Steam response payloads, request URLs, or stack traces.
 Library reads are cached for five minutes per configured SteamID. The server
 uses a 10-second upstream request timeout and returns actionable safe errors
 when Steam is unavailable or returns invalid data.
+
+## Local tracker storage and recovery
+
+Tracker state is stored in a local SQLite database at `TRACKER_DATABASE_PATH`.
+Back up the database file before upgrades or manual recovery. If startup reports
+a migration or storage failure, stop the server, restore the most recent backup,
+and restart; never delete the database automatically. The default `.steam-library/`
+directory is ignored by Git.
