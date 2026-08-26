@@ -8,12 +8,12 @@ Provide validated, normalized IGDB metadata only for games already owned in the 
 
 ### Requirement: Secure, non-blocking IGDB boundary
 
-The client MUST use the free IGDB API tier with free Twitch developer credentials read only from `IGDB_CLIENT_ID` and `IGDB_CLIENT_SECRET`, validate responses, enforce a 10-second timeout, and never expose credentials, headers, raw payloads, or stack traces. The public unavailable result MUST use exactly `{ isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }`; no content or structuredContent variant is permitted. The solution MUST NOT require paid infrastructure. Invalid IGDB configuration MUST NOT prevent the five Steam tools from starting.
+The client MUST use the free IGDB API tier with free Twitch developer credentials read only from `IGDB_CLIENT_ID` and `IGDB_CLIENT_SECRET`, validate responses, enforce a 10-second timeout, and never expose credentials, headers, raw payloads, or stack traces. The public unavailable result MUST expose top-level `{ isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }` without a text-wrapped or `structuredContent` error payload. At the MCP client boundary, the official SDK protocol-defaults `content` to `[]`; that empty array is permitted and expected. The solution MUST NOT require paid infrastructure. Invalid IGDB configuration MUST NOT prevent the five Steam tools from starting.
 
 #### Scenario: Invalid IGDB configuration
 - GIVEN either IGDB credential is absent or blank
 - WHEN the server starts and metadata tools are called
-- THEN all metadata tools remain discoverable and return exactly `{ isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }`
+- THEN all metadata tools remain discoverable and return `{ content: [], isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }` at the MCP client boundary
 - AND the five Steam tools remain usable
 
 #### Scenario: Invalid upstream payload

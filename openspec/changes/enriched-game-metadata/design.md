@@ -8,11 +8,11 @@ Flow: `MCP adapter -> MetadataService -> SteamService + IgdbClient`. `SteamServi
 
 | Decision | Choice | Alternatives | Rationale |
 |---|---|---|---|
-| Lazy configuration | Start the unified thirteen-tool surface: five Steam tools, six tracker tools, and two metadata tools. Parse IGDB settings into enabled/disabled composition; disabled metadata calls return the exact top-level `METADATA_UNAVAILABLE` envelope | Fail startup; omit tools | Preserves Steam and tracker availability and exact discovery. |
+| Lazy configuration | Start the unified thirteen-tool surface: five Steam tools, six tracker tools, and two metadata tools. Parse IGDB settings into enabled/disabled composition; disabled metadata calls expose top-level `METADATA_UNAVAILABLE` fields and the MCP SDK protocol-defaults `content` to `[]` | Fail startup; omit tools | Preserves Steam and tracker availability and uses the official SDK result contract. |
 | Authentication | `IgdbTokenProvider` exchanges environment-only Twitch credentials and caches tokens until 60 seconds before expiry | Static token; inline auth | Isolates refresh and secrets. |
 | Exact match | Accept only IGDB `external_games` entries with official Steam category `1` and `uid === String(appId)` | Names; numeric coercion | Prevents fuzzy, cross-store, and leading-zero matches. If multiple games contain that exact pair, choose the lowest numeric IGDB game ID deterministically. |
 | Cache | Validated values only; timers below | Database; raw DTOs | Avoids persistence and invalid-data retention. |
-| Tool boundary | Return normalized success or the exact public error envelope | Generated prose | Keeps adapters thin and reasoning client-side. |
+| Tool boundary | Return normalized success or top-level public error fields without text wrapping; accept SDK-defaulted empty `content` at the MCP boundary | Generated prose | Keeps adapters thin while matching the official MCP result schema. |
 
 ## Data Flow
 
@@ -49,6 +49,7 @@ interface MetadataUnavailableEnvelope {
   isError: true;
   error: { code: "METADATA_UNAVAILABLE"; message: string; retryable: boolean };
 }
+// The official MCP SDK adds `content: []` to this result at the client boundary.
 interface MetadataService {
   getOwnedGameMetadata(appId: number): Promise<GameMetadataResult>;
   queryOwnedMetadata(input: MetadataQuery): Promise<readonly GameMetadataResult[]>;
@@ -63,7 +64,7 @@ OAuth Zod requires non-empty `access_token`, bearer type, and positive `expires_
 
 ## Cache and Error Model
 
-`IGDB_CACHE_TTL_MS` defaults to `86_400_000` (24 h); positives remain stale-eligible until age `604_800_000` (7 d). Exact-match misses use a `3_600_000` (1 h) negative TTL and are never stale. HTTP 429 permits exactly two TOTAL attempts: the initial request plus one retry. Respect integer `Retry-After` seconds clamped to 0–1,000 ms, otherwise wait 500 ms. After exhaustion, return eligible stale success; without stale data return `{ isError: true, error: { code: "METADATA_UNAVAILABLE", message: "Game metadata is temporarily unavailable.", retryable: true } }`. Invalid configuration returns the same envelope shape with message `Configure IGDB_CLIENT_ID and IGDB_CLIENT_SECRET to use metadata tools.` and `retryable: false`. Timeout, 5xx, network, auth, and invalid payload failures use the temporary-unavailability envelope; ownership/input failures use their existing safe contracts. Nothing exposes secrets, headers, bodies, URLs, causes, or stacks.
+`IGDB_CACHE_TTL_MS` defaults to `86_400_000` (24 h); positives remain stale-eligible until age `604_800_000` (7 d). Exact-match misses use a `3_600_000` (1 h) negative TTL and are never stale. HTTP 429 permits exactly two TOTAL attempts: the initial request plus one retry. Respect integer `Retry-After` seconds clamped to 0–1,000 ms, otherwise wait 500 ms. After exhaustion, return eligible stale success; without stale data return top-level `{ isError: true, error: { code: "METADATA_UNAVAILABLE", message: "Game metadata is temporarily unavailable.", retryable: true } }`; the MCP SDK materializes this as `{ content: [], ... }` at its client boundary. Invalid configuration returns the same envelope shape with message `Configure IGDB_CLIENT_ID and IGDB_CLIENT_SECRET to use metadata tools.` and `retryable: false`. Timeout, 5xx, network, auth, and invalid payload failures use the temporary-unavailability envelope; ownership/input failures use their existing safe contracts. Nothing exposes secrets, headers, bodies, URLs, causes, or stacks.
 
 ## Testing Strategy
 
@@ -71,7 +72,7 @@ OAuth Zod requires non-empty `access_token`, bearer type, and positive `expires_
 |---|---|---|
 | Unit | status shape, exact/duplicate match, normalization, filters, TTLs, concurrency | Vitest fakes for clock/cache/clients. |
 | Integration | OAuth, timeout, 429 timing, payload drift/redaction | Stubbed fetch and fake timers. |
-| Contract/E2E | thirteen-tool discovery, lazy config, ownership-before-IGDB, exact unavailable envelopes, and structured success results | In-memory MCP transport and built stdio server. |
+| Contract/E2E | thirteen-tool discovery, lazy config, ownership-before-IGDB, SDK-defaulted unavailable envelopes, and structured success results | In-memory MCP transport and built stdio server. |
 
 ## Threat Matrix
 

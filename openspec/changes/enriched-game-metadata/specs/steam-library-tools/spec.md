@@ -34,7 +34,7 @@ All tools MUST use the configured SteamID, be side-effect free, and reject inval
 
 ### Requirement: Owned metadata tool contracts
 
-`steam_get_game_metadata` MUST accept `{appId: positive integer}`. `steam_query_library_metadata` MUST accept optional plural `genres`, `tags`, and `themes` string arrays, inclusive `releaseYearFrom`/`releaseYearTo`, and `limit` from 1–50 (default 50). Both return normalized owned metadata or the exact unavailable envelope `{ isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }` or a success payload with metadataStatus `missing`, never recommendations; query filters are case-insensitive, OR within each field and AND across fields, with app-ID ordering. An all-absent or all-empty filter query MUST be rejected.
+`steam_get_game_metadata` MUST accept `{appId: positive integer}`. `steam_query_library_metadata` MUST accept optional plural `genres`, `tags`, and `themes` string arrays, inclusive `releaseYearFrom`/`releaseYearTo`, and `limit` from 1–50 (default 50). Both return normalized owned metadata or an unavailable result with top-level `{ isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }`; at the MCP client boundary the official SDK protocol-defaults `content: []`, and text-wrapped or `structuredContent` error payloads are forbidden. Success payloads carry metadataStatus `missing` when appropriate, never recommendations; query filters are case-insensitive, OR within each field and AND across fields, with app-ID ordering. An all-absent or all-empty filter query MUST be rejected.
 
 #### Scenario: Valid metadata queries
 - GIVEN valid arguments and owned games with normalized metadata
@@ -44,7 +44,7 @@ All tools MUST use the configured SteamID, be side-effect free, and reject inval
 #### Scenario: Invalid IGDB configuration
 - GIVEN metadata tools are called while IGDB configuration is invalid
 - WHEN execution occurs
-- THEN the exact MCP tool error envelope `{ isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }` is returned and Steam tools remain unaffected
+- THEN `{ content: [], isError: true, error: { code: 'METADATA_UNAVAILABLE', message: string, retryable: boolean } }` is returned at the MCP client boundary and Steam tools remain unaffected
 
 #### Scenario: All filters absent
 - GIVEN steam_query_library_metadata receives no filter values

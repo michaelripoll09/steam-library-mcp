@@ -108,6 +108,35 @@ describe("MCP server composition", () => {
     await server.close();
   });
 
+  test("exposes protocol-defaulted empty content with the unavailable metadata envelope", async () => {
+    const server = createServer({
+      config,
+      steamClient: createSteamClient(),
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    await expect(
+      client.callTool({ name: "steam_get_game_metadata", arguments: { appId: 620 } }),
+    ).resolves.toEqual({
+      content: [],
+      isError: true,
+      error: {
+        code: "METADATA_UNAVAILABLE",
+        message: "Configure IGDB_CLIENT_ID and IGDB_CLIENT_SECRET to use metadata tools.",
+        retryable: false,
+      },
+    });
+
+    await client.close();
+    await server.close();
+  });
+
   test("keeps malformed stdio input and startup failures off stdout", async () => {
     const input = new PassThrough();
     const output = new PassThrough();

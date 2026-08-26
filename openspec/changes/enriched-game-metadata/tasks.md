@@ -44,6 +44,6 @@ Chain strategy: feature-branch-chain
 
 ## Bounded V3 Contract Remediation
 
-- [x] R1 RED/GREEN: restore metadata query `limit` bounds/default/truncation and the exact top-level unavailable envelope.
+- [x] R1 RED/GREEN: restore metadata query `limit` bounds/default/truncation and top-level unavailable error fields; accept the MCP SDK protocol-defaulted `content: []` at the client boundary.
 - [x] R2 RED/GREEN: cover optional partial metadata, negative-cache expiry, seven-day stale cutoff, successful payloads, and invalid year ranges.
 - [x] R3 REFACTOR: align the design with the unified thirteen-tool surface and run the bounded quality suite.
