@@ -16,8 +16,8 @@ build_output_hash: sha256:7c646b6e636dc22efb8799f2846b640bf65201270bc2f3c650db52
 
 ## Verification Report
 
-**Change**: steam-library-core  
-**Version**: N/A  
+**Change**: steam-library-core
+**Version**: N/A
 **Mode**: Strict TDD
 
 ### Completeness
@@ -130,14 +130,14 @@ Coverage analysis skipped — no coverage provider is configured.
 
 ### Quality Metrics
 
-**Type Checker**: ✅ No errors in the combined build/quality command.  
-**Linter**: ✅ No errors or warnings in the combined build/quality command.  
+**Type Checker**: ✅ No errors in the combined build/quality command.
+**Linter**: ✅ No errors or warnings in the combined build/quality command.
 **Formatter**: ✅ All matched files use Prettier code style.
 
 ### Issues Found
 
-**CRITICAL**: None.  
-**WARNING**: None.  
+**CRITICAL**: None.
+**WARNING**: None.
 **SUGGESTION**: None.
 
 ### Verdict

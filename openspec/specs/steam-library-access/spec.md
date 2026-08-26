@@ -42,5 +42,3 @@ Library data MUST be cached per SteamID for five minutes: fresh hits avoid reque
 - GIVEN an expired entry and a failed refresh
 - WHEN a read occurs
 - THEN a safe error is returned and no partial value is stored
-
-
