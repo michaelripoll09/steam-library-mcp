@@ -15,6 +15,7 @@
 - [x] 3.2 Complete explicit lifecycle transitions and derived views. Commit: pending this work unit.
 - [x] 4.1 Register tracker MCP tools and server composition. Commit: pending this work unit.
 - [x] 4.2 Document local SQLite backup/recovery and complete quality gates. Commit: pending this work unit.
+- [x] 4.2 correction: add tracker stdio restart and newer-schema recovery evidence. Commit: pending this work unit.
 
 ## TDD Cycle Evidence
 
