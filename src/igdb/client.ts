@@ -4,6 +4,8 @@ import { igdbGamesResponseSchema, type IgdbGame } from "./schemas.js";
 import { IgdbTokenProvider, isMetadataUnavailable } from "./token-provider.js";
 
 const IGDB_GAMES_URL = "https://api.igdb.com/v4/games";
+const IGDB_GAME_FIELDS =
+  "id,external_games.category,external_games.uid,genres.name,keywords.name,themes.name,first_release_date";
 const RATE_LIMIT_BACKOFF_MS = 500;
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -73,7 +75,7 @@ export function createIgdbClient({
               "Client-ID": credentials.clientId,
               Authorization: `Bearer ${accessToken}`,
             },
-            body: `fields id,external_games,genres,keywords,themes,first_release_date; where external_games.uid = "${appId}";`,
+            body: `fields ${IGDB_GAME_FIELDS}; where external_games.uid = "${appId}";`,
           });
 
           if (response.status === 429 && attempt === 0) {

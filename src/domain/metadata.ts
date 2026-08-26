@@ -35,7 +35,9 @@ export function selectSteamMatch(games: readonly IgdbGame[], appId: number): Igd
   return games
     .filter((game) =>
       game.external_games.some(
-        (external) => external.category === 1 && external.uid === String(appId),
+        (external) =>
+          external.uid === String(appId) &&
+          (external.category === undefined || external.category === 1),
       ),
     )
     .sort((left, right) => left.id - right.id)[0];

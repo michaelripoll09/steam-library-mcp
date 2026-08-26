@@ -119,6 +119,45 @@ describe("IGDB schemas", () => {
 });
 
 describe("IGDB client", () => {
+  test("requests the nested fields required to parse a successful game lookup", async () => {
+    const expandedGame = [
+      {
+        id: 620,
+        external_games: [{ id: 1, uid: "620" }],
+        genres: [{ name: "Puzzle" }],
+        keywords: [{ name: "Portal" }],
+        themes: [{ name: "Science fiction" }],
+        first_release_date: 1_280_304_000,
+      },
+    ];
+    const fetchLike = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockImplementationOnce(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fields = String(init?.body);
+        return new Response(
+          JSON.stringify(
+            fields.includes("external_games.category") &&
+              fields.includes("external_games.uid") &&
+              fields.includes("genres.name") &&
+              fields.includes("keywords.name") &&
+              fields.includes("themes.name")
+              ? expandedGame
+              : [{ id: 620, external_games: [1], genres: [2], keywords: [3], themes: [4] }],
+          ),
+          { status: 200 },
+        );
+      });
+    const client = createIgdbClient({ credentials, fetch: fetchLike as typeof fetch });
+
+    await expect(client.findGamesForSteamApp(620)).resolves.toEqual([
+      {
+        ...expandedGame[0],
+        external_games: [{ uid: "620" }],
+      },
+    ]);
+  });
+
   test("aborts the OAuth request at ten seconds", async () => {
     vi.useFakeTimers();
     const fetchLike = vi.fn(

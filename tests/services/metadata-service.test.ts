@@ -30,6 +30,12 @@ describe("metadata domain", () => {
     expect(selectSteamMatch([game(1, "621")], 620)).toBeUndefined();
   });
 
+  test("accepts an exact Steam UID when IGDB omits external-game category data", () => {
+    expect(
+      selectSteamMatch([{ ...game(3), external_games: [{ id: 1, uid: "620" }] }] as never, 620)?.id,
+    ).toBe(3);
+  });
+
   test("normalizes complete and missing metadata without recommendation fields", () => {
     expect(normalizeMetadata(game(3), 620, "Portal 2")).toEqual({
       appId: 620,

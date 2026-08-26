@@ -12,7 +12,7 @@ export const igdbGamesResponseSchema = z.array(
   z.object({
     id: z.number().int().positive(),
     external_games: z.array(
-      z.object({ category: z.number().int(), uid: z.string().trim().min(1) }),
+      z.object({ category: z.number().int().optional(), uid: z.string().trim().min(1) }),
     ),
     genres: z.array(namedMetadataSchema).optional(),
     keywords: z.array(namedMetadataSchema).optional(),
