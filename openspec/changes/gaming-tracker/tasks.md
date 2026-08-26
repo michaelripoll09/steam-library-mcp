@@ -29,7 +29,7 @@ Chain strategy: feature-branch-chain
 
 ## Phase 1: Foundation
 
-- [ ] 1.1 RED: add failing Vitest smoke/domain tests; GREEN: add `better-sqlite3` 13, TypeScript types, DB-path config, and strict TDD commands; REFACTOR: centralize status/error constants.
+- [x] 1.1 RED: add failing Vitest smoke/domain tests; GREEN: add `better-sqlite3` 13, TypeScript types, DB-path config, and strict TDD commands; REFACTOR: centralize status/error constants.
 - [ ] 1.2 RED: test status vocabulary, immutable contracts, and safe serialization; GREEN: create `src/domain/tracker.ts`; REFACTOR: keep ports readonly and driver-independent.
 
 ## Phase 2: SQLite Persistence

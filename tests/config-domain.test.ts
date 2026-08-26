@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   DEFAULT_LIBRARY_CACHE_TTL_MS,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_TRACKER_DATABASE_PATH,
   loadConfig,
 } from "../src/config.js";
 
@@ -19,6 +20,7 @@ describe("loadConfig", () => {
       steamId: "76561198000000000",
       requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
       libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
+      trackerDatabasePath: DEFAULT_TRACKER_DATABASE_PATH,
     });
   });
 
