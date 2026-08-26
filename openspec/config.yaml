@@ -2,24 +2,24 @@ schema: spec-driven
 
 context: |
   Project: Steam Library MCP 2
-  Stack: Empty repository; intended public TypeScript MCP project (no manifest yet)
-  Architecture: Not established; implementation work has not started
-  Testing: No test runner or quality configuration detected
+  Stack: TypeScript ESM on Node.js LTS with Vitest, ESLint, and Prettier
+  Architecture: Layered MCP adapters, services, Steam client, cache, and domain models
+  Testing: Strict TDD with Vitest unit and contract coverage
   Persistence: Hybrid OpenSpec files plus Engram observations
 
-strict_tdd: false
+strict_tdd: true
 
 testing:
-  test_runner: null
-  test_command: ""
-  unit: false
+  test_runner: Vitest
+  test_command: "npm test -- --run"
+  unit: true
   integration: false
   e2e: false
   coverage: false
-  linter: false
-  type_checker: false
-  formatter: false
-  reason: "No source files, package manifest, test runner, or quality configuration exists yet."
+  linter: true
+  type_checker: true
+  formatter: true
+  reason: "Vitest, TypeScript, ESLint, and Prettier were installed for strict TDD and quality gates."
 
 rules:
   proposal:
@@ -33,11 +33,11 @@ rules:
   apply:
     guidelines:
       - Follow conventions established by the implementation.
-    tdd: false
-    test_command: ""
+    tdd: true
+    test_command: "npm test -- --run"
   verify:
-    test_command: ""
-    build_command: ""
+    test_command: "npm test -- --run"
+    build_command: "npm run typecheck && npm run lint && npm run format:check"
     coverage_threshold: 0
   archive:
     - Preserve archived changes as an audit trail.
