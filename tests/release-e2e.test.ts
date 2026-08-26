@@ -45,6 +45,29 @@ beforeAll(() => {
 });
 
 describe("released stdio entrypoint", () => {
+  test("responds to a valid framed MCP initialize request", async () => {
+    const result = await runServer(
+      { STEAM_API_KEY: apiKey, STEAM_ID: "76561198000000000" },
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "release-e2e", version: "1.0.0" },
+        },
+      })}\n`,
+    );
+
+    expect(result).toMatchObject({ code: 0 });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { serverInfo: { name: "steam-library-mcp" } },
+    });
+  });
+
   test("keeps malformed frames and configured secrets out of stdout and stderr", async () => {
     const result = await runServer(
       { STEAM_API_KEY: apiKey, STEAM_ID: "76561198000000000" },
