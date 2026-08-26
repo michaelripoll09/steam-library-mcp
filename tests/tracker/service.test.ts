@@ -1,4 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { OwnershipLookup, TrackerRepository } from "../../src/domain/tracker.js";
 import {
@@ -7,6 +10,8 @@ import {
   TrackerPersistenceError,
 } from "../../src/errors.js";
 import { createGamingTrackerService } from "../../src/tracker/gaming-tracker-service.js";
+import { openTrackerDatabase } from "../../src/tracker/sqlite/database.js";
+import { SqliteTrackerRepository } from "../../src/tracker/sqlite/tracker-repository.js";
 
 const ownedGames = [{ appId: 620, name: "Portal 2", playtimeMinutes: 0 }] as const;
 
@@ -102,5 +107,64 @@ describe("GamingTrackerService ownership gate", () => {
 
     await expect(service.mark(620, "playing")).rejects.toBeInstanceOf(TrackerPersistenceError);
     expect(repository.transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GamingTrackerService lifecycle", () => {
+  test("pauses the prior current game atomically and makes repeated marks unchanged", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const service = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup: createOwnershipLookup([
+        ...ownedGames,
+        { appId: 440, name: "Team Fortress 2", playtimeMinutes: 0 },
+      ]),
+      repository: new SqliteTrackerRepository(database),
+    });
+
+    try {
+      await expect(service.mark(620, "playing")).resolves.toMatchObject({ outcome: "updated" });
+      await expect(service.mark(440, "playing")).resolves.toMatchObject({ outcome: "updated" });
+      await expect(service.mark(440, "playing")).resolves.toMatchObject({ outcome: "unchanged" });
+      await expect(service.getCurrentGame()).resolves.toMatchObject({
+        appId: 440,
+        name: "Team Fortress 2",
+        status: "playing",
+      });
+      await expect(service.getBacklog()).resolves.toEqual([
+        expect.objectContaining({ appId: 620, status: "backlog" }),
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
+  test("persists completed marks across a SQLite restart and filters completed games by ownership", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "steam-library-service-"));
+    const databasePath = join(directory, "tracker.sqlite");
+    const ownershipLookup = createOwnershipLookup();
+    const firstDatabase = openTrackerDatabase(databasePath);
+    const firstService = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup,
+      repository: new SqliteTrackerRepository(firstDatabase),
+    });
+
+    try {
+      await firstService.mark(620, "completed");
+      firstDatabase.close();
+      const restartedDatabase = openTrackerDatabase(databasePath);
+      const restartedService = createGamingTrackerService({
+        clock: { now: () => 1_700_000_000_000 },
+        ownershipLookup,
+        repository: new SqliteTrackerRepository(restartedDatabase),
+      });
+      await expect(restartedService.getCompleted()).resolves.toEqual([
+        expect.objectContaining({ appId: 620, status: "completed" }),
+      ]);
+      restartedDatabase.close();
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });

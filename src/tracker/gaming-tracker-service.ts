@@ -1,4 +1,10 @@
-import type { GameStatus, OwnershipLookup, TrackerRepository } from "../domain/tracker.js";
+import type {
+  GameStatus,
+  OwnershipLookup,
+  TrackerEntry,
+  TrackerGame,
+  TrackerRepository,
+} from "../domain/tracker.js";
 import {
   TrackerInputError,
   TrackerOwnershipUnavailableError,
@@ -21,6 +27,9 @@ type GamingTrackerServiceDependencies = Readonly<{
 
 export type GamingTrackerService = Readonly<{
   mark(appId: unknown, status: TrackerMarkStatus): Promise<TrackerMarkResult>;
+  getBacklog(): Promise<readonly TrackerGame[]>;
+  getCurrentGame(): Promise<TrackerGame | null>;
+  getCompleted(): Promise<readonly TrackerGame[]>;
 }>;
 
 export function createGamingTrackerService({
@@ -45,13 +54,77 @@ export function createGamingTrackerService({
 
       try {
         const updated = repository.transaction((writer) =>
-          writer.setStatus(appId, status, new Date(clock.now()).toISOString()),
+          setStatus(writer, appId, status, new Date(clock.now()).toISOString()),
         );
         return Object.freeze({ outcome: updated ? "updated" : "unchanged", appId, status });
       } catch (error) {
         throw new TrackerPersistenceError(error);
       }
     },
+    async getBacklog() {
+      const games = await getOwnedGames(ownershipLookup);
+      const entriesByAppId = new Map(repository.list().map((entry) => [entry.appId, entry]));
+      return Object.freeze(
+        games
+          .filter((game) => {
+            const status = entriesByAppId.get(game.appId)?.status;
+            return status === undefined || status === "backlog" || status === "paused";
+          })
+          .map((game) => toTrackerGame(game, entriesByAppId.get(game.appId), "backlog")),
+      );
+    },
+    async getCurrentGame() {
+      const games = await getOwnedGames(ownershipLookup);
+      const gameByAppId = new Map(games.map((game) => [game.appId, game]));
+      const current = repository.list().find((entry) => entry.status === "playing");
+      return current === undefined || gameByAppId.get(current.appId) === undefined
+        ? null
+        : toTrackerGame(gameByAppId.get(current.appId)!, current, "playing");
+    },
+    async getCompleted() {
+      const games = await getOwnedGames(ownershipLookup);
+      const gameByAppId = new Map(games.map((game) => [game.appId, game]));
+      return Object.freeze(
+        repository
+          .list()
+          .filter((entry) => entry.status === "completed" && gameByAppId.has(entry.appId))
+          .map((entry) => toTrackerGame(gameByAppId.get(entry.appId)!, entry, "completed")),
+      );
+    },
+  });
+}
+
+function setStatus(
+  writer: Parameters<TrackerRepository["transaction"]>[0] extends (writer: infer T) => unknown
+    ? T
+    : never,
+  appId: number,
+  status: TrackerMarkStatus,
+  at: string,
+): boolean {
+  if (status === "playing") writer.pauseCurrent(appId, at);
+  return writer.setStatus(appId, status, at);
+}
+
+async function getOwnedGames(ownershipLookup: OwnershipLookup) {
+  try {
+    return await ownershipLookup.getOwnedGames();
+  } catch (error) {
+    throw new TrackerOwnershipUnavailableError(error);
+  }
+}
+
+function toTrackerGame(
+  game: { appId: number; name: string },
+  entry: TrackerEntry | undefined,
+  status: GameStatus,
+): TrackerGame {
+  return Object.freeze({
+    appId: game.appId,
+    name: game.name,
+    status,
+    createdAt: entry?.createdAt ?? null,
+    updatedAt: entry?.updatedAt ?? null,
   });
 }
 

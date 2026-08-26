@@ -40,7 +40,7 @@ Chain strategy: feature-branch-chain
 ## Phase 3: Service
 
 - [x] 3.1 RED: test invalid `appId` before Steam/SQLite, not-owned and unavailable ownership with no writes; GREEN: create `src/tracker/gaming-tracker-service.ts`; REFACTOR: map typed safe errors.
-- [ ] 3.2 RED: test explicit marks, idempotency, restart durability, backlog/current/completed filtering, and atomic A→paused/B→playing; GREEN: complete service; REFACTOR: inject clock and simplify read projection.
+- [x] 3.2 RED: test explicit marks, idempotency, restart durability, backlog/current/completed filtering, and atomic A→paused/B→playing; GREEN: complete service; REFACTOR: inject clock and simplify read projection.
 
 ## Phase 4: MCP Integration / Release
 
