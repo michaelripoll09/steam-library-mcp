@@ -26,9 +26,9 @@ Chain strategy: feature-branch-chain
 
 ## Phase 1: IGDB Boundary (PR #1)
 
-- [ ] 1.1 RED: add failing tests for lazy IGDB config, exact unavailable envelope, secret redaction, OAuth schema, 10s timeout, invalid payload, and exactly one 429 retry.
-- [ ] 1.2 GREEN: modify `src/config.ts`, `src/errors.ts`; create `src/igdb/schemas.ts`, `token-provider.ts`, `client.ts` using free Twitch credentials and no paid infrastructure.
-- [ ] 1.3 REFACTOR: centralize safe messages, injectable fetch/clock/backoff, and ensure validated values only are returned/cached; commit `feat(metadata): add secure IGDB client boundary`.
+- [x] 1.1 RED: add failing tests for lazy IGDB config, exact unavailable envelope, secret redaction, OAuth schema, 10s timeout, invalid payload, and exactly one 429 retry.
+- [x] 1.2 GREEN: modify `src/config.ts`, `src/errors.ts`; create `src/igdb/schemas.ts`, `token-provider.ts`, `client.ts` using free Twitch credentials and no paid infrastructure.
+- [x] 1.3 REFACTOR: centralize safe messages, injectable fetch/clock/backoff, and ensure validated values only are returned/cached; commit `feat(metadata): add secure IGDB client boundary`.
 
 ## Phase 2: Owned Metadata Service (PR #2)
 

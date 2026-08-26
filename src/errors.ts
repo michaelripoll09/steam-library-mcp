@@ -11,6 +11,34 @@ export type AppErrorCode =
   | "OWNERSHIP_UNAVAILABLE"
   | "PERSISTENCE_FAILURE";
 
+export type MetadataUnavailableEnvelope = Readonly<{
+  isError: true;
+  error: Readonly<{
+    code: "METADATA_UNAVAILABLE";
+    message: string;
+    retryable: boolean;
+  }>;
+}>;
+
+type MetadataUnavailableOptions = Readonly<{
+  message: string;
+  retryable: boolean;
+  cause?: unknown;
+}>;
+
+export function createMetadataUnavailableEnvelope(
+  options: MetadataUnavailableOptions,
+): MetadataUnavailableEnvelope {
+  return Object.freeze({
+    isError: true,
+    error: Object.freeze({
+      code: "METADATA_UNAVAILABLE" as const,
+      message: options.message,
+      retryable: options.retryable,
+    }),
+  });
+}
+
 type SafeErrorPayload = Readonly<{
   code: AppErrorCode;
   message: string;

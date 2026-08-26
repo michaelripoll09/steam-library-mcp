@@ -14,6 +14,14 @@ export type AppConfig = Readonly<{
   trackerDatabasePath: string;
 }>;
 
+export type IgdbCredentials = Readonly<{
+  clientId: string;
+  clientSecret: string;
+}>;
+
+export type IgdbConfig =
+  Readonly<{ enabled: false }> | Readonly<{ enabled: true } & IgdbCredentials>;
+
 type Environment = Readonly<Record<string, string | undefined>>;
 
 const requiredSettingNames = ["STEAM_API_KEY", "STEAM_ID"] as const;
@@ -24,6 +32,29 @@ const environmentSchema = z.object({
   STEAM_ID: z.string().trim().min(1),
   TRACKER_DATABASE_PATH: z.string().trim().min(1).optional(),
 });
+
+const igdbEnvironmentSchema = z.object({
+  IGDB_CLIENT_ID: z.string().trim().min(1).optional(),
+  IGDB_CLIENT_SECRET: z.string().trim().min(1).optional(),
+});
+
+export function loadIgdbConfig(environment: Environment = process.env): IgdbConfig {
+  const parsedEnvironment = igdbEnvironmentSchema.safeParse({
+    IGDB_CLIENT_ID: environment.IGDB_CLIENT_ID,
+    IGDB_CLIENT_SECRET: environment.IGDB_CLIENT_SECRET,
+  });
+
+  if (!parsedEnvironment.success) {
+    return Object.freeze({ enabled: false });
+  }
+
+  const { IGDB_CLIENT_ID: clientId, IGDB_CLIENT_SECRET: clientSecret } = parsedEnvironment.data;
+  if (clientId === undefined || clientSecret === undefined) {
+    return Object.freeze({ enabled: false });
+  }
+
+  return Object.freeze({ enabled: true, clientId, clientSecret });
+}
 
 export function loadConfig(environment: Environment = process.env): AppConfig {
   const parsedEnvironment = environmentSchema.safeParse({
