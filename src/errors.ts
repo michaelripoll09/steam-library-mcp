@@ -104,7 +104,7 @@ export class SteamResponseError extends AppError {
 
 export class GameNotFoundError extends AppError {
   constructor(appId: number) {
-    super("GAME_NOT_FOUND", `No owned game was found for app ID ${appId}.`);
+    super("GAME_NOT_FOUND", `No accessible game was found for app ID ${appId}.`);
   }
 }
 

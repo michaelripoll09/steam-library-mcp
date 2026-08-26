@@ -1,6 +1,6 @@
 # Steam Library MCP
 
-Give an MCP client safe, read-only access to one Steam library, with explicit local game-progress tracking and optional owned-game metadata. The server runs over stdio and never changes Steam account data.
+Give an MCP client safe access to a Steam library, including games owned by the configured account and optional Steam Families games, with explicit local game-progress tracking and optional metadata. The server runs over stdio and never changes Steam account data.
 
 ## Quick start
 
@@ -30,30 +30,31 @@ Start from the tracked [`.env.example`](.env.example) file. Do not copy real cre
 | ----------------------- | ------------ | ------------------------------------------------------------------- |
 | `STEAM_API_KEY`         | Yes          | Steam Web API credential used for library requests.                 |
 | `STEAM_ID`              | Yes          | 64-bit SteamID of the single library to query.                      |
+| `STEAM_WEBAPI_TOKEN`    | For Families | Temporary Steam web-session credential for family-library syncing.  |
 | `TRACKER_DATABASE_PATH` | No           | Local SQLite location; defaults to `.steam-library/tracker.sqlite`. |
 | `IGDB_CLIENT_ID`        | For metadata | Twitch developer client ID for IGDB metadata tools.                 |
 | `IGDB_CLIENT_SECRET`    | For metadata | Twitch developer client secret for IGDB metadata tools.             |
 
-If the IGDB credentials are not set, the metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result. Steam library and local tracker tools continue to work.
+If `STEAM_WEBAPI_TOKEN` is absent or expires, Steam Families synchronization is skipped and the owned library continues to work. If the IGDB credentials are not set, metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result.
 
 ## Tool surface
 
-| Area                | Tools                                                                                                              | What they do                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| Steam library       | `steam_get_library`, `steam_search_library`, `steam_get_game`, `steam_get_recent_games`, `steam_get_library_stats` | Read the configured library and its game activity.                  |
-| Local tracker       | `gaming_get_backlog`, `gaming_get_current_game`, `gaming_get_completed`                                            | List explicitly tracked local game states.                          |
-| Local tracker       | `gaming_mark_playing`, `gaming_mark_completed`, `gaming_mark_dropped`                                              | Update local progress state; never writes to Steam.                 |
-| Owned-game metadata | `steam_get_game_metadata`, `steam_query_library_metadata`                                                          | Look up metadata only for games owned by the configured Steam user. |
+| Area             | Tools                                                                                                              | What they do                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Steam library    | `steam_get_library`, `steam_search_library`, `steam_get_game`, `steam_get_recent_games`, `steam_get_library_stats` | Read owned games and, when configured, available Steam Families games. |
+| Local tracker    | `gaming_get_backlog`, `gaming_get_current_game`, `gaming_get_completed`                                            | List explicitly tracked local game states.                             |
+| Local tracker    | `gaming_mark_playing`, `gaming_mark_completed`, `gaming_mark_dropped`                                              | Update local progress state; never writes to Steam.                    |
+| Library metadata | `steam_get_game_metadata`, `steam_query_library_metadata`                                                          | Look up metadata for games available in the configured library.        |
 
 ## Local safety
 
 > [!WARNING]
-> `.env` contains secrets. Keep it untracked and local. Do not paste credentials into prompts, tool inputs, issue reports, or logs.
+> `.env` contains secrets. Keep it untracked and local. Do not paste API keys or `STEAM_WEBAPI_TOKEN` into prompts, tool inputs, issue reports, or logs.
 
 - stdout is reserved for MCP protocol traffic; operational diagnostics belong on stderr.
 - Steam requests are read-only. The tracker is the only mutable component, and its SQLite database is local to this machine.
 - Back up the tracker database before manual recovery or upgrades. If a migration or storage failure occurs, stop the server and restore a backup rather than deleting the database.
-- Steam library reads are cached for five minutes per SteamID and use a 10-second upstream timeout. Safe errors do not expose request URLs, upstream payloads, or stack traces.
+- Steam library reads are cached for five minutes per SteamID and use a 10-second upstream timeout. Safe errors do not expose request URLs, upstream payloads, tokens, or stack traces.
 
 ## Verify the project
 
@@ -66,14 +67,6 @@ npm run lint
 npm run format:check
 ```
 
-## Architecture and scope
+## Steam Families
 
-| Layer                                              | Responsibility                                            |
-| -------------------------------------------------- | --------------------------------------------------------- |
-| `src/server.ts` and `src/index.ts`                 | Compose and run the stdio MCP server.                     |
-| `src/tools/`                                       | Register the Steam, tracker, and metadata tool contracts. |
-| `src/steam/` and `src/services/steam-service.ts`   | Fetch and normalize read-only Steam library data.         |
-| `src/tracker/`                                     | Persist explicit local progress state in SQLite.          |
-| `src/igdb/` and `src/services/metadata-service.ts` | Fetch optional IGDB metadata for owned games.             |
-
-This project intentionally supports one configured Steam library, explicit tracker status rather than playtime-based completion inference, and metadata for owned games only. It is not a Steam account management tool or a general game catalog service.
+Steam's standard owned-games API does not include borrowed games. Set `STEAM_WEBAPI_TOKEN` only when you want the full Steam Families catalog. The token is temporary and the family endpoint is not formally documented by Steam, so the server treats family synchronization as optional and keeps working with your owned games when it is unavailable.

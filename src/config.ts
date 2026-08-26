@@ -9,6 +9,7 @@ export const DEFAULT_TRACKER_DATABASE_PATH = ".steam-library/tracker.sqlite";
 export type AppConfig = Readonly<{
   steamApiKey: string;
   steamId: string;
+  steamWebApiToken?: string;
   requestTimeoutMs: typeof DEFAULT_REQUEST_TIMEOUT_MS;
   libraryCacheTtlMs: typeof DEFAULT_LIBRARY_CACHE_TTL_MS;
   trackerDatabasePath: string;
@@ -30,6 +31,7 @@ type RequiredSettingName = (typeof requiredSettingNames)[number];
 const environmentSchema = z.object({
   STEAM_API_KEY: z.string().trim().min(1),
   STEAM_ID: z.string().trim().min(1),
+  STEAM_WEBAPI_TOKEN: z.string().trim().min(1).optional(),
   TRACKER_DATABASE_PATH: z.string().trim().min(1).optional(),
 });
 
@@ -60,6 +62,7 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
   const parsedEnvironment = environmentSchema.safeParse({
     STEAM_API_KEY: environment.STEAM_API_KEY,
     STEAM_ID: environment.STEAM_ID,
+    STEAM_WEBAPI_TOKEN: environment.STEAM_WEBAPI_TOKEN,
     TRACKER_DATABASE_PATH: environment.TRACKER_DATABASE_PATH,
   });
 
@@ -75,6 +78,9 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
   return Object.freeze({
     steamApiKey: parsedEnvironment.data.STEAM_API_KEY,
     steamId: parsedEnvironment.data.STEAM_ID,
+    ...(parsedEnvironment.data.STEAM_WEBAPI_TOKEN === undefined
+      ? {}
+      : { steamWebApiToken: parsedEnvironment.data.STEAM_WEBAPI_TOKEN }),
     requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
     libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
     trackerDatabasePath:

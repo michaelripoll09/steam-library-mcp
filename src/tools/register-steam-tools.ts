@@ -31,7 +31,8 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_get_library",
     {
-      description: "Get the configured user's normalized Steam library.",
+      description:
+        "Get the configured user's normalized accessible Steam library, including Steam Families games when configured.",
       inputSchema: emptyInputSchema.shape,
     },
     createHandler(emptyInputSchema, () => service.getLibrary()),
@@ -39,7 +40,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_search_library",
     {
-      description: "Search the configured user's normalized Steam library by game name.",
+      description: "Search the configured user's accessible Steam library by game name.",
       inputSchema: searchLibraryInputSchema.shape,
     },
     createHandler(searchLibraryInputSchema, ({ query }) => service.searchLibrary(query)),
@@ -47,7 +48,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_get_game",
     {
-      description: "Get one normalized owned Steam game by app ID.",
+      description: "Get one normalized accessible Steam game by app ID.",
       inputSchema: steamGameInputSchema.shape,
     },
     createHandler(steamGameInputSchema, ({ appId }) => service.getGame(appId)),
@@ -63,7 +64,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_get_library_stats",
     {
-      description: "Get aggregate statistics for the configured user's Steam library.",
+      description: "Get aggregate statistics for the configured user's accessible Steam library.",
       inputSchema: emptyInputSchema.shape,
     },
     createHandler(emptyInputSchema, () => service.getLibraryStats()),

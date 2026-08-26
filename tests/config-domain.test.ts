@@ -131,7 +131,7 @@ describe("safe application errors", () => {
       '{"code":"STEAM_RESPONSE_INVALID","message":"Steam returned an invalid response. Try again later."}',
     );
     expect(JSON.stringify(new GameNotFoundError(730))).toBe(
-      '{"code":"GAME_NOT_FOUND","message":"No owned game was found for app ID 730."}',
+      '{"code":"GAME_NOT_FOUND","message":"No accessible game was found for app ID 730."}',
     );
   });
 });

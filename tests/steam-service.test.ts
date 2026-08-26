@@ -65,12 +65,20 @@ describe("SteamService", () => {
           appId: 620,
           name: "Portal 2",
           playtimeMinutes: 135,
+          accessType: "owned",
+          isPlayable: true,
           recentPlaytimeMinutes: 42,
           lastPlayedAt: "2023-11-14T22:13:20.000Z",
           imageUrl:
             "https://media.steampowered.com/steamcommunity/public/images/apps/620/portal-logo.jpg",
         },
-        { appId: 440, name: "Team Fortress 2", playtimeMinutes: 0 },
+        {
+          appId: 440,
+          name: "Team Fortress 2",
+          playtimeMinutes: 0,
+          accessType: "owned",
+          isPlayable: true,
+        },
       ],
     });
     expect(second).toBe(first);
@@ -113,6 +121,8 @@ describe("SteamService", () => {
       appId: 440,
       name: "Team Fortress 2",
       playtimeMinutes: 0,
+      accessType: "owned",
+      isPlayable: true,
     });
     await expect(service.getGame(999)).rejects.toBeInstanceOf(GameNotFoundError);
   });
@@ -149,6 +159,105 @@ describe("SteamService", () => {
       unplayedGames: 1,
       totalPlaytimeMinutes: 135,
       recentlyPlayedGames: 1,
+    });
+  });
+  test("merges playable Steam Families games into the accessible library without relabeling owned games", async () => {
+    const familyConfig = loadConfig({
+      STEAM_API_KEY: "secret-key",
+      STEAM_ID: "76561198000000000",
+      STEAM_WEBAPI_TOKEN: "temporary-family-token",
+    });
+    const getFamilyGames = vi.fn(async () => [
+      {
+        appid: 620,
+        name: "Portal 2",
+        owner_steamids: [familyConfig.steamId],
+        exclude_reason: 0,
+        rt_playtime: 135,
+      },
+      {
+        appid: 1196590,
+        name: "Resident Evil Village",
+        owner_steamids: ["76561198000000001"],
+        exclude_reason: 0,
+        rt_playtime: 285,
+      },
+      {
+        appid: 999,
+        name: "Unavailable shared game",
+        owner_steamids: ["76561198000000001"],
+        exclude_reason: 1,
+        rt_playtime: 0,
+      },
+    ]);
+    const service = createSteamService({
+      config: familyConfig,
+      steamClient: Object.assign(createClient(), { getFamilyGames }) as SteamApiClient,
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.getLibrary()).resolves.toMatchObject({
+      games: [
+        { appId: 620, accessType: "owned", isPlayable: true },
+        { appId: 440, accessType: "owned", isPlayable: true },
+        { appId: 1196590, accessType: "family_shared", isPlayable: true },
+        { appId: 999, accessType: "family_shared", isPlayable: false },
+      ],
+    });
+  });
+
+  test("falls back to owned games when the optional family synchronization fails", async () => {
+    const familyConfig = loadConfig({
+      STEAM_API_KEY: "secret-key",
+      STEAM_ID: "76561198000000000",
+      STEAM_WEBAPI_TOKEN: "temporary-family-token",
+    });
+    const service = createSteamService({
+      config: familyConfig,
+      steamClient: Object.assign(createClient(), {
+        getFamilyGames: vi.fn(async () => {
+          throw new SteamUnavailableError(new Error("temporary-family-token"));
+        }),
+      }) as SteamApiClient,
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.getLibrary()).resolves.toMatchObject({
+      games: [
+        { appId: 620, accessType: "owned" },
+        { appId: 440, accessType: "owned" },
+      ],
+    });
+  });
+
+  test("retains an owned game supplied only by the Steam Families catalog", async () => {
+    const familyConfig = loadConfig({
+      STEAM_API_KEY: "secret-key",
+      STEAM_ID: "76561198000000000",
+      STEAM_WEBAPI_TOKEN: "temporary-family-token",
+    });
+    const service = createSteamService({
+      config: familyConfig,
+      steamClient: Object.assign(createClient(), {
+        getFamilyGames: vi.fn(async () => [
+          {
+            appid: 730,
+            name: "Counter-Strike 2",
+            owner_steamids: [familyConfig.steamId],
+            exclude_reason: 0,
+            rt_playtime: 0,
+          },
+        ]),
+      }) as SteamApiClient,
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.getGame(730)).resolves.toMatchObject({
+      accessType: "owned",
+      isPlayable: true,
     });
   });
 });

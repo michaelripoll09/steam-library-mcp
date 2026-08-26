@@ -45,7 +45,7 @@ export function registerMetadataTools(server: ToolRegistrar, service: MetadataSe
   server.registerTool(
     "steam_get_game_metadata",
     {
-      description: "Get normalized metadata for one owned Steam game.",
+      description: "Get normalized metadata for one accessible Steam game.",
       inputSchema: steamGameInputSchema.shape,
     },
     handler(steamGameInputSchema, ({ appId }) => service.getOwnedGameMetadata(appId)) as never,
@@ -53,7 +53,7 @@ export function registerMetadataTools(server: ToolRegistrar, service: MetadataSe
   server.registerTool(
     "steam_query_library_metadata",
     {
-      description: "Query normalized metadata for owned Steam games.",
+      description: "Query normalized metadata for accessible Steam games.",
       inputSchema: metadataQueryInputSchema.shape,
     },
     handler(metadataQueryInputSchema, (query) => service.queryOwnedMetadata(query)) as never,

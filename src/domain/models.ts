@@ -5,6 +5,8 @@ export interface SteamGame {
   readonly recentPlaytimeMinutes?: number;
   readonly lastPlayedAt?: string;
   readonly imageUrl?: string;
+  readonly accessType?: "owned" | "family_shared";
+  readonly isPlayable?: boolean;
 }
 
 export interface SteamLibrary {
@@ -34,6 +36,8 @@ export function createSteamGame(input: SteamGameInput): SteamGame {
       : { recentPlaytimeMinutes: input.recentPlaytimeMinutes }),
     ...(input.lastPlayedAt === undefined ? {} : { lastPlayedAt: input.lastPlayedAt }),
     ...(input.imageUrl === undefined ? {} : { imageUrl: input.imageUrl }),
+    ...(input.accessType === undefined ? {} : { accessType: input.accessType }),
+    ...(input.isPlayable === undefined ? {} : { isPlayable: input.isPlayable }),
   });
 }
 

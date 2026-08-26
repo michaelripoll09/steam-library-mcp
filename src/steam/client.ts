@@ -12,6 +12,10 @@ import {
   recentGamesResponseSchema,
   type SteamOwnedGamesResponse,
   type SteamRecentGamesResponse,
+  type SteamFamilyGameDto,
+  type SteamFamilyGroupResponse,
+  familyGroupResponseSchema,
+  familySharedGamesResponseSchema,
 } from "./schemas.js";
 
 export type FetchLike = typeof fetch;
@@ -19,6 +23,7 @@ export type FetchLike = typeof fetch;
 export interface SteamApiClient {
   getOwnedGames(steamId: string): Promise<SteamOwnedGamesResponse>;
   getRecentGames(steamId: string, count?: number): Promise<SteamRecentGamesResponse>;
+  getFamilyGames?(steamId: string): Promise<readonly SteamFamilyGameDto[]>;
 }
 
 type SteamApiClientDependencies = Readonly<{
@@ -49,6 +54,45 @@ export function createSteamApiClient({
         { steamid: steamId, ...(count === undefined ? {} : { count: String(count) }) },
         recentGamesResponseSchema,
       ),
+    ...(config.steamWebApiToken === undefined
+      ? {}
+      : {
+          getFamilyGames: async (steamId: string) => {
+            const group = await requestSteam(
+              fetchLike,
+              config,
+              "/IFamilyGroupsService/GetFamilyGroupForUser/v1/",
+              {
+                access_token: config.steamWebApiToken!,
+                steamid: steamId,
+                include_family_group_response: "true",
+              },
+              familyGroupResponseSchema,
+              false,
+            );
+            const groupId = familyGroupId(group);
+            if (groupId === undefined) {
+              return [];
+            }
+            const library = await requestSteam(
+              fetchLike,
+              config,
+              "/IFamilyGroupsService/GetSharedLibraryApps/v1/",
+              {
+                access_token: config.steamWebApiToken!,
+                family_groupid: groupId,
+                include_own: "true",
+                include_excluded: "true",
+                include_free: "false",
+                include_non_games: "false",
+                language: "english",
+              },
+              familySharedGamesResponseSchema,
+              false,
+            );
+            return library.response.apps;
+          },
+        }),
   };
 }
 
@@ -58,14 +102,18 @@ async function requestSteam<T>(
   path: string,
   query: Readonly<Record<string, string>>,
   schema: z.ZodType<T>,
+  includeApiKey = true,
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
 
   try {
-    const response = await fetchLike(createSteamUrl(path, config.steamApiKey, query), {
-      signal: controller.signal,
-    });
+    const response = await fetchLike(
+      createSteamUrl(path, config.steamApiKey, query, includeApiKey),
+      {
+        signal: controller.signal,
+      },
+    );
 
     if (!response.ok) {
       throw new SteamUnavailableError();
@@ -95,9 +143,16 @@ function createSteamUrl(
   path: string,
   apiKey: string,
   query: Readonly<Record<string, string>>,
+  includeApiKey: boolean,
 ): URL {
-  const parameters = new URLSearchParams({ key: apiKey, ...query });
+  const parameters = new URLSearchParams({ ...(includeApiKey ? { key: apiKey } : {}), ...query });
   return new URL(`${path}?${parameters.toString()}`, steamApiBaseUrl);
+}
+
+function familyGroupId(response: SteamFamilyGroupResponse): string | undefined {
+  return response.response.is_not_member_of_any_group === true
+    ? undefined
+    : response.response.family_groupid;
 }
 
 async function parseJson(response: Response): Promise<unknown> {
