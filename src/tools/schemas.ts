@@ -3,6 +3,9 @@ import { z } from "zod";
 export const RECENT_GAME_COUNT_DEFAULT = 10;
 export const RECENT_GAME_COUNT_MIN = 1;
 export const RECENT_GAME_COUNT_MAX = 50;
+export const METADATA_QUERY_LIMIT_DEFAULT = 50;
+export const METADATA_QUERY_LIMIT_MIN = 1;
+export const METADATA_QUERY_LIMIT_MAX = 50;
 
 export const emptyInputSchema = z.object({}).strict();
 
@@ -25,6 +28,12 @@ export const metadataQueryInputSchema = z
     themes: z.array(z.string().trim().min(1)).min(1).optional(),
     releaseYearFrom: z.number().int().optional(),
     releaseYearTo: z.number().int().optional(),
+    limit: z
+      .number()
+      .int("Metadata query limit must be an integer.")
+      .min(METADATA_QUERY_LIMIT_MIN)
+      .max(METADATA_QUERY_LIMIT_MAX)
+      .default(METADATA_QUERY_LIMIT_DEFAULT),
   })
   .strict()
   .refine(

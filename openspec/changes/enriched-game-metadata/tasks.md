@@ -41,3 +41,9 @@ Chain strategy: feature-branch-chain
 - [x] 3.1 RED: add contract tests for exact seven-tool discovery, input rejection before upstream calls, metadata error/success shapes, filter semantics, and unaffected five Steam tools.
 - [x] 3.2 GREEN: modify `src/tools/schemas.ts`, `src/server.ts`; create `src/tools/register-metadata-tools.ts`; update `README.md` with free IGDB/Twitch setup and rollback behavior.
 - [x] 3.3 REFACTOR: run built stdio integration, verify no tracker/recommendation behavior, and commit `feat(metadata): expose owned game metadata tools`.
+
+## Bounded V3 Contract Remediation
+
+- [x] R1 RED/GREEN: restore metadata query `limit` bounds/default/truncation and the exact top-level unavailable envelope.
+- [x] R2 RED/GREEN: cover optional partial metadata, negative-cache expiry, seven-day stale cutoff, successful payloads, and invalid year ranges.
+- [x] R3 REFACTOR: align the design with the unified thirteen-tool surface and run the bounded quality suite.

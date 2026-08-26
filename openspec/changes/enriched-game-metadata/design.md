@@ -8,7 +8,7 @@ Flow: `MCP adapter -> MetadataService -> SteamService + IgdbClient`. `SteamServi
 
 | Decision | Choice | Alternatives | Rationale |
 |---|---|---|---|
-| Lazy configuration | Start Steam core and register all seven tools. Parse IGDB settings into enabled/disabled composition; disabled metadata calls return `METADATA_UNAVAILABLE` | Fail startup; omit tools | Preserves Steam availability and exact discovery. |
+| Lazy configuration | Start the unified thirteen-tool surface: five Steam tools, six tracker tools, and two metadata tools. Parse IGDB settings into enabled/disabled composition; disabled metadata calls return the exact top-level `METADATA_UNAVAILABLE` envelope | Fail startup; omit tools | Preserves Steam and tracker availability and exact discovery. |
 | Authentication | `IgdbTokenProvider` exchanges environment-only Twitch credentials and caches tokens until 60 seconds before expiry | Static token; inline auth | Isolates refresh and secrets. |
 | Exact match | Accept only IGDB `external_games` entries with official Steam category `1` and `uid === String(appId)` | Names; numeric coercion | Prevents fuzzy, cross-store, and leading-zero matches. If multiple games contain that exact pair, choose the lowest numeric IGDB game ID deterministically. |
 | Cache | Validated values only; timers below | Database; raw DTOs | Avoids persistence and invalid-data retention. |
@@ -71,7 +71,7 @@ OAuth Zod requires non-empty `access_token`, bearer type, and positive `expires_
 |---|---|---|
 | Unit | status shape, exact/duplicate match, normalization, filters, TTLs, concurrency | Vitest fakes for clock/cache/clients. |
 | Integration | OAuth, timeout, 429 timing, payload drift/redaction | Stubbed fetch and fake timers. |
-| Contract/E2E | seven-tool discovery, lazy config, ownership-before-IGDB, structured results | In-memory MCP transport and built stdio server. |
+| Contract/E2E | thirteen-tool discovery, lazy config, ownership-before-IGDB, exact unavailable envelopes, and structured success results | In-memory MCP transport and built stdio server. |
 
 ## Threat Matrix
 

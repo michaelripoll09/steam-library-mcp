@@ -74,7 +74,7 @@ export function createMetadataService({
         }
       }),
     );
-    return filterMetadata(result, query);
+    return filterMetadata(result, query).slice(0, query.limit ?? 50);
   }
   return Object.freeze({ getOwnedGameMetadata, queryOwnedMetadata });
 }

@@ -55,6 +55,21 @@ describe("metadata domain", () => {
     });
   });
 
+  test("normalizes incomplete upstream records as partial metadata", () => {
+    expect(
+      normalizeMetadata(
+        { ...game(3), keywords: undefined, first_release_date: undefined },
+        620,
+        "Portal 2",
+      ),
+    ).toMatchObject({
+      tags: [],
+      releaseDate: null,
+      metadataStatus: "partial",
+      missingReason: null,
+    });
+  });
+
   test("filters case-insensitively with OR within fields and AND across fields", () => {
     const items = [
       normalizeMetadata(game(3), 620, "Portal 2"),
@@ -135,5 +150,64 @@ describe("metadata service", () => {
 
     await expect(service.queryOwnedMetadata({ genres: ["puzzle"] })).resolves.toHaveLength(6);
     expect(maximum).toBeLessThanOrEqual(4);
+  });
+
+  test("expires negative entries after one hour and refuses stale positives after seven days", async () => {
+    let now = 0;
+    const findGamesForSteamApp = vi
+      .fn<IgdbClient["findGamesForSteamApp"]>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([game(3, "621")])
+      .mockResolvedValueOnce({
+        isError: true,
+        error: { code: "METADATA_UNAVAILABLE", message: "temporary", retryable: true },
+      });
+    const service = createMetadataService({
+      steamService: {
+        getGame: vi.fn(async (appId) => ({ appId, name: "Portal 2", playtimeMinutes: 0 })),
+      } as unknown as SteamService,
+      igdbClient: { findGamesForSteamApp } as IgdbClient,
+      clock: { now: () => now },
+    });
+
+    await expect(service.getOwnedGameMetadata(620)).resolves.toMatchObject({
+      metadataStatus: "missing",
+      cacheState: "none",
+    });
+    now += 3_600_000;
+    await expect(service.getOwnedGameMetadata(620)).resolves.toMatchObject({
+      metadataStatus: "missing",
+    });
+    await expect(service.getOwnedGameMetadata(621)).resolves.toMatchObject({
+      metadataStatus: "complete",
+    });
+    now += 604_800_000;
+    await expect(service.getOwnedGameMetadata(621)).resolves.toMatchObject({
+      isError: true,
+      error: { code: "METADATA_UNAVAILABLE" },
+    });
+    expect(findGamesForSteamApp).toHaveBeenCalledTimes(4);
+  });
+
+  test("applies the requested query limit after filtering in app-ID order", async () => {
+    const games = [
+      { appId: 620, name: "Portal 2", playtimeMinutes: 0 },
+      { appId: 440, name: "TF2", playtimeMinutes: 0 },
+    ];
+    const service = createMetadataService({
+      steamService: {
+        getGame: vi.fn(async (appId) => games.find((game) => game.appId === appId)!),
+        getLibrary: vi.fn(async () => ({ games })),
+      } as unknown as SteamService,
+      igdbClient: {
+        findGamesForSteamApp: vi.fn(async (appId) => [game(appId, String(appId))]),
+      } as IgdbClient,
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.queryOwnedMetadata({ genres: ["puzzle"], limit: 1 })).resolves.toEqual([
+      expect.objectContaining({ appId: 440 }),
+    ]);
   });
 });

@@ -18,6 +18,7 @@ export type MetadataQuery = Readonly<{
   themes?: readonly string[];
   releaseYearFrom?: number;
   releaseYearTo?: number;
+  limit?: number;
 }>;
 
 const names = (items: readonly { name: string }[] | undefined): readonly string[] => {
