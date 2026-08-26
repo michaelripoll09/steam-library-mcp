@@ -32,9 +32,9 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Owned Metadata Service (PR #2)
 
-- [ ] 2.1 RED: add tests for ownership-before-IGDB, category `1` + exact UID matching, lowest-ID tie-break, normalization/status, filters, 24h/1h/7d TTLs, and concurrency limit four.
-- [ ] 2.2 GREEN: create `src/domain/metadata.ts` and `src/services/metadata-service.ts`; integrate existing Steam ownership lookup, cache, stale fallback, and bounded rate-limit behavior.
-- [ ] 2.3 REFACTOR: isolate deterministic matching/filter helpers and preserve no recommendation/ranking/scoring fields; commit `feat(metadata): add owned normalization and cache`.
+- [x] 2.1 RED: add tests for ownership-before-IGDB, category `1` + exact UID matching, lowest-ID tie-break, normalization/status, filters, 24h/1h/7d TTLs, and concurrency limit four.
+- [x] 2.2 GREEN: create `src/domain/metadata.ts` and `src/services/metadata-service.ts`; integrate existing Steam ownership lookup, cache, stale fallback, and bounded rate-limit behavior.
+- [x] 2.3 REFACTOR: isolate deterministic matching/filter helpers and preserve no recommendation/ranking/scoring fields; commit `feat(metadata): add owned normalization and cache`.
 
 ## Phase 3: MCP Surface and Verification (PR #3)
 
