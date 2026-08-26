@@ -18,6 +18,28 @@ export const steamGameInputSchema = z
   })
   .strict();
 
+export const metadataQueryInputSchema = z
+  .object({
+    genres: z.array(z.string().trim().min(1)).min(1).optional(),
+    tags: z.array(z.string().trim().min(1)).min(1).optional(),
+    themes: z.array(z.string().trim().min(1)).min(1).optional(),
+    releaseYearFrom: z.number().int().optional(),
+    releaseYearTo: z.number().int().optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.genres || value.tags || value.themes || value.releaseYearFrom || value.releaseYearTo,
+    "At least one metadata filter is required.",
+  )
+  .refine(
+    (value) =>
+      value.releaseYearFrom === undefined ||
+      value.releaseYearTo === undefined ||
+      value.releaseYearFrom <= value.releaseYearTo,
+    "Release year range is invalid.",
+  );
+
 export const recentGamesInputSchema = z
   .object({
     count: z

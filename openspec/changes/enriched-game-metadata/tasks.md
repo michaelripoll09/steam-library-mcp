@@ -38,6 +38,6 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: MCP Surface and Verification (PR #3)
 
-- [ ] 3.1 RED: add contract tests for exact seven-tool discovery, input rejection before upstream calls, metadata error/success shapes, filter semantics, and unaffected five Steam tools.
-- [ ] 3.2 GREEN: modify `src/tools/schemas.ts`, `src/server.ts`; create `src/tools/register-metadata-tools.ts`; update `README.md` with free IGDB/Twitch setup and rollback behavior.
-- [ ] 3.3 REFACTOR: run built stdio integration, verify no tracker/recommendation behavior, and commit `feat(metadata): expose owned game metadata tools`.
+- [x] 3.1 RED: add contract tests for exact seven-tool discovery, input rejection before upstream calls, metadata error/success shapes, filter semantics, and unaffected five Steam tools.
+- [x] 3.2 GREEN: modify `src/tools/schemas.ts`, `src/server.ts`; create `src/tools/register-metadata-tools.ts`; update `README.md` with free IGDB/Twitch setup and rollback behavior.
+- [x] 3.3 REFACTOR: run built stdio integration, verify no tracker/recommendation behavior, and commit `feat(metadata): expose owned game metadata tools`.

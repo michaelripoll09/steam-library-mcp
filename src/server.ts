@@ -3,12 +3,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 import { TtlCache, type Cache, type Clock } from "./cache/ttl-cache.js";
-import { loadConfig, type AppConfig } from "./config.js";
-import { TrackerPersistenceError } from "./errors.js";
+import { loadConfig, loadIgdbConfig, type AppConfig } from "./config.js";
+import { createMetadataUnavailableEnvelope, TrackerPersistenceError } from "./errors.js";
+import { createIgdbClient } from "./igdb/client.js";
+import { createMetadataService, type MetadataService } from "./services/metadata-service.js";
 import { createSteamService, type SteamService } from "./services/steam-service.js";
 import { createSteamApiClient, type FetchLike, type SteamApiClient } from "./steam/client.js";
 import { registerSteamTools, type ToolRegistrar } from "./tools/register-steam-tools.js";
 import { registerGamingTools } from "./tools/register-gaming-tools.js";
+import { registerMetadataTools } from "./tools/register-metadata-tools.js";
 import {
   createGamingTrackerService,
   type GamingTrackerService,
@@ -24,6 +27,7 @@ export type ServerOverrides = Readonly<{
   steamClient?: SteamApiClient;
   steamService?: SteamService;
   gamingTrackerService?: GamingTrackerService;
+  metadataService?: MetadataService;
 }>;
 
 type StartServerOptions = ServerOverrides &
@@ -43,11 +47,34 @@ export function createServer(overrides: ServerOverrides = {}): McpServer {
   const gamingTrackerService =
     overrides.gamingTrackerService ??
     createDefaultGamingTrackerService(config, clock, steamService);
+  const metadataConfig = loadIgdbConfig();
+  const metadataService =
+    overrides.metadataService ??
+    (metadataConfig.enabled
+      ? createMetadataService({
+          steamService,
+          igdbClient: createIgdbClient({ credentials: metadataConfig, fetch: overrides.fetch }),
+          clock,
+        })
+      : disabledMetadataService());
   const server = new McpServer({ name: "steam-library-mcp", version: "0.1.0" });
 
   registerSteamTools(server as unknown as ToolRegistrar, steamService);
   registerGamingTools(server as unknown as ToolRegistrar, gamingTrackerService);
+  registerMetadataTools(server as unknown as ToolRegistrar, metadataService);
   return server;
+}
+
+function disabledMetadataService(): MetadataService {
+  const unavailable = () =>
+    createMetadataUnavailableEnvelope({
+      message: "Configure IGDB_CLIENT_ID and IGDB_CLIENT_SECRET to use metadata tools.",
+      retryable: false,
+    });
+  return {
+    getOwnedGameMetadata: async () => unavailable(),
+    queryOwnedMetadata: async () => unavailable() as never,
+  };
 }
 
 function createDefaultGamingTrackerService(

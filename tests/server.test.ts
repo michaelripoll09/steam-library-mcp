@@ -31,7 +31,7 @@ function createSteamClient(): SteamApiClient {
 }
 
 describe("MCP server composition", () => {
-  test("connects an injected Steam service through the eleven documented strict MCP tools", async () => {
+  test("connects an injected Steam service through the metadata-extended MCP tools", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
       config,
@@ -88,6 +88,8 @@ describe("MCP server composition", () => {
           name: "gaming_get_completed",
           inputSchema: { type: "object", properties: {}, additionalProperties: false },
         },
+        { name: "steam_get_game_metadata" },
+        { name: "steam_query_library_metadata" },
       ],
     });
     await expect(
