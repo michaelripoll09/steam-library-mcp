@@ -31,7 +31,7 @@ function createSteamClient(): SteamApiClient {
 }
 
 describe("MCP server composition", () => {
-  test("connects an injected Steam service through exactly five MCP tools", async () => {
+  test("connects an injected Steam service through the eleven documented strict MCP tools", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
       config,
@@ -52,12 +52,42 @@ describe("MCP server composition", () => {
         { name: "steam_get_game" },
         { name: "steam_get_recent_games" },
         { name: "steam_get_library_stats" },
-        { name: "gaming_get_backlog" },
-        { name: "gaming_get_current_game" },
-        { name: "gaming_mark_playing" },
-        { name: "gaming_mark_completed" },
-        { name: "gaming_mark_dropped" },
-        { name: "gaming_get_completed" },
+        {
+          name: "gaming_get_backlog",
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        },
+        {
+          name: "gaming_get_current_game",
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        },
+        {
+          name: "gaming_mark_playing",
+          inputSchema: {
+            type: "object",
+            properties: { appId: { type: "integer" } },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "gaming_mark_completed",
+          inputSchema: {
+            type: "object",
+            properties: { appId: { type: "integer" } },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "gaming_mark_dropped",
+          inputSchema: {
+            type: "object",
+            properties: { appId: { type: "integer" } },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "gaming_get_completed",
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        },
       ],
     });
     await expect(

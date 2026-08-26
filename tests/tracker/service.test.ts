@@ -167,4 +167,22 @@ describe("GamingTrackerService lifecycle", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  test("orders derived backlog games by update time descending and app ID when timestamps are null", async () => {
+    const service = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup: createOwnershipLookup([
+        { appId: 30, name: "Thirty", playtimeMinutes: 0 },
+        { appId: 10, name: "Ten", playtimeMinutes: 0 },
+        { appId: 20, name: "Twenty", playtimeMinutes: 0 },
+      ]),
+      repository: createRepository(),
+    });
+
+    await expect(service.getBacklog()).resolves.toEqual([
+      expect.objectContaining({ appId: 10, updatedAt: null }),
+      expect.objectContaining({ appId: 20, updatedAt: null }),
+      expect.objectContaining({ appId: 30, updatedAt: null }),
+    ]);
+  });
 });

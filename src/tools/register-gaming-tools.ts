@@ -62,7 +62,7 @@ function register<TInput extends object, TValue>(
 ): void {
   server.registerTool(
     name,
-    { description: name, inputSchema: schema.shape },
+    { description: name, inputSchema: schema },
     async (input): Promise<Result> => {
       try {
         const parsed = schema.parse(input) as TInput;
@@ -76,7 +76,10 @@ function register<TInput extends object, TValue>(
             : error instanceof z.ZodError
               ? new TrackerInputError()
               : new TrackerPersistenceError(error);
-        return { content: [{ type: "text", text: JSON.stringify(safe) }], isError: true };
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: safe }) }],
+          isError: true,
+        };
       }
     },
   );

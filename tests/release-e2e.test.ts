@@ -96,6 +96,8 @@ describe("released stdio entrypoint", () => {
         TRACKER_DATABASE_PATH: databasePath,
       });
       expect(result).toMatchObject({ code: 1, stdout: "" });
+      expect(result.stderr).toContain("PERSISTENCE_FAILURE");
+      expect(result.stderr).toContain("Check the database path and try again.");
       expect(`${result.stdout}${result.stderr}`).not.toContain(databasePath);
     } finally {
       rmSync(directory, { force: true, recursive: true });

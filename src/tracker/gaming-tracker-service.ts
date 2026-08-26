@@ -70,7 +70,8 @@ export function createGamingTrackerService({
             const status = entriesByAppId.get(game.appId)?.status;
             return status === undefined || status === "backlog" || status === "paused";
           })
-          .map((game) => toTrackerGame(game, entriesByAppId.get(game.appId), "backlog")),
+          .map((game) => toTrackerGame(game, entriesByAppId.get(game.appId), "backlog"))
+          .sort(compareTrackerGames),
       );
     },
     async getCurrentGame() {
@@ -88,7 +89,8 @@ export function createGamingTrackerService({
         repository
           .list()
           .filter((entry) => entry.status === "completed" && gameByAppId.has(entry.appId))
-          .map((entry) => toTrackerGame(gameByAppId.get(entry.appId)!, entry, "completed")),
+          .map((entry) => toTrackerGame(gameByAppId.get(entry.appId)!, entry, "completed"))
+          .sort(compareTrackerGames),
       );
     },
   });
@@ -126,6 +128,15 @@ function toTrackerGame(
     createdAt: entry?.createdAt ?? null,
     updatedAt: entry?.updatedAt ?? null,
   });
+}
+
+function compareTrackerGames(left: TrackerGame, right: TrackerGame): number {
+  if (left.updatedAt !== right.updatedAt) {
+    if (left.updatedAt === null) return 1;
+    if (right.updatedAt === null) return -1;
+    return right.updatedAt.localeCompare(left.updatedAt);
+  }
+  return left.appId - right.appId;
 }
 
 function assertAppId(appId: unknown): asserts appId is number {
