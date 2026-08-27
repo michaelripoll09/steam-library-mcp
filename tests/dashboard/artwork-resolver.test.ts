@@ -40,11 +40,76 @@ describe("artwork resolver", () => {
     }
   });
 
+  test("falls back to deterministic direct Steam CDN artwork when appdetails is unavailable", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "steam-artwork-"));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ 858460: { success: false } })))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([8, 5, 8]), { headers: { "content-type": "image/jpeg" } }),
+      );
+    try {
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+      await expect(resolver.resolve(858460)).resolves.toMatchObject({ contentType: "image/jpeg" });
+      expect(String(fetch.mock.calls[1]?.[0])).toBe(
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/858460/library_600x900.jpg",
+      );
+      expect(String(fetch.mock.calls[2]?.[0])).toBe(
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/858460/header.jpg",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("uses a safe SteamGridDB CDN result only after official Steam candidates fail", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "steam-artwork-"));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ 480: { success: false } })))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ url: "https://cdn2.steamgriddb.com/file/sgdb-cdn/grid/spacewar.jpg" }],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([4, 8, 0]), { headers: { "content-type": "image/jpeg" } }),
+      );
+    try {
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        steamGridDbApiKey: "grid-key",
+        fetch,
+      });
+      await expect(resolver.resolve(480)).resolves.toMatchObject({ contentType: "image/jpeg" });
+      expect(String(fetch.mock.calls[4]?.[0])).toContain("steamgriddb.com/api/v2/grids/steam/480");
+      expect(fetch.mock.calls[4]?.[1]).toMatchObject({
+        headers: { Authorization: "Bearer grid-key" },
+      });
+      expect(String(fetch.mock.calls[5]?.[0])).toBe(
+        "https://cdn2.steamgriddb.com/file/sgdb-cdn/grid/spacewar.jpg",
+      );
+      expect(fetch.mock.calls[5]?.[1]).not.toHaveProperty("headers");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("uses SteamGridDB only when explicitly configured and never forwards Steam credentials", async () => {
     const directory = await mkdtemp(join(tmpdir(), "steam-artwork-"));
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ 1: { success: false } })))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -63,10 +128,10 @@ describe("artwork resolver", () => {
         fetch,
       });
       await expect(resolver.resolve(1)).resolves.toBeDefined();
-      expect(fetch.mock.calls[1]?.[1]).toMatchObject({
+      expect(fetch.mock.calls[4]?.[1]).toMatchObject({
         headers: { Authorization: "Bearer grid-key" },
       });
-      expect(fetch.mock.calls[2]?.[1]).not.toHaveProperty("headers");
+      expect(fetch.mock.calls[5]?.[1]).not.toHaveProperty("headers");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

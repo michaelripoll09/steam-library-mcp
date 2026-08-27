@@ -171,6 +171,7 @@ select {
   border-color: #d8b56c;
 }
 .game-card-button {
+  position: relative;
   display: block;
   width: 100%;
   padding: 0;
@@ -179,17 +180,35 @@ select {
   border: 0;
   background: transparent;
 }
+.cover-frame {
+  position: relative;
+  display: block;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  isolation: isolate;
+  background: #1a1d28;
+}
 .cover-image {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
-  aspect-ratio: 2 / 3;
+  height: 100%;
   object-fit: cover;
   background: #1a1d28;
 }
-.cover-image.cover-landscape {
+.cover-frame-landscape .cover-image {
   object-fit: contain;
-  padding: 0.65rem;
-  background: radial-gradient(circle at 50% 20%, #34394d, #12141c 72%);
+}
+.cover-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: -1rem;
+  background-position: center;
+  background-size: cover;
+  filter: blur(1rem) saturate(1.2);
+  opacity: 0.82;
+  transform: scale(1.08);
 }
 .cover-fallback {
   background-size: cover;
@@ -199,16 +218,19 @@ select {
   gap: 0.5rem;
   padding: 0.8rem;
 }
-.game-card-title-row {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.game-card-title-row strong {
+.game-card-title {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.25;
+}
+.cover-status {
+  position: absolute;
+  z-index: 2;
+  top: 0.65rem;
+  right: 0.65rem;
+  max-width: calc(100% - 1.3rem);
 }
 .game-card-meta {
   color: #aeadb2;
@@ -292,6 +314,9 @@ select {
   box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.55);
   animation: dialog-enter 180ms ease-out;
 }
+.game-details .cover-frame {
+  height: 100%;
+}
 .game-details .cover-image {
   height: 100%;
 }
@@ -363,7 +388,7 @@ select {
     max-height: calc(100vh - 2rem);
     overflow-y: auto;
   }
-  .game-details .cover-image {
+  .game-details .cover-frame {
     max-height: 18rem;
   }
   .details-copy {

@@ -298,11 +298,11 @@ function GameCard({
         aria-label={`Ver detalles de ${game.name}`}
       >
         <CoverImage game={game} />
+        <span className="cover-status">
+          <StatusPill status={game.status} />
+        </span>
         <span className="game-card-content">
-          <span className="game-card-title-row">
-            <strong>{game.name}</strong>
-            <StatusPill status={game.status} />
-          </span>
+          <strong className="game-card-title">{game.name}</strong>
           <span className="game-card-meta">
             {formatPlaytime(game.playtimeMinutes)} jugado ·{" "}
             {game.accessType === "owned" ? "Propio" : "Compartido en familia"}
@@ -324,7 +324,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
   if (coverUrl === undefined) {
     return (
       <div
-        className="cover-image cover-fallback"
+        className="cover-frame cover-fallback"
         role="img"
         aria-label={`Portada no disponible para ${game.name}`}
         style={{ backgroundImage: coverGradient(game.appId) }}
@@ -332,15 +332,24 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
     );
   }
   return (
-    <img
-      className={`cover-image${isLandscape ? " cover-landscape" : ""}`}
-      src={coverUrl}
-      alt={`Portada de ${game.name}`}
-      onError={() => setFailedSourceCount((count) => count + 1)}
-      onLoad={(event) =>
-        setIsLandscape(event.currentTarget.naturalWidth > event.currentTarget.naturalHeight)
-      }
-    />
+    <span className={`cover-frame${isLandscape ? " cover-frame-landscape" : ""}`}>
+      {isLandscape && (
+        <span
+          className="cover-backdrop"
+          aria-hidden="true"
+          style={{ backgroundImage: `url("${coverUrl}")` }}
+        />
+      )}
+      <img
+        className={`cover-image${isLandscape ? " cover-landscape" : ""}`}
+        src={coverUrl}
+        alt={`Portada de ${game.name}`}
+        onError={() => setFailedSourceCount((count) => count + 1)}
+        onLoad={(event) =>
+          setIsLandscape(event.currentTarget.naturalWidth > event.currentTarget.naturalHeight)
+        }
+      />
+    </span>
   );
 }
 

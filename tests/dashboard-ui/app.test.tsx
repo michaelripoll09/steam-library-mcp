@@ -95,6 +95,45 @@ describe("DashboardApp", () => {
     });
   });
 
+  test("keeps a long game title separate from its always-visible cover status", async () => {
+    const longTitleLibrary: DashboardLibrary = {
+      ...library,
+      games: [
+        {
+          ...library.games[0],
+          name: "A title that is intentionally much longer than a narrow game card can display",
+          status: "backlog",
+        },
+      ],
+    };
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(longTitleLibrary),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+    };
+
+    render(<DashboardApp api={api} />);
+
+    const card = await screen.findByRole("article", { name: longTitleLibrary.games[0].name });
+    expect(within(card).getByText("Pendiente").parentElement).toHaveClass("cover-status");
+    expect(within(card).getByText(longTitleLibrary.games[0].name)).toBeInTheDocument();
+  });
+
+  test("renders a landscape cover with an uncropped foreground and full-bleed backdrop", () => {
+    render(<CoverImage game={library.games[0]} />);
+
+    const cover = screen.getByRole("img", { name: "Portada de Celeste" });
+    Object.defineProperty(cover, "naturalWidth", { configurable: true, value: 1600 });
+    Object.defineProperty(cover, "naturalHeight", { configurable: true, value: 900 });
+    fireEvent.load(cover);
+
+    expect(cover).toHaveClass("cover-image", "cover-landscape");
+    expect(cover.parentElement).toHaveClass("cover-frame", "cover-frame-landscape");
+    expect(cover.parentElement?.querySelector(".cover-backdrop")).toHaveStyle({
+      backgroundImage: expect.stringContaining("celeste.jpg"),
+    });
+  });
+
   test("renders a Spanish dashboard with accessible localized controls and dates", async () => {
     const user = userEvent.setup();
     const api = {

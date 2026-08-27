@@ -18,6 +18,11 @@ const allowedSteamHosts = new Set([
   "shared.akamai.steamstatic.com",
   "cdn.cloudflare.steamstatic.com",
 ]);
+const directSteamArtworkPaths = [
+  "library_600x900.jpg",
+  "header.jpg",
+  "capsule_616x353.jpg",
+] as const;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_CACHE_ENTRIES = 128;
 
@@ -30,13 +35,16 @@ export function createArtworkResolver({
     if (!Number.isSafeInteger(appId) || appId <= 0) return undefined;
     const cached = await readCached(cacheDirectory, appId);
     if (cached !== undefined) return cached;
-    const steamUrl = await publicSteamArtwork(fetch, appId);
+    const steamArtwork = await publicSteamArtwork(fetch, appId);
+    for (const imageUrl of steamArtwork) {
+      const resolved = await cacheImage(fetch, cacheDirectory, appId, imageUrl);
+      if (resolved !== undefined) return resolved;
+    }
     const gridUrl =
-      steamUrl === undefined && steamGridDbApiKey !== undefined
-        ? await steamGridArtwork(fetch, appId, steamGridDbApiKey)
-        : undefined;
-    const imageUrl = steamUrl ?? gridUrl;
-    return imageUrl === undefined ? undefined : cacheImage(fetch, cacheDirectory, appId, imageUrl);
+      steamGridDbApiKey === undefined
+        ? undefined
+        : await steamGridArtwork(fetch, appId, steamGridDbApiKey);
+    return gridUrl === undefined ? undefined : cacheImage(fetch, cacheDirectory, appId, gridUrl);
   }
   return Object.freeze({ resolve });
 }
@@ -54,7 +62,8 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
   }
 }
 
-async function publicSteamArtwork(fetch: FetchLike, appId: number): Promise<URL | undefined> {
+async function publicSteamArtwork(fetch: FetchLike, appId: number): Promise<readonly URL[]> {
+  const candidates = directSteamArtworkCandidates(appId);
   try {
     const response = await fetch(
       `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
@@ -63,14 +72,20 @@ async function publicSteamArtwork(fetch: FetchLike, appId: number): Promise<URL 
       string,
       { success?: boolean; data?: { header_image?: unknown } }
     >;
-    const value =
+    const headerImage =
       payload[String(appId)]?.success === true
-        ? payload[String(appId)]?.data?.header_image
+        ? allowedUrl(payload[String(appId)]?.data?.header_image, allowedSteamHosts)
         : undefined;
-    return allowedUrl(value, allowedSteamHosts);
+    return headerImage === undefined ? candidates : [headerImage, ...candidates];
   } catch {
-    return undefined;
+    return candidates;
   }
+}
+
+function directSteamArtworkCandidates(appId: number): readonly URL[] {
+  return directSteamArtworkPaths.map(
+    (path) => new URL(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/${path}`),
+  );
 }
 
 async function steamGridArtwork(
@@ -97,9 +112,11 @@ function allowedSteamGridUrl(value: unknown): URL | undefined {
   if (typeof value !== "string") return undefined;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" &&
-      url.hostname === "s3.amazonaws.com" &&
-      /^\/steamgriddb\/.+/.test(url.pathname)
+    const isLegacySteamGridAsset =
+      url.hostname === "s3.amazonaws.com" && /^\/steamgriddb\/.+/.test(url.pathname);
+    const isCurrentSteamGridAsset =
+      url.hostname === "cdn2.steamgriddb.com" && /^\/file\/sgdb-cdn\/grid\/.+/.test(url.pathname);
+    return url.protocol === "https:" && (isLegacySteamGridAsset || isCurrentSteamGridAsset)
       ? url
       : undefined;
   } catch {
