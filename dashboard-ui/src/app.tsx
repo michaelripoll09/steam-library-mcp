@@ -351,17 +351,42 @@ function GameDetails({
   onClose: () => void;
   onStatusChange: (status: DashboardMutableStatus) => Promise<void>;
 }>) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusableElements = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusableElements === undefined || focusableElements.length === 0) return;
+
+    const first = focusableElements[0];
+    const last = focusableElements[focusableElements.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <div className="dialog-backdrop" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="game-details"
         role="dialog"
         aria-modal="true"
         aria-label={`${game.name} details`}
         onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onClose();
-        }}
+        onKeyDown={handleKeyDown}
       >
         <button
           ref={closeButtonRef}
@@ -377,6 +402,9 @@ function GameDetails({
           <p className="eyebrow">{game.accessType === "owned" ? "Owned game" : "Family shared"}</p>
           <h2 id="game-details-title">{game.name}</h2>
           <p>{formatPlaytime(game.playtimeMinutes)} played</p>
+          {game.lastPlayedAt !== undefined && (
+            <p>Last played {formatLastPlayed(game.lastPlayedAt)}</p>
+          )}
           <p>{game.isPlayable ? "Ready to play" : "Not currently playable"}</p>
           <label className="status-control">
             <span>Status</span>
@@ -421,6 +449,12 @@ function StatusPill({ status }: Readonly<{ status: DashboardGameStatus }>) {
 
 function formatLabel(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatLastPlayed(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "on an unknown date";
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(date);
 }
 
 function coverGradient(appId: number): string {

@@ -385,8 +385,11 @@ select {
   *::before,
   *::after {
     scroll-behavior: auto !important;
+    animation: none !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition: none !important;
     transition-duration: 0.01ms !important;
+    transform: none !important;
   }
 }
