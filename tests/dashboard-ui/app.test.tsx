@@ -75,7 +75,7 @@ describe("DashboardApp", () => {
     expect(screen.queryByRole("img", { name: "Portada de Celeste" })).not.toBeInTheDocument();
   });
 
-  test("tries official Steam landscape assets before showing the deterministic fallback", () => {
+  test("uses the official Steam icon before showing the deterministic fallback", () => {
     const game = {
       ...library.games[0],
       coverUrl: "https://cdn.cloudflare.steamstatic.com/steam/apps/10/library_600x900.jpg",
@@ -86,31 +86,7 @@ describe("DashboardApp", () => {
     fireEvent.error(cover);
     expect(cover).toHaveAttribute(
       "src",
-      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/header.jpg",
-    );
-
-    fireEvent.error(cover);
-    expect(cover).toHaveAttribute(
-      "src",
-      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_616x353.jpg",
-    );
-
-    fireEvent.error(cover);
-    expect(cover).toHaveAttribute(
-      "src",
-      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_467x181.jpg",
-    );
-
-    fireEvent.error(cover);
-    expect(cover).toHaveAttribute(
-      "src",
-      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_231x87.jpg",
-    );
-
-    fireEvent.error(cover);
-    expect(cover).toHaveAttribute(
-      "src",
-      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_184x69.jpg",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/icon.jpg",
     );
 
     fireEvent.error(cover);

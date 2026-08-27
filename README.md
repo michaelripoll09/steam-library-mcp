@@ -26,14 +26,15 @@ For development, `npm run dev` rebuilds the project and starts the server. Shell
 
 Start from the tracked [`.env.example`](.env.example) file. Do not copy real credentials into documentation, prompts, tool arguments, or logs.
 
-| Variable                | Required     | Purpose                                                             |
-| ----------------------- | ------------ | ------------------------------------------------------------------- |
-| `STEAM_API_KEY`         | Yes          | Steam Web API credential used for library requests.                 |
-| `STEAM_ID`              | Yes          | 64-bit SteamID of the single library to query.                      |
-| `STEAM_WEBAPI_TOKEN`    | For Families | Temporary Steam web-session credential for family-library syncing.  |
-| `TRACKER_DATABASE_PATH` | No           | Local SQLite location; defaults to `.steam-library/tracker.sqlite`. |
-| `IGDB_CLIENT_ID`        | For metadata | Twitch developer client ID for IGDB metadata tools.                 |
-| `IGDB_CLIENT_SECRET`    | For metadata | Twitch developer client secret for IGDB metadata tools.             |
+| Variable                | Required     | Purpose                                                                             |
+| ----------------------- | ------------ | ----------------------------------------------------------------------------------- |
+| `STEAM_API_KEY`         | Yes          | Steam Web API credential used for library requests.                                 |
+| `STEAM_ID`              | Yes          | 64-bit SteamID of the single library to query.                                      |
+| `STEAM_WEBAPI_TOKEN`    | For Families | Temporary Steam web-session credential for family-library syncing.                  |
+| `STEAMGRIDDB_API_KEY`   | No           | Optional SteamGridDB key for portrait artwork when public Steam art is unavailable. |
+| `TRACKER_DATABASE_PATH` | No           | Local SQLite location; defaults to `.steam-library/tracker.sqlite`.                 |
+| `IGDB_CLIENT_ID`        | For metadata | Twitch developer client ID for IGDB metadata tools.                                 |
+| `IGDB_CLIENT_SECRET`    | For metadata | Twitch developer client secret for IGDB metadata tools.                             |
 
 If `STEAM_WEBAPI_TOKEN` is absent or expires, Steam Families synchronization is skipped and the owned library continues to work. If the IGDB credentials are not set, metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result.
 

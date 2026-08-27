@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { AppError, InputError } from "../../errors.js";
 import type { DashboardService } from "../dashboard-service.js";
+import type { ArtworkResolver } from "../artwork-resolver.js";
 
 export const DASHBOARD_HOST = "127.0.0.1";
 export const MAX_JSON_BODY_BYTES = 16 * 1024;
@@ -40,6 +41,7 @@ class UnsupportedMediaTypeError extends Error {}
 
 export type DashboardHttpServerOptions = Readonly<{
   dashboardService: Pick<DashboardService, "getLibrary" | "syncLibrary" | "updateStatus">;
+  artworkResolver?: ArtworkResolver;
   staticRoot?: string;
   host?: string;
   port?: number;
@@ -58,6 +60,7 @@ export function createDashboardHttpServer(options: DashboardHttpServerOptions): 
       request,
       response,
       options.dashboardService,
+      options.artworkResolver,
       staticRoot,
       options.logger,
     ).catch(() => {
@@ -81,6 +84,7 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   dashboardService: DashboardHttpServerOptions["dashboardService"],
+  artworkResolver: DashboardHttpServerOptions["artworkResolver"],
   staticRoot: string | undefined,
   logger: DashboardHttpServerOptions["logger"],
 ): Promise<void> {
@@ -101,7 +105,15 @@ async function handleRequest(
 
   if (requestUrl.pathname === "/api" || requestUrl.pathname.startsWith("/api/")) {
     if (!isAllowedOrigin(request, response, method)) return;
-    await handleApi(request, response, requestUrl.pathname, method, dashboardService, logger);
+    await handleApi(
+      request,
+      response,
+      requestUrl.pathname,
+      method,
+      dashboardService,
+      artworkResolver,
+      logger,
+    );
     return;
   }
 
@@ -126,8 +138,35 @@ async function handleApi(
   pathname: string,
   method: string,
   dashboardService: DashboardHttpServerOptions["dashboardService"],
+  artworkResolver: DashboardHttpServerOptions["artworkResolver"],
   logger: DashboardHttpServerOptions["logger"],
 ): Promise<void> {
+  const artworkMatch = /^\/api\/artwork\/(\d+)$/.exec(pathname);
+  if (artworkMatch !== null) {
+    if (method !== "GET" || artworkResolver === undefined) {
+      sendJson(
+        response,
+        404,
+        { error: { code: "NOT_FOUND", message: "Artwork not found." } },
+        method,
+      );
+      return;
+    }
+    const artwork = await artworkResolver.resolve(Number(artworkMatch[1]));
+    if (artwork === undefined) {
+      sendJson(
+        response,
+        404,
+        { error: { code: "NOT_FOUND", message: "Artwork not found." } },
+        method,
+      );
+      return;
+    }
+    response.statusCode = 200;
+    response.setHeader("Content-Type", artwork.contentType);
+    createReadStream(artwork.filePath).pipe(response);
+    return;
+  }
   if (pathname === "/api/library") {
     if (method !== "GET") {
       sendJson(

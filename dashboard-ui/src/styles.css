@@ -186,6 +186,11 @@ select {
   object-fit: cover;
   background: #1a1d28;
 }
+.cover-image.cover-landscape {
+  object-fit: contain;
+  padding: 0.65rem;
+  background: radial-gradient(circle at 50% 20%, #34394d, #12141c 72%);
+}
 .cover-fallback {
   background-size: cover;
 }

@@ -74,7 +74,7 @@ function toDashboardGame(game: SteamGame, status: DashboardGameStatus): Dashboar
     appId: game.appId,
     name: game.name,
     status,
-    coverUrl: portraitCoverUrl(game.appId),
+    coverUrl: `/api/artwork/${game.appId}`,
     accessType: game.accessType ?? "owned",
     isPlayable: game.isPlayable ?? true,
     playtimeMinutes: game.playtimeMinutes,
@@ -112,10 +112,6 @@ function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
   return result.outcome === "not_owned"
     ? Object.freeze({ outcome: result.outcome, appId: result.appId })
     : Object.freeze({ outcome: result.outcome, appId: result.appId, status: result.status });
-}
-
-function portraitCoverUrl(appId: number): string {
-  return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`;
 }
 
 function assertAppId(appId: unknown): asserts appId is number {

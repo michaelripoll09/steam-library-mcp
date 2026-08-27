@@ -315,7 +315,8 @@ function GameCard({
 
 export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
   const [failedSourceCount, setFailedSourceCount] = useState(0);
-  const coverUrls = [game.coverUrl, ...officialCoverFallbackUrls(game.appId)].filter(
+  const [isLandscape, setIsLandscape] = useState(false);
+  const coverUrls = [game.coverUrl, officialSteamIconUrl(game.appId)].filter(
     (url, index, urls) => urls.indexOf(url) === index,
   );
   const coverUrl = coverUrls[failedSourceCount];
@@ -332,23 +333,19 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
   }
   return (
     <img
-      className="cover-image"
+      className={`cover-image${isLandscape ? " cover-landscape" : ""}`}
       src={coverUrl}
       alt={`Portada de ${game.name}`}
       onError={() => setFailedSourceCount((count) => count + 1)}
+      onLoad={(event) =>
+        setIsLandscape(event.currentTarget.naturalWidth > event.currentTarget.naturalHeight)
+      }
     />
   );
 }
 
-function officialCoverFallbackUrls(appId: number): readonly string[] {
-  const baseUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`;
-  return [
-    `${baseUrl}/header.jpg`,
-    `${baseUrl}/capsule_616x353.jpg`,
-    `${baseUrl}/capsule_467x181.jpg`,
-    `${baseUrl}/capsule_231x87.jpg`,
-    `${baseUrl}/capsule_184x69.jpg`,
-  ];
+function officialSteamIconUrl(appId: number): string {
+  return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/icon.jpg`;
 }
 
 function GameDetails({

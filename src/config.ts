@@ -11,6 +11,7 @@ export type AppConfig = Readonly<{
   steamApiKey: string;
   steamId: string;
   steamWebApiToken?: string;
+  steamGridDbApiKey?: string;
   requestTimeoutMs: typeof DEFAULT_REQUEST_TIMEOUT_MS;
   libraryCacheTtlMs: typeof DEFAULT_LIBRARY_CACHE_TTL_MS;
   trackerDatabasePath: string;
@@ -34,6 +35,7 @@ const environmentSchema = z.object({
   STEAM_API_KEY: z.string().trim().min(1),
   STEAM_ID: z.string().trim().min(1),
   STEAM_WEBAPI_TOKEN: z.string().trim().min(1).optional(),
+  STEAMGRIDDB_API_KEY: z.string().trim().min(1).optional(),
   TRACKER_DATABASE_PATH: z.string().trim().min(1).optional(),
   DASHBOARD_PORT: z
     .string()
@@ -72,6 +74,7 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
     STEAM_API_KEY: environment.STEAM_API_KEY,
     STEAM_ID: environment.STEAM_ID,
     STEAM_WEBAPI_TOKEN: environment.STEAM_WEBAPI_TOKEN,
+    STEAMGRIDDB_API_KEY: environment.STEAMGRIDDB_API_KEY,
     TRACKER_DATABASE_PATH: environment.TRACKER_DATABASE_PATH,
     DASHBOARD_PORT: environment.DASHBOARD_PORT,
   });
@@ -95,6 +98,9 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
     ...(parsedEnvironment.data.STEAM_WEBAPI_TOKEN === undefined
       ? {}
       : { steamWebApiToken: parsedEnvironment.data.STEAM_WEBAPI_TOKEN }),
+    ...(parsedEnvironment.data.STEAMGRIDDB_API_KEY === undefined
+      ? {}
+      : { steamGridDbApiKey: parsedEnvironment.data.STEAMGRIDDB_API_KEY }),
     requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
     libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
     trackerDatabasePath:

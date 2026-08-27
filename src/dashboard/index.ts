@@ -1,8 +1,10 @@
 import { type Server } from "node:http";
+import { dirname, resolve } from "node:path";
 
 import { createCoreServices, type CoreServiceOverrides } from "../core-services.js";
 import { loadConfig, type AppConfig } from "../config.js";
 import { createDashboardService, type DashboardService } from "./dashboard-service.js";
+import { createArtworkResolver, type ArtworkResolver } from "./artwork-resolver.js";
 import {
   createDashboardHttpServer,
   DASHBOARD_HOST,
@@ -13,6 +15,7 @@ export type DashboardStartOptions = CoreServiceOverrides &
   Readonly<{
     config?: AppConfig;
     dashboardService?: DashboardService;
+    artworkResolver?: ArtworkResolver;
     staticRoot?: string;
     port?: number;
     installSignalHandlers?: boolean;
@@ -24,6 +27,15 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
     options.dashboardService ?? createDashboardService(createCoreServices({ ...options, config }));
   const server = createDashboardHttpServer({
     dashboardService,
+    artworkResolver:
+      options.artworkResolver ??
+      createArtworkResolver({
+        cacheDirectory: resolve(dirname(config.trackerDatabasePath), "artwork"),
+        ...(config.steamGridDbApiKey === undefined
+          ? {}
+          : { steamGridDbApiKey: config.steamGridDbApiKey }),
+        fetch: options.fetch,
+      }),
     staticRoot: options.staticRoot ?? dashboardStaticRootFromModule(import.meta.url),
     host: DASHBOARD_HOST,
     port: options.port ?? config.dashboardPort,
