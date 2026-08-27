@@ -30,6 +30,7 @@ export type GamingTrackerService = Readonly<{
   getBacklog(): Promise<readonly TrackerGame[]>;
   getCurrentGame(): Promise<TrackerGame | null>;
   getCompleted(): Promise<readonly TrackerGame[]>;
+  getStatuses(): Promise<readonly TrackerGame[]>;
 }>;
 
 export function createGamingTrackerService({
@@ -90,6 +91,22 @@ export function createGamingTrackerService({
           .list()
           .filter((entry) => entry.status === "completed" && gameByAppId.has(entry.appId))
           .map((entry) => toTrackerGame(gameByAppId.get(entry.appId)!, entry, "completed"))
+          .sort(compareTrackerGames),
+      );
+    },
+    async getStatuses() {
+      const games = await getOwnedGames(ownershipLookup);
+      const gameByAppId = new Map(games.map((game) => [game.appId, game]));
+      let entries: readonly TrackerEntry[];
+      try {
+        entries = repository.list();
+      } catch (error) {
+        throw new TrackerPersistenceError(error);
+      }
+      return Object.freeze(
+        entries
+          .filter((entry) => gameByAppId.has(entry.appId))
+          .map((entry) => toTrackerGame(gameByAppId.get(entry.appId)!, entry, entry.status))
           .sort(compareTrackerGames),
       );
     },

@@ -9,6 +9,7 @@ import { TtlCache } from "../src/cache/ttl-cache.js";
 import { loadConfig } from "../src/config.js";
 import { createServer, startStdioServer } from "../src/server.js";
 import type { SteamApiClient } from "../src/steam/client.js";
+import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
 
 const config = loadConfig({
   STEAM_API_KEY: "secret-api-key",
@@ -30,6 +31,16 @@ function createSteamClient(): SteamApiClient {
   };
 }
 
+function createGamingTrackerService(): GamingTrackerService {
+  return {
+    getBacklog: vi.fn(async () => []),
+    getCurrentGame: vi.fn(async () => null),
+    getCompleted: vi.fn(async () => []),
+    getStatuses: vi.fn(async () => []),
+    mark: vi.fn(async (appId) => ({ outcome: "not_owned" as const, appId: appId as number })),
+  };
+}
+
 describe("MCP server composition", () => {
   test("lists the complete thirteen-tool Steam, tracker, and metadata surface", async () => {
     const steamClient = createSteamClient();
@@ -38,6 +49,7 @@ describe("MCP server composition", () => {
       steamClient,
       cache: new TtlCache(),
       clock: { now: () => 0 },
+      gamingTrackerService: createGamingTrackerService(),
     });
     const client = new Client({ name: "test-client", version: "1.0.0" });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
@@ -114,6 +126,7 @@ describe("MCP server composition", () => {
       steamClient: createSteamClient(),
       cache: new TtlCache(),
       clock: { now: () => 0 },
+      gamingTrackerService: createGamingTrackerService(),
     });
     const client = new Client({ name: "test-client", version: "1.0.0" });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();

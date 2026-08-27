@@ -106,6 +106,48 @@ describe("SteamService", () => {
     expect(getOwnedGames).toHaveBeenCalledTimes(2);
   });
 
+  test("bypasses a fresh cache entry and replaces it after a successful library refresh", async () => {
+    const getOwnedGames = vi
+      .fn<SteamApiClient["getOwnedGames"]>()
+      .mockResolvedValueOnce({
+        response: { games: [{ appid: 620, name: "Portal 2", playtime_forever: 135 }] },
+      })
+      .mockResolvedValueOnce({
+        response: { games: [{ appid: 440, name: "Team Fortress 2", playtime_forever: 0 }] },
+      });
+    const service = createSteamService({
+      config,
+      steamClient: createClient({ getOwnedGames }),
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.getLibrary()).resolves.toMatchObject({ games: [{ appId: 620 }] });
+    await expect(service.refreshLibrary()).resolves.toMatchObject({ games: [{ appId: 440 }] });
+    await expect(service.getLibrary()).resolves.toMatchObject({ games: [{ appId: 440 }] });
+    expect(getOwnedGames).toHaveBeenCalledTimes(2);
+  });
+
+  test("preserves the last good cached library when a forced refresh fails", async () => {
+    const getOwnedGames = vi
+      .fn<SteamApiClient["getOwnedGames"]>()
+      .mockResolvedValueOnce({
+        response: { games: [{ appid: 620, name: "Portal 2", playtime_forever: 135 }] },
+      })
+      .mockRejectedValueOnce(new SteamUnavailableError(new Error("upstream unavailable")));
+    const service = createSteamService({
+      config,
+      steamClient: createClient({ getOwnedGames }),
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    const cached = await service.getLibrary();
+    await expect(service.refreshLibrary()).rejects.toBeInstanceOf(SteamUnavailableError);
+    await expect(service.getLibrary()).resolves.toBe(cached);
+    expect(getOwnedGames).toHaveBeenCalledTimes(2);
+  });
+
   test("searches case-insensitively and looks up a normalized game by app ID", async () => {
     const service = createSteamService({
       config,

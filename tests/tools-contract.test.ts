@@ -35,6 +35,11 @@ function createService(): SteamService {
       fetchedAt: "2026-08-25T00:00:00.000Z",
       games: [{ appId: 620, name: "Portal 2", playtimeMinutes: 135 }],
     })),
+    refreshLibrary: vi.fn(async () => ({
+      steamId: "76561198000000000",
+      fetchedAt: "2026-08-25T00:00:00.000Z",
+      games: [{ appId: 620, name: "Portal 2", playtimeMinutes: 135 }],
+    })),
     searchLibrary: vi.fn(async () => [{ appId: 620, name: "Portal 2", playtimeMinutes: 135 }]),
     getGame: vi.fn(async () => ({ appId: 620, name: "Portal 2", playtimeMinutes: 135 })),
     getRecentGames: vi.fn(async () => [{ appId: 620, name: "Portal 2", playtimeMinutes: 135 }]),

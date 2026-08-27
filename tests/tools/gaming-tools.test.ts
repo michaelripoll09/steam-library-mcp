@@ -20,6 +20,7 @@ function setup() {
     getBacklog: vi.fn(async () => []),
     getCurrentGame: vi.fn(async () => null),
     getCompleted: vi.fn(async () => []),
+    getStatuses: vi.fn(async () => []),
     mark: vi.fn(async (appId, status) => ({
       outcome: "updated" as const,
       appId: appId as number,

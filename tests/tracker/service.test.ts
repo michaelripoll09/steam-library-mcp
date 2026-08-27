@@ -185,4 +185,71 @@ describe("GamingTrackerService lifecycle", () => {
       expect.objectContaining({ appId: 30, updatedAt: null }),
     ]);
   });
+
+  test("returns only persisted statuses joined with accessible owned games in existing order", async () => {
+    const repository: TrackerRepository = {
+      list: vi.fn(() => [
+        {
+          appId: 30,
+          status: "dropped" as const,
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-03T00:00:00.000Z",
+        },
+        {
+          appId: 20,
+          status: "paused" as const,
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-02T00:00:00.000Z",
+        },
+        {
+          appId: 99,
+          status: "completed" as const,
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-04T00:00:00.000Z",
+        },
+      ]),
+      transaction: vi.fn(),
+    };
+    const service = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup: createOwnershipLookup([
+        { appId: 10, name: "Untracked", playtimeMinutes: 0 },
+        { appId: 20, name: "Twenty", playtimeMinutes: 0 },
+        { appId: 30, name: "Thirty", playtimeMinutes: 0 },
+      ]),
+      repository,
+    });
+
+    await expect(service.getStatuses()).resolves.toEqual([
+      {
+        appId: 30,
+        name: "Thirty",
+        status: "dropped",
+        createdAt: "2024-01-01T00:00:00.000Z",
+        updatedAt: "2024-01-03T00:00:00.000Z",
+      },
+      {
+        appId: 20,
+        name: "Twenty",
+        status: "paused",
+        createdAt: "2024-01-01T00:00:00.000Z",
+        updatedAt: "2024-01-02T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  test("maps persisted-status storage failures to the existing safe typed error", async () => {
+    const service = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup: createOwnershipLookup(),
+      repository: {
+        list: vi.fn(() => {
+          throw new Error("SQLITE_BUSY at C:/private/tracker.sqlite");
+        }),
+        transaction: vi.fn(),
+      },
+    });
+
+    await expect(service.getStatuses()).rejects.toBeInstanceOf(TrackerPersistenceError);
+  });
 });

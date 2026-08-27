@@ -13,6 +13,7 @@ import type { SteamFamilyGameDto, SteamGameDto } from "../steam/schemas.js";
 
 export interface SteamService {
   getLibrary(): Promise<SteamLibrary>;
+  refreshLibrary(): Promise<SteamLibrary>;
   searchLibrary(query: string): Promise<readonly SteamGame[]>;
   getGame(appId: number): Promise<SteamGame>;
   getRecentGames(count?: number): Promise<readonly SteamGame[]>;
@@ -41,6 +42,11 @@ export function createSteamService({
       return cached;
     }
 
+    return refreshLibrary();
+  }
+
+  async function refreshLibrary(): Promise<SteamLibrary> {
+    const key = libraryCacheKey(config.steamId);
     const response = await steamClient.getOwnedGames(config.steamId);
     const familyGames = await getFamilyGames(steamClient, config);
     const library = createSteamLibrary({
@@ -54,6 +60,7 @@ export function createSteamService({
 
   return {
     getLibrary,
+    refreshLibrary,
     async searchLibrary(query) {
       const normalizedQuery = query.trim().toLocaleLowerCase();
       const { games } = await getLibrary();
