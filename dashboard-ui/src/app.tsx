@@ -314,8 +314,13 @@ function GameCard({
 }
 
 export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
-  const [hasImageError, setHasImageError] = useState(false);
-  if (hasImageError) {
+  const [failedSourceCount, setFailedSourceCount] = useState(0);
+  const coverUrls = [game.coverUrl, ...officialCoverFallbackUrls(game.appId)].filter(
+    (url, index, urls) => urls.indexOf(url) === index,
+  );
+  const coverUrl = coverUrls[failedSourceCount];
+
+  if (coverUrl === undefined) {
     return (
       <div
         className="cover-image cover-fallback"
@@ -328,11 +333,22 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
   return (
     <img
       className="cover-image"
-      src={game.coverUrl}
+      src={coverUrl}
       alt={`Portada de ${game.name}`}
-      onError={() => setHasImageError(true)}
+      onError={() => setFailedSourceCount((count) => count + 1)}
     />
   );
+}
+
+function officialCoverFallbackUrls(appId: number): readonly string[] {
+  const baseUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`;
+  return [
+    `${baseUrl}/header.jpg`,
+    `${baseUrl}/capsule_616x353.jpg`,
+    `${baseUrl}/capsule_467x181.jpg`,
+    `${baseUrl}/capsule_231x87.jpg`,
+    `${baseUrl}/capsule_184x69.jpg`,
+  ];
 }
 
 function GameDetails({

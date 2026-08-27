@@ -62,11 +62,61 @@ describe("DashboardApp", () => {
   test("uses the official cover URL once and replaces a failed image with a deterministic fallback", () => {
     render(<CoverImage game={library.games[0]} />);
 
-    fireEvent.error(screen.getByRole("img", { name: "Portada de Celeste" }));
+    const cover = screen.getByRole("img", { name: "Portada de Celeste" });
+    fireEvent.error(cover);
+    fireEvent.error(cover);
+    fireEvent.error(cover);
+    fireEvent.error(cover);
+    fireEvent.error(cover);
+    fireEvent.error(cover);
 
     const fallback = screen.getByRole("img", { name: "Portada no disponible para Celeste" });
     expect(fallback).toHaveStyle({ backgroundImage: expect.stringContaining("linear-gradient") });
     expect(screen.queryByRole("img", { name: "Portada de Celeste" })).not.toBeInTheDocument();
+  });
+
+  test("tries official Steam landscape assets before showing the deterministic fallback", () => {
+    const game = {
+      ...library.games[0],
+      coverUrl: "https://cdn.cloudflare.steamstatic.com/steam/apps/10/library_600x900.jpg",
+    };
+    render(<CoverImage game={game} />);
+
+    const cover = screen.getByRole("img", { name: "Portada de Celeste" });
+    fireEvent.error(cover);
+    expect(cover).toHaveAttribute(
+      "src",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/header.jpg",
+    );
+
+    fireEvent.error(cover);
+    expect(cover).toHaveAttribute(
+      "src",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_616x353.jpg",
+    );
+
+    fireEvent.error(cover);
+    expect(cover).toHaveAttribute(
+      "src",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_467x181.jpg",
+    );
+
+    fireEvent.error(cover);
+    expect(cover).toHaveAttribute(
+      "src",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_231x87.jpg",
+    );
+
+    fireEvent.error(cover);
+    expect(cover).toHaveAttribute(
+      "src",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/capsule_184x69.jpg",
+    );
+
+    fireEvent.error(cover);
+    expect(screen.getByRole("img", { name: "Portada no disponible para Celeste" })).toHaveStyle({
+      backgroundImage: expect.stringContaining("linear-gradient"),
+    });
   });
 
   test("renders a Spanish dashboard with accessible localized controls and dates", async () => {
