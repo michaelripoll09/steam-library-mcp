@@ -19,9 +19,10 @@ const MUTABLE_STATUSES: readonly DashboardMutableStatus[] = ["playing", "complet
 
 type DashboardAppProps = Readonly<{ api?: DashboardApi }>;
 
-export function DashboardApp({
-  api = createDashboardApi(window.fetch.bind(window)),
-}: DashboardAppProps) {
+export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
+  const defaultApiRef = useRef<DashboardApi | undefined>(undefined);
+  const api =
+    suppliedApi ?? (defaultApiRef.current ??= createDashboardApi(window.fetch.bind(window)));
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
   const [initialError, setInitialError] = useState<string | undefined>();

@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -37,9 +37,28 @@ const library: DashboardLibrary = {
   statusStats: { backlog: 1, playing: 1, completed: 0, dropped: 0, paused: 0 },
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("DashboardApp", () => {
+  test("uses one default API client for the initial library request across rerenders", async () => {
+    const fetch = vi.spyOn(window, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(library), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const { rerender } = render(<DashboardApp />);
+    await screen.findByRole("article", { name: "Celeste" });
+    rerender(<DashboardApp />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  });
+
   test("uses the official cover URL once and replaces a failed image with a deterministic fallback", () => {
     render(<CoverImage game={library.games[0]} />);
 
