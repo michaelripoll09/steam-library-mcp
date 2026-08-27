@@ -15,7 +15,7 @@ export default defineConfig({
         configure(proxy) {
           proxy.on("proxyReq", (proxyRequest, request) => {
             proxyRequest.setHeader("host", dashboardApiTarget.host);
-            if (request.headers.origin !== undefined) {
+            if (isExpectedViteOrigin(request.headers.origin, request.headers.host)) {
               proxyRequest.setHeader("origin", dashboardApiTarget.origin);
             }
           });
@@ -28,3 +28,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
 });
+
+function isExpectedViteOrigin(origin: string | undefined, host: string | undefined): boolean {
+  if (origin === undefined || host === undefined) return false;
+  try {
+    const viteOrigin = new URL(`http://${host}`);
+    return viteOrigin.hostname === "127.0.0.1" && origin === viteOrigin.origin;
+  } catch {
+    return false;
+  }
+}

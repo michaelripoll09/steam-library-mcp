@@ -52,6 +52,18 @@ describe("Vite dashboard API proxy", () => {
     expect(syncLibrary).toHaveBeenCalledTimes(1);
     expect(updateStatus).toHaveBeenCalledWith(42, "completed");
   });
+
+  test("preserves an untrusted mutating origin for the dashboard server to reject", async () => {
+    const { baseUrl, syncLibrary } = await startProxy();
+
+    const response = await fetch(`${baseUrl}/api/library/sync`, {
+      method: "POST",
+      headers: { Origin: "http://attacker.invalid" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(syncLibrary).not.toHaveBeenCalled();
+  });
 });
 
 async function startProxy() {
