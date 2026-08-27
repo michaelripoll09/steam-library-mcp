@@ -5,6 +5,7 @@ import { ConfigError } from "./errors.js";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const DEFAULT_LIBRARY_CACHE_TTL_MS = 300_000;
 export const DEFAULT_TRACKER_DATABASE_PATH = ".steam-library/tracker.sqlite";
+export const DEFAULT_DASHBOARD_PORT = 4173;
 
 export type AppConfig = Readonly<{
   steamApiKey: string;
@@ -13,6 +14,7 @@ export type AppConfig = Readonly<{
   requestTimeoutMs: typeof DEFAULT_REQUEST_TIMEOUT_MS;
   libraryCacheTtlMs: typeof DEFAULT_LIBRARY_CACHE_TTL_MS;
   trackerDatabasePath: string;
+  dashboardPort: number;
 }>;
 
 export type IgdbCredentials = Readonly<{
@@ -33,6 +35,13 @@ const environmentSchema = z.object({
   STEAM_ID: z.string().trim().min(1),
   STEAM_WEBAPI_TOKEN: z.string().trim().min(1).optional(),
   TRACKER_DATABASE_PATH: z.string().trim().min(1).optional(),
+  DASHBOARD_PORT: z
+    .string()
+    .trim()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .refine((port) => port >= 1 && port <= 65_535)
+    .optional(),
 });
 
 const igdbEnvironmentSchema = z.object({
@@ -64,14 +73,19 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
     STEAM_ID: environment.STEAM_ID,
     STEAM_WEBAPI_TOKEN: environment.STEAM_WEBAPI_TOKEN,
     TRACKER_DATABASE_PATH: environment.TRACKER_DATABASE_PATH,
+    DASHBOARD_PORT: environment.DASHBOARD_PORT,
   });
 
   if (!parsedEnvironment.success) {
-    const setting = parsedEnvironment.error.issues[0]?.path[0];
+    const setting =
+      parsedEnvironment.error.issues[0]?.path[0] ??
+      (environment.DASHBOARD_PORT === undefined ? undefined : "DASHBOARD_PORT");
     throw new ConfigError(
       requiredSettingNames.includes(setting as RequiredSettingName)
         ? (setting as RequiredSettingName)
-        : "STEAM_API_KEY",
+        : setting === "DASHBOARD_PORT"
+          ? "DASHBOARD_PORT"
+          : "STEAM_API_KEY",
     );
   }
 
@@ -85,5 +99,6 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
     libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
     trackerDatabasePath:
       parsedEnvironment.data.TRACKER_DATABASE_PATH ?? DEFAULT_TRACKER_DATABASE_PATH,
+    dashboardPort: parsedEnvironment.data.DASHBOARD_PORT ?? DEFAULT_DASHBOARD_PORT,
   });
 }

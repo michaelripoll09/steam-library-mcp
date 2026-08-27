@@ -5,6 +5,7 @@ import {
   DEFAULT_LIBRARY_CACHE_TTL_MS,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_TRACKER_DATABASE_PATH,
+  DEFAULT_DASHBOARD_PORT,
   loadConfig,
 } from "../src/config.js";
 
@@ -21,8 +22,35 @@ describe("loadConfig", () => {
       requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
       libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
       trackerDatabasePath: DEFAULT_TRACKER_DATABASE_PATH,
+      dashboardPort: DEFAULT_DASHBOARD_PORT,
     });
   });
+
+  test.each([
+    ["4174", 4174],
+    ["65535", 65535],
+  ])("validates dashboard port override %s", (value, expected) => {
+    expect(
+      loadConfig({
+        STEAM_API_KEY: "test-api-key",
+        STEAM_ID: "76561198000000000",
+        DASHBOARD_PORT: value,
+      }).dashboardPort,
+    ).toBe(expected);
+  });
+
+  test.each(["", "0", "65536", "12.5", "abc", "  "])(
+    "rejects invalid dashboard port %p",
+    (value) => {
+      expect(() =>
+        loadConfig({
+          STEAM_API_KEY: "test-api-key",
+          STEAM_ID: "76561198000000000",
+          DASHBOARD_PORT: value,
+        }),
+      ).toThrow("DASHBOARD_PORT");
+    },
+  );
 
   test("names and remediates a missing API key", () => {
     expect(() => loadConfig({ STEAM_ID: "76561198000000000" })).toThrow(
