@@ -104,8 +104,7 @@ describe("DashboardService", () => {
           appId: 10,
           name: "Owned game",
           status: "backlog",
-          coverUrl:
-            "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/10/library_600x900.jpg",
+          coverUrl: "https://cdn.cloudflare.steamstatic.com/steam/apps/10/library_600x900.jpg",
           accessType: "owned",
           isPlayable: true,
           playtimeMinutes: 0,
@@ -114,8 +113,7 @@ describe("DashboardService", () => {
           appId: 20,
           name: "Family game",
           status: "paused",
-          coverUrl:
-            "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/20/library_600x900.jpg",
+          coverUrl: "https://cdn.cloudflare.steamstatic.com/steam/apps/20/library_600x900.jpg",
           accessType: "family_shared",
           isPlayable: false,
           playtimeMinutes: 120,
@@ -126,8 +124,7 @@ describe("DashboardService", () => {
           appId: 30,
           name: "Dropped game",
           status: "dropped",
-          coverUrl:
-            "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/30/library_600x900.jpg",
+          coverUrl: "https://cdn.cloudflare.steamstatic.com/steam/apps/30/library_600x900.jpg",
           accessType: "owned",
           isPlayable: true,
           playtimeMinutes: 30,

@@ -12,7 +12,7 @@ export const MAX_JSON_BODY_BYTES = 16 * 1024;
 
 const SECURITY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   "Content-Security-Policy":
-    "default-src 'self'; img-src 'self' https://shared.cloudflare.steamstatic.com; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; img-src 'self' https://cdn.cloudflare.steamstatic.com; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",

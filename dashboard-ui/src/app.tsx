@@ -89,7 +89,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
       const update = await api.updateGameStatus(selectedGame.appId, status);
       setLibrary(update.library);
       setSelectedGame(update.library.games.find((game) => game.appId === selectedGame.appId));
-      setStatusMessage("Status saved.");
+      setStatusMessage("Estado guardado.");
     } catch (error) {
       setStatusError(errorMessage(error));
     } finally {
@@ -103,9 +103,9 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Personal game archive</p>
-          <h1>Your Steam library</h1>
-          <p className="subtitle">A focused view of what to play next, and what already matters.</p>
+          <p className="eyebrow">Archivo personal de juegos</p>
+          <h1>Tu biblioteca de Steam</h1>
+          <p className="subtitle">Una vista enfocada de qué jugar después y qué ya importa.</p>
         </div>
         <button
           className="sync-button"
@@ -113,7 +113,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           onClick={() => void syncLibrary()}
           disabled={isSyncing}
         >
-          {isSyncing ? "Syncing library…" : "Sync library"}
+          {isSyncing ? "Sincronizando biblioteca…" : "Sincronizar biblioteca"}
         </button>
       </header>
 
@@ -121,7 +121,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         <section className="notice notice-error" role="alert">
           <p>{syncError}</p>
           <button type="button" onClick={() => void syncLibrary()} disabled={isSyncing}>
-            Retry sync
+            Reintentar sincronización
           </button>
         </section>
       )}
@@ -131,24 +131,24 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
       <section className="library-panel" aria-labelledby="library-heading">
         <div className="library-panel-heading">
           <div>
-            <p className="eyebrow">Collection</p>
-            <h2 id="library-heading">Games</h2>
+            <p className="eyebrow">Colección</p>
+            <h2 id="library-heading">Juegos</h2>
           </div>
-          {library !== undefined && <p className="result-count">{games.length} shown</p>}
+          {library !== undefined && <p className="result-count">{games.length} mostrados</p>}
         </div>
         <LibraryToolbar filters={filters} onChange={setFilters} />
 
         {isLoading && (
-          <p className="loading-state" role="status" aria-label="Loading library">
-            Loading library…
+          <p className="loading-state" role="status" aria-label="Cargando biblioteca">
+            Cargando biblioteca…
           </p>
         )}
         {initialError !== undefined && (
           <section className="empty-state" role="alert">
-            <h2>Could not load your library</h2>
+            <h2>No se pudo cargar tu biblioteca</h2>
             <p>{initialError}</p>
             <button type="button" onClick={() => void loadLibrary()}>
-              Retry loading library
+              Reintentar carga de la biblioteca
             </button>
           </section>
         )}
@@ -157,10 +157,10 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           library !== undefined &&
           games.length === 0 && (
             <section className="empty-state" aria-live="polite">
-              <h2>No games match these filters</h2>
-              <p>Clear the filters to bring your full collection back into view.</p>
+              <h2>Ningún juego coincide con estos filtros</h2>
+              <p>Limpia los filtros para volver a ver toda tu colección.</p>
               <button type="button" onClick={() => setFilters(clearLibraryFilters())}>
-                Clear filters
+                Limpiar filtros
               </button>
             </section>
           )}
@@ -190,12 +190,12 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
 
 function LibrarySummary({ library }: Readonly<{ library: DashboardLibrary }>) {
   return (
-    <section className="summary-grid" aria-label="Library totals">
-      <SummaryCard label="Games" value={String(library.totals.totalGames)} />
-      <SummaryCard label="Played" value={String(library.totals.playedGames)} />
-      <SummaryCard label="Unplayed" value={String(library.totals.unplayedGames)} />
+    <section className="summary-grid" aria-label="Totales de la biblioteca">
+      <SummaryCard label="Juegos" value={String(library.totals.totalGames)} />
+      <SummaryCard label="Jugados" value={String(library.totals.playedGames)} />
+      <SummaryCard label="Sin jugar" value={String(library.totals.unplayedGames)} />
       <SummaryCard
-        label="Time invested"
+        label="Tiempo invertido"
         value={formatPlaytime(library.totals.totalPlaytimeMinutes)}
       />
     </section>
@@ -219,25 +219,25 @@ function LibraryToolbar({
     <form
       className="library-toolbar"
       onSubmit={(event) => event.preventDefault()}
-      aria-label="Library filters"
+      aria-label="Filtros de la biblioteca"
     >
       <label className="search-field">
-        <span>Search games</span>
+        <span>Buscar juegos</span>
         <input
           type="search"
           value={filters.query}
           onChange={(event) => onChange({ ...filters, query: event.target.value })}
-          placeholder="Search by title"
+          placeholder="Buscar por título"
         />
       </label>
       <FilterSelect
-        label="Status"
+        label="Estado"
         value={filters.status}
         onChange={(status) => onChange({ ...filters, status: status as LibraryFilters["status"] })}
         options={["all", "backlog", "playing", "completed", "paused", "dropped"]}
       />
       <FilterSelect
-        label="Access"
+        label="Acceso"
         value={filters.accessType}
         onChange={(accessType) =>
           onChange({ ...filters, accessType: accessType as LibraryFilters["accessType"] })
@@ -245,13 +245,13 @@ function LibraryToolbar({
         options={["all", "owned", "family_shared"]}
       />
       <FilterSelect
-        label="Play history"
+        label="Historial de juego"
         value={filters.played}
         onChange={(played) => onChange({ ...filters, played: played as LibraryFilters["played"] })}
         options={["all", "played", "unplayed"]}
       />
       <button className="text-button" type="button" onClick={() => onChange(clearLibraryFilters())}>
-        Reset
+        Restablecer
       </button>
     </form>
   );
@@ -295,7 +295,7 @@ function GameCard({
         type="button"
         className="game-card-button"
         onClick={(event) => onOpen(game, event.currentTarget)}
-        aria-label={`View ${game.name} details`}
+        aria-label={`Ver detalles de ${game.name}`}
       >
         <CoverImage game={game} />
         <span className="game-card-content">
@@ -304,8 +304,8 @@ function GameCard({
             <StatusPill status={game.status} />
           </span>
           <span className="game-card-meta">
-            {formatPlaytime(game.playtimeMinutes)} played ·{" "}
-            {game.accessType === "owned" ? "Owned" : "Family shared"}
+            {formatPlaytime(game.playtimeMinutes)} jugado ·{" "}
+            {game.accessType === "owned" ? "Propio" : "Compartido en familia"}
           </span>
         </span>
       </button>
@@ -320,7 +320,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
       <div
         className="cover-image cover-fallback"
         role="img"
-        aria-label={`Cover art unavailable for ${game.name}`}
+        aria-label={`Portada no disponible para ${game.name}`}
         style={{ backgroundImage: coverGradient(game.appId) }}
       />
     );
@@ -329,7 +329,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
     <img
       className="cover-image"
       src={game.coverUrl}
-      alt={`Cover art for ${game.name}`}
+      alt={`Portada de ${game.name}`}
       onError={() => setHasImageError(true)}
     />
   );
@@ -385,7 +385,7 @@ function GameDetails({
         className="game-details"
         role="dialog"
         aria-modal="true"
-        aria-label={`${game.name} details`}
+        aria-label={`Detalles de ${game.name}`}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -394,21 +394,23 @@ function GameDetails({
           className="dialog-close"
           type="button"
           onClick={onClose}
-          aria-label="Close details"
+          aria-label="Cerrar detalles"
         >
           ×
         </button>
         <CoverImage game={game} />
         <div className="details-copy">
-          <p className="eyebrow">{game.accessType === "owned" ? "Owned game" : "Family shared"}</p>
+          <p className="eyebrow">
+            {game.accessType === "owned" ? "Juego propio" : "Compartido en familia"}
+          </p>
           <h2 id="game-details-title">{game.name}</h2>
-          <p>{formatPlaytime(game.playtimeMinutes)} played</p>
+          <p>{formatPlaytime(game.playtimeMinutes)} jugado</p>
           {game.lastPlayedAt !== undefined && (
-            <p>Last played {formatLastPlayed(game.lastPlayedAt)}</p>
+            <p>Última vez jugado: {formatLastPlayed(game.lastPlayedAt)}</p>
           )}
-          <p>{game.isPlayable ? "Ready to play" : "Not currently playable"}</p>
+          <p>{game.isPlayable ? "Listo para jugar" : "No se puede jugar actualmente"}</p>
           <label className="status-control">
-            <span>Status</span>
+            <span>Estado</span>
             <select
               value={game.status}
               disabled={isUpdatingStatus}
@@ -430,7 +432,7 @@ function GameDetails({
             </select>
           </label>
           <div className="dialog-live-region" aria-live="polite">
-            {isUpdatingStatus && "Saving status…"}
+            {isUpdatingStatus && "Guardando estado…"}
             {statusMessage}
           </div>
           {statusError !== undefined && (
@@ -449,13 +451,26 @@ function StatusPill({ status }: Readonly<{ status: DashboardGameStatus }>) {
 }
 
 function formatLabel(value: string): string {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+  return (
+    {
+      all: "Todos",
+      backlog: "Pendiente",
+      playing: "Jugando",
+      completed: "Completado",
+      dropped: "Abandonado",
+      paused: "En pausa",
+      owned: "Propio",
+      family_shared: "Compartido en familia",
+      played: "Jugados",
+      unplayed: "Sin jugar",
+    }[value] ?? value
+  );
 }
 
 function formatLastPlayed(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "on an unknown date";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(date);
+  if (Number.isNaN(date.getTime())) return "en una fecha desconocida";
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeZone: "UTC" }).format(date);
 }
 
 function coverGradient(appId: number): string {
@@ -466,5 +481,5 @@ function coverGradient(appId: number): string {
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message !== ""
     ? error.message
-    : "Something went wrong. Please try again.";
+    : "Algo salió mal. Inténtalo de nuevo.";
 }

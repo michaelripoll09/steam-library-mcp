@@ -62,14 +62,14 @@ describe("DashboardApp", () => {
   test("uses the official cover URL once and replaces a failed image with a deterministic fallback", () => {
     render(<CoverImage game={library.games[0]} />);
 
-    fireEvent.error(screen.getByRole("img", { name: "Cover art for Celeste" }));
+    fireEvent.error(screen.getByRole("img", { name: "Portada de Celeste" }));
 
-    const fallback = screen.getByRole("img", { name: "Cover art unavailable for Celeste" });
+    const fallback = screen.getByRole("img", { name: "Portada no disponible para Celeste" });
     expect(fallback).toHaveStyle({ backgroundImage: expect.stringContaining("linear-gradient") });
-    expect(screen.queryByRole("img", { name: "Cover art for Celeste" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Portada de Celeste" })).not.toBeInTheDocument();
   });
 
-  test("loads a cinematic game grid and filters it from the semantic toolbar", async () => {
+  test("renders a Spanish dashboard with accessible localized controls and dates", async () => {
     const user = userEvent.setup();
     const api = {
       getLibrary: vi.fn().mockResolvedValue(library),
@@ -79,17 +79,38 @@ describe("DashboardApp", () => {
 
     render(<DashboardApp api={api} />);
 
-    expect(screen.getByRole("status", { name: "Loading library" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Your Steam library" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Cover art for Celeste" })).toHaveAttribute(
+    expect(screen.getByRole("status", { name: "Cargando biblioteca" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Tu biblioteca de Steam" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Portada de Celeste" })).toHaveAttribute(
       "src",
       "https://cdn.example/celeste.jpg",
     );
+    expect(screen.getByRole("form", { name: "Filtros de la biblioteca" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sincronizar biblioteca" })).toBeInTheDocument();
 
-    await user.type(screen.getByRole("searchbox", { name: "Search games" }), "hades");
+    await user.type(screen.getByRole("searchbox", { name: "Buscar juegos" }), "hades");
 
     expect(screen.queryByRole("article", { name: "Celeste" })).not.toBeInTheDocument();
     expect(screen.getByRole("article", { name: "Hades" })).toBeInTheDocument();
+  });
+
+  test("formats last played dates in Colombian Spanish without localizing API status values", async () => {
+    const user = userEvent.setup();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+    };
+
+    render(<DashboardApp api={api} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
+    expect(within(dialog).getByText("Última vez jugado: 26/08/2026")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Estado")).toHaveValue("playing");
+    expect(within(dialog).getByRole("option", { name: "Jugando" })).toHaveValue("playing");
   });
 
   test("opens a keyboard-accessible detail dialog, updates status, and restores focus on Escape", async () => {
@@ -109,16 +130,16 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
-    const gameButton = await screen.findByRole("button", { name: "View Hades details" });
+    const gameButton = await screen.findByRole("button", { name: "Ver detalles de Hades" });
     await user.click(gameButton);
 
-    const dialog = screen.getByRole("dialog", { name: "Hades details" });
-    expect(within(dialog).getByText("2h 5m played")).toBeInTheDocument();
-    expect(within(dialog).getByText("Last played Aug 26, 2026")).toBeInTheDocument();
-    await user.selectOptions(within(dialog).getByLabelText("Status"), "completed");
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
+    expect(within(dialog).getByText("2h 5m jugado")).toBeInTheDocument();
+    expect(within(dialog).getByText("Última vez jugado: 26/08/2026")).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
 
     expect(api.updateGameStatus).toHaveBeenCalledWith(20, "completed");
-    expect(await within(dialog).findByText("Status saved.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Estado guardado.")).toBeInTheDocument();
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -135,11 +156,11 @@ describe("DashboardApp", () => {
 
     render(<DashboardApp api={api} />);
     await screen.findByRole("article", { name: "Celeste" });
-    await user.click(screen.getByRole("button", { name: "Sync library" }));
+    await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
     expect(screen.getByRole("article", { name: "Celeste" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry sync" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar sincronización" })).toBeInTheDocument();
   });
 
   test("retries an initial load failure", async () => {
@@ -156,7 +177,7 @@ describe("DashboardApp", () => {
     render(<DashboardApp api={api} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
-    await user.click(screen.getByRole("button", { name: "Retry loading library" }));
+    await user.click(screen.getByRole("button", { name: "Reintentar carga de la biblioteca" }));
 
     expect(await screen.findByRole("article", { name: "Celeste" })).toBeInTheDocument();
     expect(api.getLibrary).toHaveBeenCalledTimes(2);
@@ -172,16 +193,16 @@ describe("DashboardApp", () => {
 
     render(<DashboardApp api={api} />);
     await screen.findByRole("article", { name: "Celeste" });
-    await user.type(screen.getByRole("searchbox", { name: "Search games" }), "missing game");
+    await user.type(screen.getByRole("searchbox", { name: "Buscar juegos" }), "missing game");
 
     expect(
-      await screen.findByRole("heading", { name: "No games match these filters" }),
+      await screen.findByRole("heading", { name: "Ningún juego coincide con estos filtros" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Restablecer" }));
 
     expect(screen.getByRole("article", { name: "Celeste" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "No games match these filters" }),
+      screen.queryByRole("heading", { name: "Ningún juego coincide con estos filtros" }),
     ).not.toBeInTheDocument();
   });
 
@@ -205,15 +226,15 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
-    await user.click(await screen.findByRole("button", { name: "View Hades details" }));
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
     const dialog = screen.getByRole("dialog");
-    const status = within(dialog).getByLabelText("Status");
+    const status = within(dialog).getByLabelText("Estado");
     await user.selectOptions(status, "completed");
 
     expect(status).toBeDisabled();
-    expect(within(dialog).getByText("Saving status…")).toBeInTheDocument();
+    expect(within(dialog).getByText("Guardando estado…")).toBeInTheDocument();
     resolveUpdate?.({ mark: { outcome: "updated", appId: 20, status: "completed" }, library });
-    expect(await within(dialog).findByText("Status saved.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Estado guardado.")).toBeInTheDocument();
   });
 
   test("preserves the displayed snapshot when a status mutation fails", async () => {
@@ -225,13 +246,13 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
-    await user.click(await screen.findByRole("button", { name: "View Hades details" }));
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
     const dialog = screen.getByRole("dialog");
-    await user.selectOptions(within(dialog).getByLabelText("Status"), "completed");
+    await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Tracker is offline.");
     expect(
-      within(screen.getByRole("article", { name: "Hades" })).getByText("Playing"),
+      within(screen.getByRole("article", { name: "Hades" })).getByText("Jugando"),
     ).toBeInTheDocument();
   });
 
@@ -250,7 +271,7 @@ describe("DashboardApp", () => {
 
     render(<DashboardApp api={api} />);
     await screen.findByRole("article", { name: "Celeste" });
-    await user.click(screen.getByRole("button", { name: "Sync library" }));
+    await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
 
     expect(await screen.findByRole("article", { name: "Hades" })).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: "Celeste" })).not.toBeInTheDocument();
@@ -273,13 +294,13 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
-    await user.click(await screen.findByRole("button", { name: "View Hades details" }));
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
     const dialog = screen.getByRole("dialog");
-    await user.selectOptions(within(dialog).getByLabelText("Status"), "completed");
+    await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
 
-    expect(await within(dialog).findByDisplayValue("Paused")).toBeInTheDocument();
+    expect(await within(dialog).findByDisplayValue("En pausa")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("article", { name: "Hades" })).getByText("Paused"),
+      within(screen.getByRole("article", { name: "Hades" })).getByText("En pausa"),
     ).toBeInTheDocument();
   });
 
@@ -292,11 +313,11 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
-    const opener = await screen.findByRole("button", { name: "View Hades details" });
+    const opener = await screen.findByRole("button", { name: "Ver detalles de Hades" });
     await user.click(opener);
     const dialog = screen.getByRole("dialog");
-    const close = within(dialog).getByRole("button", { name: "Close details" });
-    const status = within(dialog).getByLabelText("Status");
+    const close = within(dialog).getByRole("button", { name: "Cerrar detalles" });
+    const status = within(dialog).getByLabelText("Estado");
 
     expect(close).toHaveFocus();
     await user.tab();

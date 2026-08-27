@@ -115,7 +115,7 @@ function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
 }
 
 function portraitCoverUrl(appId: number): string {
-  return `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`;
+  return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`;
 }
 
 function assertAppId(appId: unknown): asserts appId is number {

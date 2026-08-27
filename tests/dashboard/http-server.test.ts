@@ -167,6 +167,12 @@ describe("dashboard HTTP server", () => {
     const response = await call(port, "/");
     expect(response.status).toBe(200);
     expect(response.headers["content-security-policy"]).toContain("default-src 'self'");
+    expect(response.headers["content-security-policy"]).toContain(
+      "img-src 'self' https://cdn.cloudflare.steamstatic.com",
+    );
+    expect(response.headers["content-security-policy"]).not.toContain(
+      "shared.cloudflare.steamstatic.com",
+    );
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.headers["x-frame-options"]).toBe("DENY");
