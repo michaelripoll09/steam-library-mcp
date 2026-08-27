@@ -22,6 +22,11 @@ const entrypoint = join(process.cwd(), "dist", "index.js");
 const dashboardEntrypoint = join(process.cwd(), "dist", "dashboard", "index.js");
 const dashboardUiDirectory = join(process.cwd(), "dist", "dashboard-ui");
 const buildSecretMarker = "dashboard-release-test-secret-marker";
+const dashboardLibrary = {
+  games: [],
+  totals: { totalGames: 0, playedGames: 0, unplayedGames: 0, totalPlaytimeMinutes: 0 },
+  statusStats: { backlog: 0, playing: 0, completed: 0, dropped: 0, paused: 0 },
+};
 
 type ProcessResult = Readonly<{
   code: number | null;
@@ -77,6 +82,31 @@ async function waitForDashboard(url: string, process?: ChildProcess): Promise<Re
   throw lastError ?? new Error(`Dashboard did not listen at ${url}.`);
 }
 
+async function waitForStatus(
+  url: string,
+  expectedStatus: number,
+  process?: ChildProcess,
+): Promise<Response> {
+  const deadline = Date.now() + 5_000;
+  let lastStatus: number | undefined;
+  while (Date.now() < deadline) {
+    if (process?.exitCode !== null && process?.exitCode !== undefined) {
+      throw new Error(`Dashboard process exited with code ${process.exitCode}.`);
+    }
+    try {
+      const response = await fetch(url);
+      if (response.status === expectedStatus) return response;
+      lastStatus = response.status;
+    } catch {
+      // The Vite process can accept UI requests before the backend has bound its port.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(
+    `Dashboard did not return ${expectedStatus} at ${url}; last status was ${lastStatus}.`,
+  );
+}
+
 function callDashboard(port: number, path: string, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const requestHandle = request(
@@ -111,15 +141,15 @@ async function stopProcess(child: ChildProcess): Promise<void> {
   await close;
 }
 
-function startDashboardCommand(environment: NodeJS.ProcessEnv): ChildProcess {
+function startNpmScript(script: string, environment: NodeJS.ProcessEnv): ChildProcess {
   if (process.platform === "win32") {
-    return spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "npm run dashboard"], {
+    return spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `npm run ${script}`], {
       cwd: process.cwd(),
       env: { ...process.env, ...environment },
       stdio: "ignore",
     });
   }
-  return spawn("npm", ["run", "dashboard"], {
+  return spawn("npm", ["run", script], {
     cwd: process.cwd(),
     env: { ...process.env, ...environment },
     stdio: "ignore",
@@ -248,9 +278,12 @@ describe("released dashboard", () => {
       const server = await startDashboardServer({
         config: { dashboardPort: 0 },
         dashboardService: {
-          getLibrary: async () => ({ games: [] }),
-          syncLibrary: async () => ({ games: [] }),
-          updateStatus: async () => ({ games: [] }),
+          getLibrary: async () => dashboardLibrary,
+          syncLibrary: async () => dashboardLibrary,
+          updateStatus: async () => ({
+            mark: { outcome: "updated", appId: 1, status: "playing" },
+            library: dashboardLibrary,
+          }),
         },
         staticRoot,
         installSignalHandlers: false,
@@ -266,6 +299,12 @@ describe("released dashboard", () => {
         expect(root.status).toBe(200);
         expect(await root.text()).toContain("Release dashboard");
         expect((await fetch(`http://127.0.0.1:${port}/asset.js`)).status).toBe(200);
+        const library = await fetch(`http://127.0.0.1:${port}/api/library`);
+        expect(library.status).toBe(200);
+        expect(await library.json()).toEqual(dashboardLibrary);
+        const libraryRoute = await fetch(`http://127.0.0.1:${port}/library`);
+        expect(libraryRoute.status).toBe(200);
+        expect(await libraryRoute.text()).toContain("Release dashboard");
         expect((await fetch(`http://127.0.0.1:${port}/api/missing`)).status).toBe(404);
         expect(await callDashboard(port, "/api/library", "evil.example")).toBe(403);
       } finally {
@@ -281,7 +320,7 @@ describe("released dashboard", () => {
   test("starts the compiled dashboard command without embedding test secrets in built UI assets", async () => {
     const port = await reserveLoopbackPort();
     const databaseDirectory = mkdtempSync(join(tmpdir(), "steam-library-dashboard-command-"));
-    const dashboard = startDashboardCommand({
+    const dashboard = startNpmScript("dashboard", {
       STEAM_API_KEY: buildSecretMarker,
       STEAM_ID: "76561198000000000",
       DASHBOARD_PORT: String(port),
@@ -300,6 +339,30 @@ describe("released dashboard", () => {
           expect(readFileSync(path, "utf8")).not.toContain(buildSecretMarker);
         }
       }
+    } finally {
+      await stopProcess(dashboard);
+      rmSync(databaseDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("starts the dashboard development lifecycle with the Vite UI", async () => {
+    const dashboardPort = await reserveLoopbackPort();
+    const vitePort = await reserveLoopbackPort();
+    const databaseDirectory = mkdtempSync(join(tmpdir(), "steam-library-dashboard-dev-"));
+    const dashboard = startNpmScript("dev:dashboard", {
+      STEAM_API_KEY: buildSecretMarker,
+      STEAM_ID: "76561198000000000",
+      DASHBOARD_PORT: String(dashboardPort),
+      DASHBOARD_UI_PORT: String(vitePort),
+      TRACKER_DATABASE_PATH: join(databaseDirectory, "tracker.sqlite"),
+    });
+    try {
+      const root = await waitForDashboard(`http://127.0.0.1:${vitePort}/`, dashboard);
+      expect(root.status).toBe(200);
+      expect(await root.text()).toContain('<div id="root">');
+      expect(
+        (await waitForStatus(`http://127.0.0.1:${vitePort}/api/missing`, 404, dashboard)).status,
+      ).toBe(404);
     } finally {
       await stopProcess(dashboard);
       rmSync(databaseDirectory, { force: true, recursive: true });

@@ -1,13 +1,16 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const dashboardApiTarget = new URL("http://127.0.0.1:4173");
+const dashboardApiTarget = new URL(`http://127.0.0.1:${process.env.DASHBOARD_PORT ?? "4173"}`);
+const dashboardUiPort = Number(process.env.DASHBOARD_UI_PORT ?? "5173");
 
 export default defineConfig({
   plugins: [react()],
   root: "dashboard-ui",
   server: {
     host: "127.0.0.1",
+    port: dashboardUiPort,
+    strictPort: true,
     proxy: {
       "/api": {
         target: dashboardApiTarget.origin,
