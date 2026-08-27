@@ -7,6 +7,7 @@ import { request } from "node:http";
 import { InputError, SteamUnavailableError } from "../../src/errors.js";
 import { createDashboardHttpServer } from "../../src/dashboard/http/server.js";
 import type { DashboardLibrary, DashboardStatusUpdate } from "../../src/dashboard/contracts.js";
+import type { ArtworkResolver } from "../../src/dashboard/artwork-resolver.js";
 
 const library: DashboardLibrary = {
   games: [],
@@ -26,8 +27,14 @@ function startServer(
     updateStatus: (appId: unknown, status: unknown) => Promise<DashboardStatusUpdate>;
   },
   staticRoot: string,
+  artworkResolver?: ArtworkResolver,
 ) {
-  const server = createDashboardHttpServer({ dashboardService: service, staticRoot, port: 0 });
+  const server = createDashboardHttpServer({
+    dashboardService: service,
+    staticRoot,
+    artworkResolver,
+    port: 0,
+  });
   return new Promise<{ server: ReturnType<typeof createDashboardHttpServer>; port: number }>(
     (resolve) => {
       server.listen(0, "127.0.0.1", () => {
@@ -153,6 +160,23 @@ describe("dashboard HTTP server", () => {
     ).toBe(415);
     expect((await call(port, "/api/nope")).status).toBe(404);
     expect(service.updateStatus).not.toHaveBeenCalled();
+  });
+
+  test("does not resolve artwork for app IDs outside the configured library", async () => {
+    root = await mkdtemp(join(tmpdir(), "dashboard-http-"));
+    await writeFile(join(root, "index.html"), "<!doctype html><title>Dashboard</title>");
+    const service = {
+      getLibrary: vi.fn(async () => library),
+      syncLibrary: vi.fn(async () => library),
+      updateStatus: vi.fn(async () => update),
+    };
+    const artworkResolver: ArtworkResolver = { resolve: vi.fn(async () => undefined) };
+    const started = await startServer(service, root, artworkResolver);
+    server = started.server;
+
+    expect((await call(started.port, "/api/artwork/999")).status).toBe(404);
+    expect(service.getLibrary).toHaveBeenCalledOnce();
+    expect(artworkResolver.resolve).not.toHaveBeenCalled();
   });
 
   test("enforces local host/origin and security headers", async () => {

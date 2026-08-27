@@ -144,27 +144,31 @@ async function handleApi(
   const artworkMatch = /^\/api\/artwork\/(\d+)$/.exec(pathname);
   if (artworkMatch !== null) {
     if (method !== "GET" || artworkResolver === undefined) {
-      sendJson(
-        response,
-        404,
-        { error: { code: "NOT_FOUND", message: "Artwork not found." } },
-        method,
-      );
+      sendArtworkNotFound(response, method);
       return;
     }
-    const artwork = await artworkResolver.resolve(Number(artworkMatch[1]));
-    if (artwork === undefined) {
-      sendJson(
-        response,
-        404,
-        { error: { code: "NOT_FOUND", message: "Artwork not found." } },
-        method,
-      );
+    const appId = parseAppId(artworkMatch[1]);
+    if (appId === undefined) {
+      sendArtworkNotFound(response, method);
       return;
     }
-    response.statusCode = 200;
-    response.setHeader("Content-Type", artwork.contentType);
-    createReadStream(artwork.filePath).pipe(response);
+    try {
+      const library = await dashboardService.getLibrary();
+      if (!library.games.some((game) => game.appId === appId)) {
+        sendArtworkNotFound(response, method);
+        return;
+      }
+      const artwork = await artworkResolver.resolve(appId);
+      if (artwork === undefined) {
+        sendArtworkNotFound(response, method);
+        return;
+      }
+      response.statusCode = 200;
+      response.setHeader("Content-Type", artwork.contentType);
+      createReadStream(artwork.filePath).pipe(response);
+    } catch (error) {
+      sendError(response, error, logger, method);
+    }
     return;
   }
   if (pathname === "/api/library") {
@@ -239,6 +243,10 @@ async function handleApi(
     { error: { code: "NOT_FOUND", message: "API route not found." } },
     method,
   );
+}
+
+function sendArtworkNotFound(response: ServerResponse, method: string): void {
+  sendJson(response, 404, { error: { code: "NOT_FOUND", message: "Artwork not found." } }, method);
 }
 
 async function runService<T>(
