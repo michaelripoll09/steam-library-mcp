@@ -30,6 +30,7 @@ export const familyGameSchema = z.object({
   owner_steamids: z.array(z.string().trim().min(1)).default([]),
   exclude_reason: z.number().int().nonnegative().default(0),
   rt_playtime: z.number().int().nonnegative().default(0),
+  rt_last_played: z.number().int().nonnegative().optional(),
 });
 
 const familyGroupResponseSchema = z.object({

@@ -232,6 +232,39 @@ describe("SteamService", () => {
     });
   });
 
+  test("exposes the last played date for a family-shared game", async () => {
+    const familyConfig = loadConfig({
+      STEAM_API_KEY: "secret-key",
+      STEAM_ID: "76561198000000000",
+      STEAM_WEBAPI_TOKEN: "temporary-family-token",
+    });
+    const service = createSteamService({
+      config: familyConfig,
+      steamClient: Object.assign(
+        createClient({ getOwnedGames: vi.fn(async () => ({ response: { games: [] } })) }),
+        {
+          getFamilyGames: vi.fn(async () => [
+            {
+              appid: 1196590,
+              name: "Resident Evil Village",
+              owner_steamids: ["76561198000000001"],
+              exclude_reason: 0,
+              rt_playtime: 285,
+              rt_last_played: 1_700_000_000,
+            },
+          ]),
+        },
+      ) as SteamApiClient,
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.getGame(1196590)).resolves.toMatchObject({
+      accessType: "family_shared",
+      lastPlayedAt: "2023-11-14T22:13:20.000Z",
+    });
+  });
+
   test("retains an owned game supplied only by the Steam Families catalog", async () => {
     const familyConfig = loadConfig({
       STEAM_API_KEY: "secret-key",

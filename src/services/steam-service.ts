@@ -157,6 +157,9 @@ function normalizeFamilyGame(game: SteamFamilyGameDto): SteamGame {
     playtimeMinutes: game.rt_playtime,
     accessType: "family_shared",
     isPlayable: game.exclude_reason === 0,
+    ...(game.rt_last_played === undefined
+      ? {}
+      : { lastPlayedAt: new Date(game.rt_last_played * 1000).toISOString() }),
   });
 }
 
