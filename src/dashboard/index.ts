@@ -54,6 +54,12 @@ export async function runDashboard(): Promise<void> {
   }
 }
 
-if (process.argv[1] !== undefined && process.argv[1].endsWith("/dashboard/index.js")) {
+export function isDashboardEntrypoint(argv1: string | undefined): boolean {
+  if (argv1 === undefined) return false;
+  const segments = argv1.replaceAll("\\", "/").toLocaleLowerCase().split("/");
+  return segments.at(-2) === "dashboard" && segments.at(-1) === "index.js";
+}
+
+if (isDashboardEntrypoint(process.argv[1])) {
   void runDashboard();
 }
