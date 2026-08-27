@@ -56,7 +56,8 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_get_recent_games",
     {
-      description: "Get the configured user's recently played Steam games.",
+      description:
+        "Get the configured user's recently played Steam games, ordered by confirmed last-played date descending when Steam provides it.",
       inputSchema: recentGamesInputSchema.shape,
     },
     createHandler(recentGamesInputSchema, ({ count }) => service.getRecentGames(count)),

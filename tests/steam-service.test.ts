@@ -145,6 +145,48 @@ describe("SteamService", () => {
     await expect(service.getRecentGames(51)).rejects.toBeInstanceOf(InputError);
   });
 
+  test("orders recent games by confirmed last played date without inventing missing dates", async () => {
+    const service = createSteamService({
+      config,
+      steamClient: createClient({
+        getRecentGames: vi.fn(async () => ({
+          response: {
+            total_count: 3,
+            games: [
+              {
+                appid: 440,
+                name: "Team Fortress 2",
+                playtime_forever: 20,
+                rtime_last_played: 1_700_000_000,
+              },
+              { appid: 570, name: "Dota 2", playtime_forever: 10 },
+              {
+                appid: 620,
+                name: "Portal 2",
+                playtime_forever: 135,
+                rtime_last_played: 1_710_000_000,
+              },
+            ],
+          },
+        })),
+      }),
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+
+    await expect(service.getRecentGames()).resolves.toEqual([
+      expect.objectContaining({
+        appId: 620,
+        lastPlayedAt: "2024-03-09T16:00:00.000Z",
+      }),
+      expect.objectContaining({
+        appId: 440,
+        lastPlayedAt: "2023-11-14T22:13:20.000Z",
+      }),
+      expect.not.objectContaining({ lastPlayedAt: expect.anything() }),
+    ]);
+  });
+
   test("calculates statistics from the normalized library", async () => {
     const service = createSteamService({
       config,

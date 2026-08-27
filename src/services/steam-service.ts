@@ -70,7 +70,7 @@ export function createSteamService({
     async getRecentGames(count) {
       assertRecentGameCount(count);
       const response = await steamClient.getRecentGames(config.steamId, count);
-      return response.response.games.map(normalizeRecentGame);
+      return response.response.games.map(normalizeRecentGame).sort(sortByLastPlayedAtDescending);
     },
     async getLibraryStats() {
       const { games } = await getLibrary();
@@ -123,6 +123,16 @@ function mergeGames(
         : normalizeFamilyGame(game),
     );
   return [...ownedByAppId.values(), ...familyOnlyGames];
+}
+
+function sortByLastPlayedAtDescending(left: SteamGame, right: SteamGame): number {
+  if (left.lastPlayedAt === undefined) {
+    return right.lastPlayedAt === undefined ? 0 : 1;
+  }
+  if (right.lastPlayedAt === undefined) {
+    return -1;
+  }
+  return right.lastPlayedAt.localeCompare(left.lastPlayedAt);
 }
 
 function normalizeOwnedGame(game: SteamGameDto): SteamGame {
