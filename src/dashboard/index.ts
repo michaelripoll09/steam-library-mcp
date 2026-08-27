@@ -2,7 +2,7 @@ import { type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 
 import { createCoreServices, type CoreServiceOverrides } from "../core-services.js";
-import { loadConfig, type AppConfig } from "../config.js";
+import { DEFAULT_TRACKER_DATABASE_PATH, loadConfig, type AppConfig } from "../config.js";
 import { createDashboardService, type DashboardService } from "./dashboard-service.js";
 import { createArtworkResolver, type ArtworkResolver } from "./artwork-resolver.js";
 import {
@@ -30,7 +30,10 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
     artworkResolver:
       options.artworkResolver ??
       createArtworkResolver({
-        cacheDirectory: resolve(dirname(config.trackerDatabasePath), "artwork"),
+        cacheDirectory: resolve(
+          dirname(config.trackerDatabasePath ?? DEFAULT_TRACKER_DATABASE_PATH),
+          "artwork",
+        ),
         ...(config.steamGridDbApiKey === undefined
           ? {}
           : { steamGridDbApiKey: config.steamGridDbApiKey }),
