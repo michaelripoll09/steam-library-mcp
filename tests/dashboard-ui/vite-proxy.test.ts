@@ -15,12 +15,19 @@ const library: DashboardLibrary = {
 
 let dashboardServer: Server | undefined;
 let viteServer: ViteDevServer | undefined;
+let originalDashboardPort: string | undefined;
 
 afterEach(async () => {
   await viteServer?.close();
   viteServer = undefined;
   await closeServer(dashboardServer);
   dashboardServer = undefined;
+  if (originalDashboardPort === undefined) {
+    delete process.env.DASHBOARD_PORT;
+  } else {
+    process.env.DASHBOARD_PORT = originalDashboardPort;
+  }
+  originalDashboardPort = undefined;
 });
 
 describe("Vite dashboard API proxy", () => {
@@ -76,8 +83,14 @@ async function startProxy() {
   dashboardServer = createDashboardHttpServer({
     dashboardService: { getLibrary, syncLibrary, updateStatus },
   });
-  dashboardServer.listen(4173, "127.0.0.1");
+  originalDashboardPort = process.env.DASHBOARD_PORT;
+  dashboardServer.listen(0, "127.0.0.1");
   await once(dashboardServer, "listening");
+  const dashboardAddress = dashboardServer.address();
+  if (dashboardAddress === null || typeof dashboardAddress === "string") {
+    throw new Error("Dashboard server did not bind.");
+  }
+  process.env.DASHBOARD_PORT = String(dashboardAddress.port);
 
   viteServer = await createViteServer({
     configFile: "vite.config.ts",
