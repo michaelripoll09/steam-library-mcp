@@ -292,6 +292,23 @@ select {
 }
 .cover-frame-landscape .cover-image {
   object-fit: contain;
+  border-radius: 0.35rem;
+  box-shadow: 0 0.5rem 1.4rem rgb(0 0 0 / 0.45);
+}
+.cover-frame-landscape::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, rgb(5 7 12 / 0.08), rgb(5 7 12 / 0.5));
+}
+.cover-landscape-foreground {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0.45rem;
 }
 .cover-backdrop {
   position: absolute;

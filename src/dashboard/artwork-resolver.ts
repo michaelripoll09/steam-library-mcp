@@ -89,19 +89,19 @@ export function createArtworkResolver({
     );
     if (grid !== undefined) return grid;
 
-    const landscape = await cacheFirst(
+    const igdb = await cacheFirst(
       fetch,
       cacheDirectory,
       appId,
-      await publicSteamLandscapeArtwork(fetch, appId),
+      await igdbArtwork(fetch, igdbCredentials, igdbTokenProvider, title),
     );
-    if (landscape !== undefined) return landscape;
+    if (igdb !== undefined) return igdb;
 
     return cacheFirst(
       fetch,
       cacheDirectory,
       appId,
-      await igdbArtwork(fetch, igdbCredentials, igdbTokenProvider, title),
+      await publicSteamLandscapeArtwork(fetch, appId),
     );
   }
   return Object.freeze({ resolve });
@@ -113,7 +113,7 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
     const metadata = JSON.parse(
       await readFile(join(directory, `${appId}.json`), "utf8"),
     ) as unknown;
-    if (!isReadableMetadata(metadata)) return undefined;
+    if (!isReadableMetadata(metadata) || metadata.orientation !== "portrait") return undefined;
     await access(filePath);
     return { filePath, contentType: metadata.contentType, orientation: metadata.orientation };
   } catch {

@@ -421,6 +421,17 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
       />
     );
   }
+  const image = (
+    <img
+      className={`cover-image${isLandscape ? " cover-landscape" : ""}`}
+      src={coverUrl}
+      alt={`Portada de ${game.name}`}
+      onError={() => setFailedSourceCount((count) => count + 1)}
+      onLoad={(event) =>
+        setIsLandscape(event.currentTarget.naturalWidth > event.currentTarget.naturalHeight)
+      }
+    />
+  );
   return (
     <span className={`cover-frame${isLandscape ? " cover-frame-landscape" : ""}`}>
       {isLandscape && (
@@ -430,15 +441,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
           style={{ backgroundImage: `url("${coverUrl}")` }}
         />
       )}
-      <img
-        className={`cover-image${isLandscape ? " cover-landscape" : ""}`}
-        src={coverUrl}
-        alt={`Portada de ${game.name}`}
-        onError={() => setFailedSourceCount((count) => count + 1)}
-        onLoad={(event) =>
-          setIsLandscape(event.currentTarget.naturalWidth > event.currentTarget.naturalHeight)
-        }
-      />
+      {isLandscape ? <span className="cover-landscape-foreground">{image}</span> : image}
     </span>
   );
 }

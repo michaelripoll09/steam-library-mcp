@@ -119,7 +119,7 @@ describe("DashboardApp", () => {
     expect(within(card).getByText(longTitleLibrary.games[0].name)).toBeInTheDocument();
   });
 
-  test("renders a landscape cover with an uncropped foreground and full-bleed backdrop", () => {
+  test("renders a landscape cover as a readable foreground over a full-bleed backdrop", () => {
     render(<CoverImage game={library.games[0]} />);
 
     const cover = screen.getByRole("img", { name: "Portada de Celeste" });
@@ -127,11 +127,38 @@ describe("DashboardApp", () => {
     Object.defineProperty(cover, "naturalHeight", { configurable: true, value: 900 });
     fireEvent.load(cover);
 
-    expect(cover).toHaveClass("cover-image", "cover-landscape");
-    expect(cover.parentElement).toHaveClass("cover-frame", "cover-frame-landscape");
-    expect(cover.parentElement?.querySelector(".cover-backdrop")).toHaveStyle({
+    const landscapeCover = screen.getByRole("img", { name: "Portada de Celeste" });
+    expect(landscapeCover).toHaveClass("cover-image", "cover-landscape");
+    expect(landscapeCover.parentElement?.parentElement).toHaveClass(
+      "cover-frame",
+      "cover-frame-landscape",
+    );
+    expect(landscapeCover.parentElement).toHaveClass("cover-landscape-foreground");
+    expect(landscapeCover.parentElement).toContainElement(landscapeCover);
+    expect(
+      landscapeCover.parentElement?.parentElement?.querySelector(".cover-backdrop"),
+    ).toHaveStyle({
       backgroundImage: expect.stringContaining("celeste.jpg"),
     });
+  });
+
+  test("keeps a portrait cover in its existing direct card treatment", () => {
+    render(<CoverImage game={library.games[0]} />);
+
+    const cover = screen.getByRole("img", { name: "Portada de Celeste" });
+    Object.defineProperty(cover, "naturalWidth", { configurable: true, value: 900 });
+    Object.defineProperty(cover, "naturalHeight", { configurable: true, value: 1600 });
+    fireEvent.load(cover);
+
+    const portraitCover = screen.getByRole("img", { name: "Portada de Celeste" });
+    expect(portraitCover).toHaveClass("cover-image");
+    expect(portraitCover).not.toHaveClass("cover-landscape");
+    expect(portraitCover.parentElement).toHaveClass("cover-frame");
+    expect(portraitCover.parentElement).not.toHaveClass("cover-frame-landscape");
+    expect(portraitCover.parentElement?.querySelector(".cover-backdrop")).not.toBeInTheDocument();
+    expect(
+      portraitCover.parentElement?.querySelector(".cover-landscape-foreground"),
+    ).not.toBeInTheDocument();
   });
 
   test("renders a Spanish dashboard with accessible localized controls and dates", async () => {

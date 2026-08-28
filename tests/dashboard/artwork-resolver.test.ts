@@ -71,6 +71,51 @@ describe("artwork resolver", () => {
     });
   });
 
+  test("checks IGDB before Steam landscape fallbacks after the other portrait sources fail", async () => {
+    await withDirectory(async (directory) => {
+      const clientSecret = "fake-client-secret";
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("steamgriddb.com/api/v2/grids/steam/858460")) {
+          return new Response(JSON.stringify({ success: true, data: [] }));
+        }
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") return new Response(JSON.stringify([]));
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        if (url.endsWith("/header.jpg")) return image([8, 5, 8]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        steamGridDbApiKey: "grid-key",
+        igdbCredentials: { clientId: "fake-client-id", clientSecret },
+        fetch,
+      });
+
+      await expect(resolver.resolve(858460, "Celeste")).resolves.toMatchObject({
+        orientation: "landscape",
+      });
+
+      const calls = fetch.mock.calls.map(([input]) => String(input));
+      expect(calls.indexOf("https://api.igdb.com/v4/games")).toBeLessThan(
+        calls.findIndex((url) => url.includes("store.steampowered.com/api/appdetails")),
+      );
+      expect(calls.indexOf("https://api.igdb.com/v4/games")).toBeLessThan(
+        calls.findIndex((url) => url.endsWith("/header.jpg")),
+      );
+      expect(JSON.stringify(calls)).not.toContain(clientSecret);
+    });
+  });
+
   test("prefers a SteamGridDB portrait grid over an official Steam header when no official vertical cover exists", async () => {
     await withDirectory(async (directory) => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
@@ -272,6 +317,100 @@ describe("artwork resolver", () => {
       );
       await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
         '"version":3',
+      );
+    });
+  });
+
+  test.each([
+    ["v2 portrait", { version: 2, contentType: "image/jpeg", orientation: "portrait" }],
+    [
+      "v3 Steam portrait",
+      { version: 3, contentType: "image/jpeg", orientation: "portrait", source: "steam" },
+    ],
+    [
+      "v3 SteamGridDB portrait",
+      { version: 3, contentType: "image/jpeg", orientation: "portrait", source: "steamgriddb" },
+    ],
+    [
+      "v3 IGDB portrait",
+      { version: 3, contentType: "image/jpeg", orientation: "portrait", source: "igdb" },
+    ],
+  ] as const)(
+    "uses a valid %s cache record without a provider request",
+    async (_name, metadata) => {
+      await withDirectory(async (directory) => {
+        await Promise.all([
+          writeFile(join(directory, "4513840.img"), new Uint8Array([9])),
+          writeFile(join(directory, "4513840.json"), JSON.stringify(metadata)),
+        ]);
+        const fetch = vi.fn<typeof globalThis.fetch>();
+        const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+        await expect(resolver.resolve(4513840)).resolves.toMatchObject({ orientation: "portrait" });
+        expect(fetch).not.toHaveBeenCalled();
+      });
+    },
+  );
+
+  test("re-resolves a v3 Steam landscape cache record instead of bypassing portrait sources", async () => {
+    await withDirectory(async (directory) => {
+      await Promise.all([
+        writeFile(join(directory, "4513840.img"), new Uint8Array([9])),
+        writeFile(
+          join(directory, "4513840.json"),
+          JSON.stringify({
+            version: 3,
+            contentType: "image/jpeg",
+            orientation: "landscape",
+            source: "steam",
+          }),
+        ),
+      ]);
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        if (String(input).endsWith("/library_600x900.jpg")) return image([4, 5, 1]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(4513840)).resolves.toMatchObject({ orientation: "portrait" });
+      expect(fetch.mock.calls.map(([input]) => String(input))).toContain(
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/4513840/library_600x900.jpg",
+      );
+      await expect(readFile(join(directory, "4513840.img"))).resolves.toEqual(
+        Buffer.from([4, 5, 1]),
+      );
+      await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
+        '"orientation":"portrait"',
+      );
+    });
+  });
+
+  test("rechecks a freshly cached Steam landscape before allowing it to remain the fallback", async () => {
+    await withDirectory(async (directory) => {
+      const firstFetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+        if (url.endsWith("/header.jpg")) return image([9, 9, 9]);
+        return new Response(null, { status: 404 });
+      });
+
+      await expect(
+        createArtworkResolver({ cacheDirectory: directory, fetch: firstFetch }).resolve(4513840),
+      ).resolves.toMatchObject({ orientation: "landscape" });
+      await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
+        '"orientation":"landscape","source":"steam"',
+      );
+
+      const secondFetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        if (String(input).endsWith("/library_600x900.jpg")) return image([4, 5, 1]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch: secondFetch });
+
+      await expect(resolver.resolve(4513840)).resolves.toMatchObject({ orientation: "portrait" });
+      expect(secondFetch.mock.calls.map(([input]) => String(input))).toContain(
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/4513840/library_600x900.jpg",
       );
     });
   });
