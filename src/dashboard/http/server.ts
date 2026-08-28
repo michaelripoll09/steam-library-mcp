@@ -167,7 +167,15 @@ async function handleApi(
       response.statusCode = 200;
       response.setHeader("Content-Type", artwork.contentType);
       response.setHeader("X-Artwork-Orientation", artwork.orientation);
-      createReadStream(artwork.filePath).pipe(response);
+      const artworkStream = createReadStream(artwork.filePath);
+      artworkStream.once("error", () => {
+        if (!response.headersSent) {
+          sendArtworkNotFound(response, method);
+        } else {
+          response.destroy();
+        }
+      });
+      artworkStream.pipe(response);
     } catch (error) {
       sendError(response, error, logger, method);
     }

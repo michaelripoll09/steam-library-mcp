@@ -118,23 +118,24 @@ describe("artwork resolver", () => {
 
   test("prefers a SteamGridDB portrait grid over an official Steam header when no official vertical cover exists", async () => {
     await withDirectory(async (directory) => {
+      const appId = 858460;
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/480")) {
+        if (url.includes(`steamgriddb.com/api/v2/grids/steam/${appId}`)) {
           return new Response(
             JSON.stringify({
               success: true,
-              data: [{ url: "https://cdn2.steamgriddb.com/file/sgdb-cdn/grid/spacewar.jpg" }],
+              data: [{ url: "https://cdn2.steamgriddb.com/file/sgdb-cdn/grid/grid.jpg" }],
             }),
           );
         }
         if (url.includes("cdn2.steamgriddb.com")) return image([4, 8, 0]);
         if (url.includes("store.steampowered.com/api/appdetails")) {
           return appDetails(
-            480,
+            appId,
             true,
-            "https://shared.akamai.steamstatic.com/steam/apps/480/header.jpg",
+            `https://shared.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
           );
         }
         return image();
@@ -145,13 +146,13 @@ describe("artwork resolver", () => {
         fetch,
       });
 
-      await expect(resolver.resolve(480)).resolves.toMatchObject({ orientation: "portrait" });
+      await expect(resolver.resolve(appId)).resolves.toMatchObject({ orientation: "portrait" });
       const calls = fetch.mock.calls.map(([input]) => String(input));
       expect(calls).toContain(
-        "https://www.steamgriddb.com/api/v2/grids/steam/480?dimensions=600x900",
+        `https://www.steamgriddb.com/api/v2/grids/steam/${appId}?dimensions=600x900`,
       );
       expect(calls).not.toContain(
-        "https://shared.akamai.steamstatic.com/steam/apps/480/header.jpg",
+        `https://shared.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
       );
       expect(fetch.mock.calls[1]?.[1]).toMatchObject({
         headers: { Authorization: "Bearer grid-key" },
@@ -159,7 +160,6 @@ describe("artwork resolver", () => {
       expect(fetch.mock.calls[2]?.[1]).not.toHaveProperty("headers");
     });
   });
-
   test("accepts SteamGridDB's current direct portrait CDN path without relaxing its allowlist", async () => {
     await withDirectory(async (directory) => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
@@ -918,6 +918,34 @@ describe("artwork resolver", () => {
     });
   });
 
+  test("caches Spacewar's pinned vetted IGDB portrait without OAuth or API lookup", async () => {
+    await withDirectory(async (directory) => {
+      const pinnedCover = "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co3lld.jpg";
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url === pinnedCover) return image([4, 8, 0]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(480, "Spacewar")).resolves.toMatchObject({
+        contentType: "image/jpeg",
+        orientation: "portrait",
+      });
+      expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([pinnedCover]);
+      await expect(readFile(join(directory, "480.img"))).resolves.toEqual(Buffer.from([4, 8, 0]));
+      await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toEqual(
+        JSON.stringify({
+          version: 4,
+          contentType: "image/jpeg",
+          orientation: "portrait",
+          source: "igdb-curated-override",
+          identity: "app-id-override",
+          providerGameId: 11301,
+        }),
+      );
+    });
+  });
   test.each([
     {
       appId: 15100,
@@ -933,8 +961,37 @@ describe("artwork resolver", () => {
       gameName: "Prince of Persia",
       imageName: "curated-prince-of-persia.jpg",
     },
+    {
+      appId: 3527290,
+      title: "PEAK",
+      gameId: 349524,
+      gameName: "Peak",
+      imageName: "curated-peak.jpg",
+    },
+    {
+      appId: 13500,
+      title: "Prince of Persia: Warrior Within",
+      gameId: 837,
+      gameName: "Prince of Persia: Warrior Within",
+      imageName: "curated-warrior-within.jpg",
+    },
+    {
+      appId: 13530,
+      title: "Prince of Persia: The Two Thrones",
+      gameId: 2437,
+      gameName: "Prince of Persia: The Two Thrones",
+      imageName: "curated-two-thrones.jpg",
+    },
+    {
+      appId: 13600,
+      title: "Prince of Persia: The Sands of Time",
+      gameId: 836,
+      gameName: "Prince of Persia: The Sands of Time",
+      imageName: "curated-sands-of-time.jpg",
+    },
   ])("uses the verified curated IGDB cover for Steam $appId", async (override) => {
     await withDirectory(async (directory) => {
+      const igdbQueries: string[] = [];
       const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
@@ -948,7 +1005,13 @@ describe("artwork resolver", () => {
           );
         }
         if (url === "https://api.igdb.com/v4/games") {
-          expect(String(init?.body)).toContain(`where id = ${override.gameId}; limit 1;`);
+          igdbQueries.push(String(init?.body));
+          if (
+            String(init?.body) !==
+            `fields id,name,cover.url; where id = ${override.gameId}; limit 1;`
+          ) {
+            return new Response(JSON.stringify([]));
+          }
           return new Response(
             JSON.stringify([
               {
@@ -970,11 +1033,24 @@ describe("artwork resolver", () => {
         fetch,
       });
 
-      await expect(resolver.resolve(override.appId, override.title)).resolves.toMatchObject({
+      const resolved = await resolver.resolve(override.appId, override.title);
+
+      expect(igdbQueries).toEqual([
+        `fields id,name,cover.url; where id = ${override.gameId}; limit 1;`,
+      ]);
+      expect(resolved).toMatchObject({
+        contentType: "image/jpeg",
         orientation: "portrait",
       });
-      await expect(readFile(join(directory, `${override.appId}.json`), "utf8")).resolves.toContain(
-        `"source":"igdb-curated-override","identity":"app-id-override","providerGameId":${override.gameId}`,
+      await expect(readFile(join(directory, `${override.appId}.json`), "utf8")).resolves.toEqual(
+        JSON.stringify({
+          version: 4,
+          contentType: "image/jpeg",
+          orientation: "portrait",
+          source: "igdb-curated-override",
+          identity: "app-id-override",
+          providerGameId: override.gameId,
+        }),
       );
     });
   });

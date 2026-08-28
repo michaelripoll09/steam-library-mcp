@@ -59,7 +59,7 @@ describe("DashboardApp", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
-  test("uses the official cover URL once and replaces a failed image with a deterministic fallback", () => {
+  test("uses the official cover URL once and replaces a failed image with an identifiable fallback", () => {
     render(<CoverImage game={library.games[0]} />);
 
     const cover = screen.getByRole("img", { name: "Portada de Celeste" });
@@ -72,6 +72,7 @@ describe("DashboardApp", () => {
 
     const fallback = screen.getByRole("img", { name: "Portada no disponible para Celeste" });
     expect(fallback).toHaveStyle({ backgroundImage: expect.stringContaining("linear-gradient") });
+    expect(within(fallback).getByText("Celeste")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Portada de Celeste" })).not.toBeInTheDocument();
   });
 
@@ -119,7 +120,7 @@ describe("DashboardApp", () => {
     expect(within(card).getByText(longTitleLibrary.games[0].name)).toBeInTheDocument();
   });
 
-  test("renders a landscape cover as a readable foreground over a full-bleed backdrop", () => {
+  test("renders a landscape cover as a full-card cropped image", () => {
     render(<CoverImage game={library.games[0]} />);
 
     const cover = screen.getByRole("img", { name: "Portada de Celeste" });
@@ -129,17 +130,12 @@ describe("DashboardApp", () => {
 
     const landscapeCover = screen.getByRole("img", { name: "Portada de Celeste" });
     expect(landscapeCover).toHaveClass("cover-image", "cover-landscape");
-    expect(landscapeCover.parentElement?.parentElement).toHaveClass(
-      "cover-frame",
-      "cover-frame-landscape",
-    );
-    expect(landscapeCover.parentElement).toHaveClass("cover-landscape-foreground");
-    expect(landscapeCover.parentElement).toContainElement(landscapeCover);
+    expect(landscapeCover.parentElement).toHaveClass("cover-frame");
+    expect(landscapeCover.parentElement).not.toHaveClass("cover-frame-landscape");
+    expect(landscapeCover.parentElement?.querySelector(".cover-backdrop")).not.toBeInTheDocument();
     expect(
-      landscapeCover.parentElement?.parentElement?.querySelector(".cover-backdrop"),
-    ).toHaveStyle({
-      backgroundImage: expect.stringContaining("celeste.jpg"),
-    });
+      landscapeCover.parentElement?.querySelector(".cover-landscape-foreground"),
+    ).not.toBeInTheDocument();
   });
 
   test("keeps a portrait cover in its existing direct card treatment", () => {

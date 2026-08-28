@@ -418,7 +418,11 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
         role="img"
         aria-label={`Portada no disponible para ${game.name}`}
         style={{ backgroundImage: coverGradient(game.appId) }}
-      />
+      >
+        <span className="cover-fallback-title" aria-hidden="true">
+          {game.name}
+        </span>
+      </div>
     );
   }
   const image = (
@@ -432,18 +436,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
       }
     />
   );
-  return (
-    <span className={`cover-frame${isLandscape ? " cover-frame-landscape" : ""}`}>
-      {isLandscape && (
-        <span
-          className="cover-backdrop"
-          aria-hidden="true"
-          style={{ backgroundImage: `url("${coverUrl}")` }}
-        />
-      )}
-      {isLandscape ? <span className="cover-landscape-foreground">{image}</span> : image}
-    </span>
-  );
+  return <span className="cover-frame">{image}</span>;
 }
 
 function officialSteamIconUrl(appId: number): string {

@@ -52,6 +52,7 @@ type IgdbCover = Readonly<{ name: string; url: URL; exactTitle: boolean }>;
 type CuratedIgdbOverride = Readonly<{
   gameId: number;
   expectedIgdbName: string;
+  pinnedCoverUrl?: string;
 }>;
 
 const CACHE_VERSION = 4;
@@ -76,6 +77,42 @@ const curatedIgdbOverrides = new Map<number, CuratedIgdbOverride>([
     {
       gameId: 2438,
       expectedIgdbName: "Prince of Persia",
+    },
+  ],
+  [
+    3527290,
+    {
+      gameId: 349524,
+      expectedIgdbName: "Peak",
+    },
+  ],
+  [
+    480,
+    {
+      gameId: 11301,
+      expectedIgdbName: "Spacewar",
+      pinnedCoverUrl: "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co3lld.jpg",
+    },
+  ],
+  [
+    13500,
+    {
+      gameId: 837,
+      expectedIgdbName: "Prince of Persia: Warrior Within",
+    },
+  ],
+  [
+    13530,
+    {
+      gameId: 2437,
+      expectedIgdbName: "Prince of Persia: The Two Thrones",
+    },
+  ],
+  [
+    13600,
+    {
+      gameId: 836,
+      expectedIgdbName: "Prince of Persia: The Sands of Time",
     },
   ],
 ]);
@@ -301,6 +338,21 @@ async function curatedIgdbOverrideArtwork(
 ): Promise<readonly ArtworkCandidate[]> {
   const override = curatedIgdbOverrides.get(appId);
   if (override === undefined) return [];
+  const pinnedCover =
+    override.pinnedCoverUrl === undefined
+      ? undefined
+      : allowedIgdbCoverUrl(override.pinnedCoverUrl);
+  if (pinnedCover !== undefined) {
+    return [
+      {
+        url: pinnedCover,
+        orientation: "portrait",
+        source: "igdb-curated-override",
+        identity: "app-id-override",
+        providerGameId: override.gameId,
+      },
+    ];
+  }
   const payload = await requestIgdbGames(fetch, credentials, tokenProvider, {
     body: `fields id,name,cover.url; where id = ${override.gameId}; limit 1;`,
   });
