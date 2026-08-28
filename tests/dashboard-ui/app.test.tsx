@@ -457,3 +457,22 @@ test("closes a custom filter menu with Escape and an outside click", async () =>
   await user.click(screen.getByRole("heading", { name: "Tu biblioteca de Steam" }));
   expect(screen.queryByRole("listbox", { name: "Acceso" })).not.toBeInTheDocument();
 });
+
+test("closes an open custom filter menu when tabbing to the next filter", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+  };
+  render(<DashboardApp api={api} />);
+  const statusFilter = await screen.findByRole("combobox", { name: "Estado" });
+  const accessFilter = screen.getByRole("combobox", { name: "Acceso" });
+
+  await user.click(statusFilter);
+  expect(screen.getByRole("listbox", { name: "Estado" })).toBeInTheDocument();
+  await user.tab();
+
+  expect(screen.queryByRole("listbox", { name: "Estado" })).not.toBeInTheDocument();
+  expect(accessFilter).toHaveFocus();
+});

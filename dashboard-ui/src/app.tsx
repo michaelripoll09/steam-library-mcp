@@ -302,6 +302,10 @@ function FilterSelect({
       setIsOpen(false);
       return;
     }
+    if (event.key === "Tab") {
+      setIsOpen(false);
+      return;
+    }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const nextIndex = Math.max(
