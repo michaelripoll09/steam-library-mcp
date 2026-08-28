@@ -423,7 +423,7 @@ describe("artwork resolver", () => {
 
   test.each([
     [15100, "Assassin's Creed: Director's Cut"],
-    [19980, "Prince of Persia"],
+    [19980, "Prince of Persia (2008)"],
   ])(
     "uses Steam app-bound IGDB cover for %i before generic title variants",
     async (appId, title) => {
@@ -914,6 +914,261 @@ describe("artwork resolver", () => {
       );
       expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
         "https://images.igdb.com/igdb/image/upload/t_thumb/unsafe.jpg",
+      );
+    });
+  });
+
+  test.each([
+    {
+      appId: 15100,
+      title: "Assassin's Creed™: Director's Cut Edition",
+      gameId: 27827,
+      gameName: "Assassin's Creed: Director's Cut Edition",
+      imageName: "curated-assassins-creed.jpg",
+    },
+    {
+      appId: 19980,
+      title: "Prince of Persia®",
+      gameId: 2438,
+      gameName: "Prince of Persia",
+      imageName: "curated-prince-of-persia.jpg",
+    },
+  ])("uses the verified curated IGDB cover for Steam $appId", async (override) => {
+    await withDirectory(async (directory) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          expect(String(init?.body)).toContain(`where id = ${override.gameId}; limit 1;`);
+          return new Response(
+            JSON.stringify([
+              {
+                id: override.gameId,
+                name: override.gameName,
+                cover: {
+                  url: `//images.igdb.com/igdb/image/upload/t_cover_big_2x/${override.imageName}`,
+                },
+              },
+            ]),
+          );
+        }
+        if (url.endsWith(`/${override.imageName}`)) return image([override.appId % 256]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(override.appId, override.title)).resolves.toMatchObject({
+        orientation: "portrait",
+      });
+      await expect(readFile(join(directory, `${override.appId}.json`), "utf8")).resolves.toContain(
+        `"source":"igdb-curated-override","identity":"app-id-override","providerGameId":${override.gameId}`,
+      );
+    });
+  });
+
+  test("does not request curated overrides for other Steam app IDs", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 4513840;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          expect(String(init?.body)).not.toContain("where id = ");
+          return new Response(JSON.stringify([]));
+        }
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(appId, "Unrelated title")).resolves.toBeUndefined();
+    });
+  });
+
+  test("rejects a curated override when its Steam title or IGDB game identity does not match", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 15100;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          const body = String(init?.body);
+          if (body.includes("where id = 27827; limit 1;")) {
+            return new Response(
+              JSON.stringify([
+                {
+                  id: 99999,
+                  name: "Assassin's Creed: Director's Cut Edition",
+                  cover: {
+                    url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong-identity.jpg",
+                  },
+                },
+              ]),
+            );
+          }
+          return new Response(JSON.stringify([]));
+        }
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(
+        resolver.resolve(appId, "Assassin's Creed™: Director's Cut Edition"),
+      ).resolves.toBeUndefined();
+      await expect(resolver.resolve(appId, "Different game")).resolves.toBeUndefined();
+      expect(
+        fetch.mock.calls.filter(
+          ([input, init]) =>
+            String(input) === "https://api.igdb.com/v4/games" &&
+            String(init?.body).includes("where id = 27827; limit 1;"),
+        ),
+      ).toHaveLength(1);
+      expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+        "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong-identity.jpg",
+      );
+    });
+  });
+
+  test("rejects unsafe curated override image URLs before fetching them", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 19980;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          if (String(init?.body).includes("where id = 2438; limit 1;")) {
+            return new Response(
+              JSON.stringify([
+                {
+                  id: 2438,
+                  name: "Prince of Persia",
+                  cover: { url: "https://127.0.0.1/private.jpg" },
+                },
+              ]),
+            );
+          }
+          return new Response(JSON.stringify([]));
+        }
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(appId, "Prince of Persia®")).resolves.toBeUndefined();
+      expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+        "https://127.0.0.1/private.jpg",
+      );
+    });
+  });
+
+  test("re-resolves a cached Steam landscape as a provenance-marked curated override", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 19980;
+      await Promise.all([
+        writeFile(join(directory, `${appId}.img`), new Uint8Array([0])),
+        writeFile(
+          join(directory, `${appId}.json`),
+          JSON.stringify({
+            version: 4,
+            contentType: "image/jpeg",
+            orientation: "landscape",
+            source: "steam",
+          }),
+        ),
+      ]);
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          expect(String(init?.body)).toContain("where id = 2438; limit 1;");
+          return new Response(
+            JSON.stringify([
+              {
+                id: 2438,
+                name: "Prince of Persia",
+                cover: {
+                  url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/curated-migrated.jpg",
+                },
+              },
+            ]),
+          );
+        }
+        if (url.endsWith("/curated-migrated.jpg")) return image([1, 9, 9]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(appId, "Prince of Persia®")).resolves.toMatchObject({
+        orientation: "portrait",
+      });
+      await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
+        '"source":"igdb-curated-override","identity":"app-id-override","providerGameId":2438',
       );
     });
   });

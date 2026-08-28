@@ -37,16 +37,23 @@ type Metadata = Readonly<{
   orientation: ArtworkOrientation;
   source: ArtworkSource;
   identity?: IgdbIdentity;
+  providerGameId?: number;
 }>;
-type ArtworkSource = "steam" | "steamgriddb" | "igdb";
-type IgdbIdentity = "steam-app" | "title";
+type ArtworkSource = "steam" | "steamgriddb" | "igdb" | "igdb-curated-override";
+type IgdbIdentity = "steam-app" | "title" | "app-id-override";
 type ArtworkCandidate = Readonly<{
   url: URL;
   orientation: ArtworkOrientation;
   source: ArtworkSource;
   identity?: IgdbIdentity;
+  providerGameId?: number;
 }>;
 type IgdbCover = Readonly<{ name: string; url: URL; exactTitle: boolean }>;
+type CuratedIgdbOverride = Readonly<{
+  expectedSteamTitle: string;
+  gameId: number;
+  expectedIgdbName: string;
+}>;
 
 const CACHE_VERSION = 4;
 const allowedSteamHosts = new Set([
@@ -57,6 +64,24 @@ const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_CACHE_ENTRIES = 128;
 const allowedIgdbImageHosts = new Set(["images.igdb.com"]);
 const IGDB_GAMES_URL = "https://api.igdb.com/v4/games";
+const curatedIgdbOverrides = new Map<number, CuratedIgdbOverride>([
+  [
+    15100,
+    {
+      expectedSteamTitle: "Assassin's Creed™: Director's Cut Edition",
+      gameId: 27827,
+      expectedIgdbName: "Assassin's Creed: Director's Cut Edition",
+    },
+  ],
+  [
+    19980,
+    {
+      expectedSteamTitle: "Prince of Persia®",
+      gameId: 2438,
+      expectedIgdbName: "Prince of Persia",
+    },
+  ],
+]);
 
 export function createArtworkResolver({
   cacheDirectory,
@@ -81,6 +106,14 @@ export function createArtworkResolver({
       directSteamPortraitArtwork(appId),
     );
     if (portrait !== undefined) return portrait;
+
+    const curatedOverride = await cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      await curatedIgdbOverrideArtwork(fetch, igdbCredentials, igdbTokenProvider, appId, title),
+    );
+    if (curatedOverride !== undefined) return curatedOverride;
 
     const gridUrls =
       steamGridDbApiKey === undefined
@@ -264,6 +297,27 @@ async function igdbBoundArtwork(
   }));
 }
 
+async function curatedIgdbOverrideArtwork(
+  fetch: FetchLike,
+  credentials: IgdbCredentials | undefined,
+  tokenProvider: IgdbTokenProvider | undefined,
+  appId: number,
+  title: string | undefined,
+): Promise<readonly ArtworkCandidate[]> {
+  const override = curatedIgdbOverrides.get(appId);
+  if (override === undefined || title !== override.expectedSteamTitle) return [];
+  const payload = await requestIgdbGames(fetch, credentials, tokenProvider, {
+    body: `fields id,name,cover.url; where id = ${override.gameId}; limit 1;`,
+  });
+  return parseCuratedIgdbOverrideCovers(payload, override).map((url) => ({
+    url,
+    orientation: "portrait" as const,
+    source: "igdb-curated-override" as const,
+    identity: "app-id-override" as const,
+    providerGameId: override.gameId,
+  }));
+}
+
 async function igdbTitleArtwork(
   fetch: FetchLike,
   credentials: IgdbCredentials | undefined,
@@ -330,6 +384,27 @@ function parseIgdbBoundCovers(payload: unknown, appId: number): readonly URL[] {
       );
     return url !== undefined && matchesSteamApp ? [url] : [];
   });
+}
+
+function parseCuratedIgdbOverrideCovers(
+  payload: unknown,
+  override: CuratedIgdbOverride,
+): readonly URL[] {
+  if (!Array.isArray(payload)) return [];
+  const covers = payload.flatMap((value): readonly URL[] => {
+    if (value === null || typeof value !== "object") return [];
+    const id = "id" in value ? value.id : undefined;
+    const name = "name" in value ? value.name : undefined;
+    const cover = "cover" in value ? value.cover : undefined;
+    const url =
+      cover !== null && typeof cover === "object" && "url" in cover
+        ? allowedIgdbCoverUrl(cover.url)
+        : undefined;
+    return id === override.gameId && name === override.expectedIgdbName && url !== undefined
+      ? [url]
+      : [];
+  });
+  return covers.length === 1 ? covers : [];
 }
 
 function parseIgdbCovers(payload: unknown, title: string): readonly IgdbCover[] {
@@ -405,6 +480,7 @@ function isReadableMetadata(
     orientation?: unknown;
     source?: unknown;
     identity?: unknown;
+    providerGameId?: unknown;
   }>;
   const isCommonShape =
     typeof candidate.contentType === "string" &&
@@ -412,11 +488,10 @@ function isReadableMetadata(
     (candidate.orientation === "portrait" || candidate.orientation === "landscape");
   if (!isCommonShape) return false;
   if (candidate.version === CACHE_VERSION) {
-    return (
-      isArtworkSource(candidate.source) &&
-      (candidate.source !== "igdb" ||
-        candidate.identity === "steam-app" ||
-        candidate.identity === "title")
+    return isValidMetadataProvenance(
+      candidate.source,
+      candidate.identity,
+      candidate.providerGameId,
     );
   }
   if (candidate.version === 3) {
@@ -426,7 +501,29 @@ function isReadableMetadata(
 }
 
 function isArtworkSource(value: unknown): value is ArtworkSource {
-  return value === "steam" || value === "steamgriddb" || value === "igdb";
+  return (
+    value === "steam" ||
+    value === "steamgriddb" ||
+    value === "igdb" ||
+    value === "igdb-curated-override"
+  );
+}
+
+function isValidMetadataProvenance(
+  source: unknown,
+  identity: unknown,
+  providerGameId: unknown,
+): boolean {
+  if (!isArtworkSource(source)) return false;
+  if (source === "igdb-curated-override") {
+    return identity === "app-id-override" && isSafeProviderGameId(providerGameId);
+  }
+  if (source === "igdb") return identity === "steam-app" || identity === "title";
+  return identity === undefined && providerGameId === undefined;
+}
+
+function isSafeProviderGameId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 function isTrustedCacheRecord(metadata: Metadata | VersionThreeMetadata | LegacyMetadata): boolean {
@@ -476,6 +573,9 @@ async function cacheImage(
         orientation: candidate.orientation,
         source: candidate.source,
         ...(candidate.identity === undefined ? {} : { identity: candidate.identity }),
+        ...(candidate.providerGameId === undefined
+          ? {}
+          : { providerGameId: candidate.providerGameId }),
       }),
       "utf8",
     );
