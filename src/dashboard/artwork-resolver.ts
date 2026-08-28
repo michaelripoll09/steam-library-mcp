@@ -254,7 +254,7 @@ async function igdbBoundArtwork(
   appId: number,
 ): Promise<readonly ArtworkCandidate[]> {
   const payload = await requestIgdbGames(fetch, credentials, tokenProvider, {
-    body: `fields name,cover.url,external_games.category,external_games.uid; where external_games.uid = "${appId}"; limit 10;`,
+    body: `fields name,cover.url,external_games.category,external_games.uid; where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
   });
   return parseIgdbBoundCovers(payload, appId).map((url) => ({
     url,
@@ -347,9 +347,7 @@ function parseIgdbCovers(payload: unknown, title: string): readonly IgdbCover[] 
     if (typeof name !== "string" || url === undefined) return [];
     const normalizedName = normalizeSpanishTitle(name);
     const exactTitle = normalizedName === normalizedTitle;
-    return exactTitle || normalizedName.includes(normalizedTitle)
-      ? [{ name, url, exactTitle }]
-      : [];
+    return exactTitle ? [{ name, url, exactTitle }] : [];
   });
   return covers.sort(
     (left, right) =>

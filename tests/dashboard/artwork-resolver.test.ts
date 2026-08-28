@@ -442,7 +442,9 @@ describe("artwork resolver", () => {
           }
           if (url === "https://api.igdb.com/v4/games") {
             const body = String(init?.body);
-            expect(body).toContain(`where external_games.uid = "${appId}"`);
+            expect(body).toContain(
+              `where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
+            );
             expect(body).toContain("external_games.category");
             expect(body).toContain("external_games.uid");
             expect(body).not.toContain("search ");
@@ -461,6 +463,13 @@ describe("artwork resolver", () => {
                   external_games: [{ category: 1, uid: "99999" }],
                   cover: {
                     url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong.jpg",
+                  },
+                },
+                {
+                  name: "Wrong provider category",
+                  external_games: [{ category: 2, uid: String(appId) }],
+                  cover: {
+                    url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong-category.jpg",
                   },
                 },
               ]),
@@ -484,6 +493,9 @@ describe("artwork resolver", () => {
         expect(gameRequests).toHaveLength(1);
         expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
           "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong.jpg",
+        );
+        expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+          "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong-category.jpg",
         );
         await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
           '"identity":"steam-app"',
@@ -510,7 +522,11 @@ describe("artwork resolver", () => {
         if (url === "https://api.igdb.com/v4/games") {
           const body = String(init?.body);
           expect(init).toMatchObject({ method: "POST", redirect: "error" });
-          if (body.includes(`where external_games.uid = "${appId}"`)) {
+          if (
+            body.includes(
+              `where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
+            )
+          ) {
             return new Response(JSON.stringify([]));
           }
           expect(body).toContain('search "Celeste"');
@@ -541,10 +557,68 @@ describe("artwork resolver", () => {
         ([input]) => String(input) === "https://api.igdb.com/v4/games",
       );
       expect(gameRequests).toHaveLength(2);
-      expect(String(gameRequests[0]?.[1]?.body)).toContain(`where external_games.uid = "${appId}"`);
+      expect(String(gameRequests[0]?.[1]?.body)).toContain(
+        `where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
+      );
       expect(String(gameRequests[1]?.[1]?.body)).toContain('search "Celeste"');
       await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
         '"identity":"title"',
+      );
+    });
+  });
+
+  test("rejects ambiguous IGDB sequel title fallbacks before Steam landscape recovery", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 19980;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          const body = String(init?.body);
+          if (
+            body.includes(
+              `where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
+            )
+          ) {
+            return new Response(JSON.stringify([]));
+          }
+          expect(body).toContain('search "Prince of Persia"');
+          return new Response(
+            JSON.stringify([
+              {
+                name: "Prince of Persia: The Forgotten Sands",
+                cover: {
+                  url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/sequel.jpg",
+                },
+              },
+            ]),
+          );
+        }
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg")) {
+          return new Response(null, { status: 404 });
+        }
+        if (url.endsWith("/sequel.jpg")) return image([1, 9, 9]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(appId, "Prince of Persia")).resolves.toBeUndefined();
+      expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+        "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/sequel.jpg",
       );
     });
   });
@@ -577,7 +651,9 @@ describe("artwork resolver", () => {
           );
         }
         if (url === "https://api.igdb.com/v4/games") {
-          expect(String(init?.body)).toContain(`where external_games.uid = "${appId}"`);
+          expect(String(init?.body)).toContain(
+            `where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
+          );
           return new Response(
             JSON.stringify([
               {
@@ -638,7 +714,11 @@ describe("artwork resolver", () => {
         }
         if (url === "https://api.igdb.com/v4/games") {
           const body = String(init?.body);
-          if (body.includes('where external_games.uid = "4513840"')) {
+          if (
+            body.includes(
+              'where external_games.category = 1 & external_games.uid = "4513840"; limit 10;',
+            )
+          ) {
             return new Response(JSON.stringify([]));
           }
           expect(body).toContain('search "El Niño"');
