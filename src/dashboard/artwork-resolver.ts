@@ -166,7 +166,7 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
     if (
       !isReadableMetadata(metadata) ||
       metadata.orientation !== "portrait" ||
-      !isTrustedCacheRecord(metadata)
+      !isTrustedCacheRecord(metadata, appId)
     ) {
       return undefined;
     }
@@ -495,7 +495,7 @@ function isReadableMetadata(
     );
   }
   if (candidate.version === 3) {
-    return isArtworkSource(candidate.source);
+    return isArtworkSource(candidate.source) && candidate.source !== "igdb-curated-override";
   }
   return candidate.version === 2 && candidate.orientation === "portrait";
 }
@@ -526,12 +526,18 @@ function isSafeProviderGameId(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-function isTrustedCacheRecord(metadata: Metadata | VersionThreeMetadata | LegacyMetadata): boolean {
+function isTrustedCacheRecord(
+  metadata: Metadata | VersionThreeMetadata | LegacyMetadata,
+  appId: number,
+): boolean {
   return (
     (metadata.version !== 3 || metadata.source !== "igdb") &&
     (metadata.version !== CACHE_VERSION ||
       metadata.source !== "igdb" ||
-      metadata.identity === "steam-app")
+      metadata.identity === "steam-app") &&
+    (metadata.version !== CACHE_VERSION ||
+      metadata.source !== "igdb-curated-override" ||
+      curatedIgdbOverrides.get(appId)?.gameId === metadata.providerGameId)
   );
 }
 

@@ -1173,6 +1173,51 @@ describe("artwork resolver", () => {
     });
   });
 
+  test.each([
+    {
+      name: "a curated provider game ID copied from another Steam app",
+      appId: 19980,
+      metadata: {
+        version: 4,
+        contentType: "image/jpeg",
+        orientation: "portrait",
+        source: "igdb-curated-override",
+        identity: "app-id-override",
+        providerGameId: 27827,
+      },
+    },
+    {
+      name: "a legacy curated cache record",
+      appId: 15100,
+      metadata: {
+        version: 3,
+        contentType: "image/jpeg",
+        orientation: "portrait",
+        source: "igdb-curated-override",
+      },
+    },
+  ])("re-resolves $name instead of trusting its cached artwork", async ({ appId, metadata }) => {
+    await withDirectory(async (directory) => {
+      await Promise.all([
+        writeFile(join(directory, `${appId}.img`), new Uint8Array([0])),
+        writeFile(join(directory, `${appId}.json`), JSON.stringify(metadata)),
+      ]);
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        expect(String(input)).toBe(
+          `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+        );
+        return image([5, 1, 5]);
+      });
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(appId)).resolves.toMatchObject({ orientation: "portrait" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await expect(readFile(join(directory, `${appId}.img`))).resolves.toEqual(
+        Buffer.from([5, 1, 5]),
+      );
+    });
+  });
+
   test("rejects oversized streamed artwork without buffering it through arrayBuffer", async () => {
     await withDirectory(async (directory) => {
       const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
