@@ -43,6 +43,7 @@ export class IgdbTokenProvider {
     try {
       const response = await this.fetchLike(TWITCH_TOKEN_URL, {
         method: "POST",
+        redirect: "error",
         body: new URLSearchParams({
           client_id: this.credentials.clientId,
           client_secret: this.credentials.clientSecret,

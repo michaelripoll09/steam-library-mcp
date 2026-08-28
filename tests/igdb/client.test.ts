@@ -186,6 +186,25 @@ describe("IGDB client", () => {
     vi.useRealTimers();
   });
 
+  test("rejects redirects during the Twitch token exchange", async () => {
+    let tokenRequest: RequestInit | undefined;
+    const fetchLike = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      tokenRequest = init;
+      return new Response(null, { status: 302, headers: { location: "https://example.test" } });
+    });
+    const provider = new IgdbTokenProvider({ credentials, fetch: fetchLike as typeof fetch });
+
+    await expect(provider.getAccessToken()).rejects.toEqual({
+      isError: true,
+      error: {
+        code: "METADATA_UNAVAILABLE",
+        message: "Game metadata is temporarily unavailable.",
+        retryable: true,
+      },
+    });
+    expect(tokenRequest).toMatchObject({ redirect: "error" });
+  });
+
   test("rejects an invalid IGDB payload and does not cache it", async () => {
     const fetchLike = vi
       .fn()
