@@ -25,21 +25,30 @@ type LegacyMetadata = Readonly<{
   contentType: string;
   orientation: ArtworkOrientation;
 }>;
-type Metadata = Readonly<{
+type VersionThreeMetadata = Readonly<{
   version: 3;
   contentType: string;
   orientation: ArtworkOrientation;
   source: ArtworkSource;
 }>;
+type Metadata = Readonly<{
+  version: 4;
+  contentType: string;
+  orientation: ArtworkOrientation;
+  source: ArtworkSource;
+  identity?: IgdbIdentity;
+}>;
 type ArtworkSource = "steam" | "steamgriddb" | "igdb";
+type IgdbIdentity = "steam-app" | "title";
 type ArtworkCandidate = Readonly<{
   url: URL;
   orientation: ArtworkOrientation;
   source: ArtworkSource;
+  identity?: IgdbIdentity;
 }>;
 type IgdbCover = Readonly<{ name: string; url: URL; exactTitle: boolean }>;
 
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const allowedSteamHosts = new Set([
   "shared.akamai.steamstatic.com",
   "cdn.cloudflare.steamstatic.com",
@@ -93,9 +102,17 @@ export function createArtworkResolver({
       fetch,
       cacheDirectory,
       appId,
-      await igdbArtwork(fetch, igdbCredentials, igdbTokenProvider, title),
+      await igdbBoundArtwork(fetch, igdbCredentials, igdbTokenProvider, appId),
     );
     if (igdb !== undefined) return igdb;
+
+    const titleMatch = await cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      await igdbTitleArtwork(fetch, igdbCredentials, igdbTokenProvider, title),
+    );
+    if (titleMatch !== undefined) return titleMatch;
 
     return cacheFirst(
       fetch,
@@ -113,7 +130,13 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
     const metadata = JSON.parse(
       await readFile(join(directory, `${appId}.json`), "utf8"),
     ) as unknown;
-    if (!isReadableMetadata(metadata) || metadata.orientation !== "portrait") return undefined;
+    if (
+      !isReadableMetadata(metadata) ||
+      metadata.orientation !== "portrait" ||
+      !isTrustedCacheRecord(metadata)
+    ) {
+      return undefined;
+    }
     await access(filePath);
     return { filePath, contentType: metadata.contentType, orientation: metadata.orientation };
   } catch {
@@ -224,21 +247,49 @@ function allowedUrl(value: unknown, hosts: ReadonlySet<string>): URL | undefined
   }
 }
 
-async function igdbArtwork(
+async function igdbBoundArtwork(
+  fetch: FetchLike,
+  credentials: IgdbCredentials | undefined,
+  tokenProvider: IgdbTokenProvider | undefined,
+  appId: number,
+): Promise<readonly ArtworkCandidate[]> {
+  const payload = await requestIgdbGames(fetch, credentials, tokenProvider, {
+    body: `fields name,cover.url,external_games.category,external_games.uid; where external_games.uid = "${appId}"; limit 10;`,
+  });
+  return parseIgdbBoundCovers(payload, appId).map((url) => ({
+    url,
+    orientation: "portrait" as const,
+    source: "igdb" as const,
+    identity: "steam-app" as const,
+  }));
+}
+
+async function igdbTitleArtwork(
   fetch: FetchLike,
   credentials: IgdbCredentials | undefined,
   tokenProvider: IgdbTokenProvider | undefined,
   title: string | undefined,
 ): Promise<readonly ArtworkCandidate[]> {
   const cleanTitle = title?.trim();
-  if (
-    credentials === undefined ||
-    tokenProvider === undefined ||
-    cleanTitle === undefined ||
-    cleanTitle === ""
-  ) {
-    return [];
-  }
+  if (cleanTitle === undefined || cleanTitle === "") return [];
+  const payload = await requestIgdbGames(fetch, credentials, tokenProvider, {
+    body: `search ${JSON.stringify(cleanTitle)}; fields name,cover.url; limit 10;`,
+  });
+  return parseIgdbCovers(payload, cleanTitle).map(({ url }) => ({
+    url,
+    orientation: "portrait" as const,
+    source: "igdb" as const,
+    identity: "title" as const,
+  }));
+}
+
+async function requestIgdbGames(
+  fetch: FetchLike,
+  credentials: IgdbCredentials | undefined,
+  tokenProvider: IgdbTokenProvider | undefined,
+  request: Readonly<{ body: string }>,
+): Promise<unknown | undefined> {
+  if (credentials === undefined || tokenProvider === undefined) return undefined;
   try {
     const accessToken = await tokenProvider.getAccessToken();
     const response = await fetch(IGDB_GAMES_URL, {
@@ -248,17 +299,37 @@ async function igdbArtwork(
         "Client-ID": credentials.clientId,
         Authorization: `Bearer ${accessToken}`,
       },
-      body: `search ${JSON.stringify(cleanTitle)}; fields name,cover.url; limit 10;`,
+      body: request.body,
     });
-    if (!response.ok) return [];
-    return parseIgdbCovers(await response.json(), cleanTitle).map(({ url }) => ({
-      url,
-      orientation: "portrait" as const,
-      source: "igdb" as const,
-    }));
+    return response.ok ? await response.json() : undefined;
   } catch {
-    return [];
+    return undefined;
   }
+}
+
+function parseIgdbBoundCovers(payload: unknown, appId: number): readonly URL[] {
+  if (!Array.isArray(payload)) return [];
+  return payload.flatMap((value): readonly URL[] => {
+    if (value === null || typeof value !== "object") return [];
+    const cover = "cover" in value ? value.cover : undefined;
+    const externalGames = "external_games" in value ? value.external_games : undefined;
+    const url =
+      cover !== null && typeof cover === "object" && "url" in cover
+        ? allowedIgdbCoverUrl(cover.url)
+        : undefined;
+    const matchesSteamApp =
+      Array.isArray(externalGames) &&
+      externalGames.some(
+        (external) =>
+          external !== null &&
+          typeof external === "object" &&
+          "category" in external &&
+          "uid" in external &&
+          external.category === 1 &&
+          external.uid === String(appId),
+      );
+    return url !== undefined && matchesSteamApp ? [url] : [];
+  });
 }
 
 function parseIgdbCovers(payload: unknown, title: string): readonly IgdbCover[] {
@@ -325,13 +396,16 @@ function isStrictHttpsUrl(url: URL): boolean {
   );
 }
 
-function isReadableMetadata(metadata: unknown): metadata is Metadata | LegacyMetadata {
+function isReadableMetadata(
+  metadata: unknown,
+): metadata is Metadata | VersionThreeMetadata | LegacyMetadata {
   if (metadata === null || typeof metadata !== "object") return false;
   const candidate = metadata as Readonly<{
     version?: unknown;
     contentType?: unknown;
     orientation?: unknown;
     source?: unknown;
+    identity?: unknown;
   }>;
   const isCommonShape =
     typeof candidate.contentType === "string" &&
@@ -340,12 +414,29 @@ function isReadableMetadata(metadata: unknown): metadata is Metadata | LegacyMet
   if (!isCommonShape) return false;
   if (candidate.version === CACHE_VERSION) {
     return (
-      candidate.source === "steam" ||
-      candidate.source === "steamgriddb" ||
-      candidate.source === "igdb"
+      isArtworkSource(candidate.source) &&
+      (candidate.source !== "igdb" ||
+        candidate.identity === "steam-app" ||
+        candidate.identity === "title")
     );
   }
+  if (candidate.version === 3) {
+    return isArtworkSource(candidate.source);
+  }
   return candidate.version === 2 && candidate.orientation === "portrait";
+}
+
+function isArtworkSource(value: unknown): value is ArtworkSource {
+  return value === "steam" || value === "steamgriddb" || value === "igdb";
+}
+
+function isTrustedCacheRecord(metadata: Metadata | VersionThreeMetadata | LegacyMetadata): boolean {
+  return (
+    (metadata.version !== 3 || metadata.source !== "igdb") &&
+    (metadata.version !== CACHE_VERSION ||
+      metadata.source !== "igdb" ||
+      metadata.identity === "steam-app")
+  );
 }
 
 async function cacheFirst(
@@ -385,6 +476,7 @@ async function cacheImage(
         contentType,
         orientation: candidate.orientation,
         source: candidate.source,
+        ...(candidate.identity === undefined ? {} : { identity: candidate.identity }),
       }),
       "utf8",
     );

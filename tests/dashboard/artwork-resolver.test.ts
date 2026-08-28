@@ -294,7 +294,7 @@ describe("artwork resolver", () => {
       await expect(resolver.resolve(480)).resolves.toMatchObject({ orientation: "portrait" });
       expect(fetch).toHaveBeenCalled();
       await expect(readFile(join(directory, "480.img"))).resolves.toEqual(Buffer.from([4, 8, 0]));
-      await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toContain('"version":3');
+      await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toContain('"version":4');
     });
   });
 
@@ -316,7 +316,7 @@ describe("artwork resolver", () => {
         Buffer.from([4, 5, 1]),
       );
       await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
-        '"version":3',
+        '"version":4',
       );
     });
   });
@@ -332,8 +332,14 @@ describe("artwork resolver", () => {
       { version: 3, contentType: "image/jpeg", orientation: "portrait", source: "steamgriddb" },
     ],
     [
-      "v3 IGDB portrait",
-      { version: 3, contentType: "image/jpeg", orientation: "portrait", source: "igdb" },
+      "v4 app-bound IGDB portrait",
+      {
+        version: 4,
+        contentType: "image/jpeg",
+        orientation: "portrait",
+        source: "igdb",
+        identity: "steam-app",
+      },
     ],
   ] as const)(
     "uses a valid %s cache record without a provider request",
@@ -415,6 +421,198 @@ describe("artwork resolver", () => {
     });
   });
 
+  test.each([
+    [15100, "Assassin's Creed: Director's Cut"],
+    [19980, "Prince of Persia"],
+  ])(
+    "uses Steam app-bound IGDB cover for %i before generic title variants",
+    async (appId, title) => {
+      await withDirectory(async (directory) => {
+        const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+          const url = String(input);
+          if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+          if (url === "https://id.twitch.tv/oauth2/token") {
+            return new Response(
+              JSON.stringify({
+                access_token: "temporary-artwork-token",
+                token_type: "bearer",
+                expires_in: 3600,
+              }),
+            );
+          }
+          if (url === "https://api.igdb.com/v4/games") {
+            const body = String(init?.body);
+            expect(body).toContain(`where external_games.uid = "${appId}"`);
+            expect(body).toContain("external_games.category");
+            expect(body).toContain("external_games.uid");
+            expect(body).not.toContain("search ");
+            expect(init).toMatchObject({ method: "POST", redirect: "error" });
+            return new Response(
+              JSON.stringify([
+                {
+                  name: `${title} (Steam edition)`,
+                  external_games: [{ category: 1, uid: String(appId) }],
+                  cover: {
+                    url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/steam-bound.jpg",
+                  },
+                },
+                {
+                  name: "Generic franchise variant",
+                  external_games: [{ category: 1, uid: "99999" }],
+                  cover: {
+                    url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong.jpg",
+                  },
+                },
+              ]),
+            );
+          }
+          if (url.endsWith("/steam-bound.jpg")) return image([1, 5, 1]);
+          return new Response(null, { status: 404 });
+        });
+        const resolver = createArtworkResolver({
+          cacheDirectory: directory,
+          igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+          fetch,
+        });
+
+        await expect(resolver.resolve(appId, title)).resolves.toMatchObject({
+          orientation: "portrait",
+        });
+        const gameRequests = fetch.mock.calls.filter(
+          ([input]) => String(input) === "https://api.igdb.com/v4/games",
+        );
+        expect(gameRequests).toHaveLength(1);
+        expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+          "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/wrong.jpg",
+        );
+        await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
+          '"identity":"steam-app"',
+        );
+      });
+    },
+  );
+
+  test("preserves an exact unique IGDB title fallback when no Steam app-bound result exists", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 999;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          const body = String(init?.body);
+          expect(init).toMatchObject({ method: "POST", redirect: "error" });
+          if (body.includes(`where external_games.uid = "${appId}"`)) {
+            return new Response(JSON.stringify([]));
+          }
+          expect(body).toContain('search "Celeste"');
+          return new Response(
+            JSON.stringify([
+              {
+                name: "Celeste",
+                cover: {
+                  url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/celeste.jpg",
+                },
+              },
+            ]),
+          );
+        }
+        if (url.endsWith("/celeste.jpg")) return image([9, 9, 9]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(appId, "Celeste")).resolves.toMatchObject({
+        orientation: "portrait",
+      });
+      const gameRequests = fetch.mock.calls.filter(
+        ([input]) => String(input) === "https://api.igdb.com/v4/games",
+      );
+      expect(gameRequests).toHaveLength(2);
+      expect(String(gameRequests[0]?.[1]?.body)).toContain(`where external_games.uid = "${appId}"`);
+      expect(String(gameRequests[1]?.[1]?.body)).toContain('search "Celeste"');
+      await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
+        '"identity":"title"',
+      );
+    });
+  });
+
+  test("re-resolves legacy generic IGDB cache records through the Steam app identity", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 15100;
+      await Promise.all([
+        writeFile(join(directory, `${appId}.img`), new Uint8Array([0])),
+        writeFile(
+          join(directory, `${appId}.json`),
+          JSON.stringify({
+            version: 3,
+            contentType: "image/jpeg",
+            orientation: "portrait",
+            source: "igdb",
+          }),
+        ),
+      ]);
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          expect(String(init?.body)).toContain(`where external_games.uid = "${appId}"`);
+          return new Response(
+            JSON.stringify([
+              {
+                name: "Assassin's Creed: Director's Cut",
+                external_games: [{ category: 1, uid: String(appId) }],
+                cover: {
+                  url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/repaired.jpg",
+                },
+              },
+            ]),
+          );
+        }
+        if (url.endsWith("/repaired.jpg")) return image([1, 5, 1]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(
+        resolver.resolve(appId, "Assassin's Creed: Director's Cut"),
+      ).resolves.toMatchObject({
+        orientation: "portrait",
+      });
+      await expect(readFile(join(directory, `${appId}.img`))).resolves.toEqual(
+        Buffer.from([1, 5, 1]),
+      );
+      await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
+        '"identity":"steam-app"',
+      );
+    });
+  });
+
   test("uses a Spanish-normalized IGDB high-quality cover only after Steam and SteamGridDB fail", async () => {
     await withDirectory(async (directory) => {
       const fakeClientSecret = "fake-client-secret";
@@ -439,7 +637,11 @@ describe("artwork resolver", () => {
           );
         }
         if (url === "https://api.igdb.com/v4/games") {
-          expect(String(init?.body)).toContain('search "El Niño"');
+          const body = String(init?.body);
+          if (body.includes('where external_games.uid = "4513840"')) {
+            return new Response(JSON.stringify([]));
+          }
+          expect(body).toContain('search "El Niño"');
           return new Response(
             JSON.stringify([
               {
