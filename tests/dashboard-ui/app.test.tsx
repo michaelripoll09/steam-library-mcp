@@ -402,3 +402,58 @@ describe("DashboardApp", () => {
     expect(styles).toMatch(/transform:\s*none !important/);
   });
 });
+
+test("uses an accessible custom filter menu that applies selections through the keyboard", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+  };
+  render(<DashboardApp api={api} />);
+  await screen.findByRole("article", { name: "Celeste" });
+
+  const statusFilter = screen.getByRole("combobox", { name: "Estado" });
+  expect(statusFilter).toHaveAttribute("aria-expanded", "false");
+  expect(
+    screen.getByRole("form", { name: "Filtros de la biblioteca" }).querySelector("select"),
+  ).toBeNull();
+
+  await user.click(statusFilter);
+  expect(statusFilter).toHaveAttribute("aria-expanded", "true");
+  const statusMenu = screen.getByRole("listbox", { name: "Estado" });
+  expect(statusFilter).toHaveAttribute("aria-controls", statusMenu.id);
+  expect(statusMenu.querySelectorAll('[role="option"]')[0]).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(statusMenu.querySelectorAll('[role="option"]')[0]).toHaveAttribute("tabindex", "-1");
+  await user.keyboard("{ArrowDown}");
+  const activeOption = statusMenu.querySelector('[role="option"].filter-option-active');
+  expect(activeOption).not.toBeNull();
+  expect(statusFilter).toHaveAttribute("aria-activedescendant", activeOption?.id);
+  await user.keyboard("{ArrowDown}{Enter}");
+
+  expect(screen.queryByRole("listbox", { name: "Estado" })).not.toBeInTheDocument();
+  expect(screen.getByRole("article", { name: "Hades" })).toBeInTheDocument();
+  expect(screen.queryByRole("article", { name: "Celeste" })).not.toBeInTheDocument();
+});
+
+test("closes a custom filter menu with Escape and an outside click", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+  };
+  render(<DashboardApp api={api} />);
+  const accessFilter = await screen.findByRole("combobox", { name: "Acceso" });
+
+  await user.click(accessFilter);
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("listbox", { name: "Acceso" })).not.toBeInTheDocument();
+
+  await user.click(accessFilter);
+  await user.click(screen.getByRole("heading", { name: "Tu biblioteca de Steam" }));
+  expect(screen.queryByRole("listbox", { name: "Acceso" })).not.toBeInTheDocument();
+});

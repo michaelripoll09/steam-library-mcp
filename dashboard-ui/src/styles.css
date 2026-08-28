@@ -127,7 +127,8 @@ h2 {
   align-items: end;
   margin: 1.5rem 0 1.7rem;
 }
-.library-toolbar label,
+.library-toolbar .search-field,
+.select-field,
 .status-control {
   display: grid;
   gap: 0.35rem;
@@ -143,6 +144,98 @@ select {
   background: #11131a;
   color: #f2efe7;
   padding: 0 0.7rem;
+}
+.select-field {
+  position: relative;
+}
+.filter-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 2.65rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  border: 1px solid #383b47;
+  border-radius: 0.7rem;
+  background: linear-gradient(145deg, #171a25, #101219);
+  color: #f2efe7;
+  padding: 0 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+.filter-trigger:hover,
+.filter-trigger[aria-expanded="true"] {
+  border-color: #d8b56c;
+  background: linear-gradient(145deg, #202333, #14161f);
+}
+.filter-trigger[aria-expanded="true"] {
+  box-shadow: 0 0 0 3px rgba(216, 181, 108, 0.18);
+}
+.filter-trigger-chevron {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: 0 0 auto;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(-0.15rem, -0.15rem);
+  transition: transform 160ms ease;
+}
+.filter-trigger[aria-expanded="true"] .filter-trigger-chevron {
+  transform: rotate(225deg) translate(-0.08rem, -0.08rem);
+}
+.filter-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  width: 100%;
+  min-width: max-content;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #4b4e5c;
+  border-radius: 0.75rem;
+  background: rgba(19, 21, 30, 0.98);
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.45);
+  list-style: none;
+  padding: 0.35rem;
+  animation: filter-menu-enter 140ms ease-out;
+}
+.filter-option {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: #e9e6df;
+  padding: 0.58rem 0.65rem;
+  text-align: left;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.filter-option:hover,
+.filter-option-active {
+  background: #2b5fae;
+  color: #fff;
+}
+.filter-option[aria-selected="true"]::after {
+  float: right;
+  color: #d8b56c;
+  content: "✓";
+}
+@keyframes filter-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.3rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .text-button {
   min-height: 2.65rem;

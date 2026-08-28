@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type {
   DashboardGame,
@@ -268,20 +268,106 @@ function FilterSelect({
   options: readonly string[];
   onChange: (value: string) => void;
 }>) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedIndex = Math.max(options.indexOf(value), 0);
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const labelId = useId();
+  const listboxId = useId();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target))
+        setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [isOpen]);
+
+  const open = (index = selectedIndex) => {
+    setActiveIndex(index);
+    setIsOpen(true);
+  };
+
+  const choose = (option: string) => {
+    onChange(option);
+    setIsOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Escape") {
+      setIsOpen(false);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const nextIndex = Math.max(
+        0,
+        Math.min(
+          options.length - 1,
+          (isOpen ? activeIndex : selectedIndex) + (event.key === "ArrowDown" ? 1 : -1),
+        ),
+      );
+      open(nextIndex);
+      return;
+    }
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      open(event.key === "Home" ? 0 : options.length - 1);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (isOpen) choose(options[activeIndex] ?? value);
+      else open();
+    }
+  };
+
   return (
-    <label className="select-field">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {formatLabel(option)}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="select-field" ref={rootRef}>
+      <span id={labelId}>{label}</span>
+      <button
+        ref={buttonRef}
+        className="filter-trigger"
+        type="button"
+        role="combobox"
+        aria-labelledby={labelId}
+        aria-controls={listboxId}
+        aria-activedescendant={isOpen ? `${listboxId}-option-${activeIndex}` : undefined}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => (isOpen ? setIsOpen(false) : open())}
+        onKeyDown={handleKeyDown}
+      >
+        <span>{formatLabel(value)}</span>
+        <span className="filter-trigger-chevron" aria-hidden="true" />
+      </button>
+      {isOpen && (
+        <ul className="filter-menu" id={listboxId} role="listbox" aria-labelledby={labelId}>
+          {options.map((option, index) => (
+            <li key={option} role="none">
+              <button
+                id={`${listboxId}-option-${index}`}
+                className={`filter-option${index === activeIndex ? " filter-option-active" : ""}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={option === value}
+                onMouseMove={() => setActiveIndex(index)}
+                onClick={() => choose(option)}
+              >
+                {formatLabel(option)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
-
 function GameCard({
   game,
   onOpen,

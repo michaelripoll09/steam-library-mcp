@@ -3,26 +3,32 @@ import { join } from "node:path";
 
 import type { FetchLike } from "../steam/client.js";
 
+export type ArtworkOrientation = "portrait" | "landscape";
 export type ArtworkResolver = Readonly<{
   resolve(appId: number): Promise<ResolvedArtwork | undefined>;
 }>;
-export type ResolvedArtwork = Readonly<{ filePath: string; contentType: string }>;
+export type ResolvedArtwork = Readonly<{
+  filePath: string;
+  contentType: string;
+  orientation: ArtworkOrientation;
+}>;
 type Dependencies = Readonly<{
   cacheDirectory: string;
   steamGridDbApiKey?: string;
   fetch?: FetchLike;
 }>;
-type Metadata = Readonly<{ contentType: string }>;
+type Metadata = Readonly<{
+  version: 2;
+  contentType: string;
+  orientation: ArtworkOrientation;
+}>;
+type ArtworkCandidate = Readonly<{ url: URL; orientation: ArtworkOrientation }>;
 
+const CACHE_VERSION = 2;
 const allowedSteamHosts = new Set([
   "shared.akamai.steamstatic.com",
   "cdn.cloudflare.steamstatic.com",
 ]);
-const directSteamArtworkPaths = [
-  "library_600x900.jpg",
-  "header.jpg",
-  "capsule_616x353.jpg",
-] as const;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_CACHE_ENTRIES = 128;
 
@@ -35,16 +41,33 @@ export function createArtworkResolver({
     if (!Number.isSafeInteger(appId) || appId <= 0) return undefined;
     const cached = await readCached(cacheDirectory, appId);
     if (cached !== undefined) return cached;
-    const steamArtwork = await publicSteamArtwork(fetch, appId);
-    for (const imageUrl of steamArtwork) {
-      const resolved = await cacheImage(fetch, cacheDirectory, appId, imageUrl);
-      if (resolved !== undefined) return resolved;
-    }
-    const gridUrl =
+
+    const portrait = await cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      directSteamPortraitArtwork(appId),
+    );
+    if (portrait !== undefined) return portrait;
+
+    const gridUrls =
       steamGridDbApiKey === undefined
-        ? undefined
+        ? []
         : await steamGridArtwork(fetch, appId, steamGridDbApiKey);
-    return gridUrl === undefined ? undefined : cacheImage(fetch, cacheDirectory, appId, gridUrl);
+    const grid = await cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      gridUrls.map((url) => ({ url, orientation: "portrait" as const })),
+    );
+    if (grid !== undefined) return grid;
+
+    return cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      await publicSteamLandscapeArtwork(fetch, appId),
+    );
   }
   return Object.freeze({ resolve });
 }
@@ -55,15 +78,47 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
     const metadata = JSON.parse(
       await readFile(join(directory, `${appId}.json`), "utf8"),
     ) as Metadata;
+    if (
+      metadata.version !== CACHE_VERSION ||
+      !["image/jpeg", "image/png", "image/webp"].includes(metadata.contentType) ||
+      !["portrait", "landscape"].includes(metadata.orientation)
+    ) {
+      return undefined;
+    }
     await access(filePath);
-    return { filePath, contentType: metadata.contentType };
+    return { filePath, contentType: metadata.contentType, orientation: metadata.orientation };
   } catch {
     return undefined;
   }
 }
 
-async function publicSteamArtwork(fetch: FetchLike, appId: number): Promise<readonly URL[]> {
-  const candidates = directSteamArtworkCandidates(appId);
+function directSteamPortraitArtwork(appId: number): readonly ArtworkCandidate[] {
+  return [
+    {
+      url: new URL(
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+      ),
+      orientation: "portrait",
+    },
+  ];
+}
+
+async function publicSteamLandscapeArtwork(
+  fetch: FetchLike,
+  appId: number,
+): Promise<readonly ArtworkCandidate[]> {
+  const directCandidates: readonly ArtworkCandidate[] = [
+    {
+      url: new URL(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`),
+      orientation: "landscape",
+    },
+    {
+      url: new URL(
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+      ),
+      orientation: "landscape",
+    },
+  ];
   try {
     const response = await fetch(
       `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
@@ -76,23 +131,19 @@ async function publicSteamArtwork(fetch: FetchLike, appId: number): Promise<read
       payload[String(appId)]?.success === true
         ? allowedUrl(payload[String(appId)]?.data?.header_image, allowedSteamHosts)
         : undefined;
-    return headerImage === undefined ? candidates : [headerImage, ...candidates];
+    return headerImage === undefined
+      ? directCandidates
+      : [{ url: headerImage, orientation: "landscape" }, ...directCandidates];
   } catch {
-    return candidates;
+    return directCandidates;
   }
-}
-
-function directSteamArtworkCandidates(appId: number): readonly URL[] {
-  return directSteamArtworkPaths.map(
-    (path) => new URL(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/${path}`),
-  );
 }
 
 async function steamGridArtwork(
   fetch: FetchLike,
   appId: number,
   key: string,
-): Promise<URL | undefined> {
+): Promise<readonly URL[]> {
   try {
     const response = await fetch(
       `https://www.steamgriddb.com/api/v2/grids/steam/${appId}?dimensions=600x900`,
@@ -102,9 +153,13 @@ async function steamGridArtwork(
       success?: boolean;
       data?: readonly { url?: unknown }[];
     };
-    return payload.success === true ? allowedSteamGridUrl(payload.data?.[0]?.url) : undefined;
+    if (payload.success !== true || payload.data === undefined) return [];
+    return payload.data.flatMap((entry) => {
+      const url = allowedSteamGridUrl(entry.url);
+      return url === undefined ? [] : [url];
+    });
   } catch {
-    return undefined;
+    return [];
   }
 }
 
@@ -134,14 +189,27 @@ function allowedUrl(value: unknown, hosts: ReadonlySet<string>): URL | undefined
   }
 }
 
+async function cacheFirst(
+  fetch: FetchLike,
+  directory: string,
+  appId: number,
+  candidates: readonly ArtworkCandidate[],
+): Promise<ResolvedArtwork | undefined> {
+  for (const candidate of candidates) {
+    const resolved = await cacheImage(fetch, directory, appId, candidate);
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
 async function cacheImage(
   fetch: FetchLike,
   directory: string,
   appId: number,
-  url: URL,
+  candidate: ArtworkCandidate,
 ): Promise<ResolvedArtwork | undefined> {
   try {
-    const response = await fetch(url, { redirect: "error" });
+    const response = await fetch(candidate.url, { redirect: "error" });
     const contentType = response.headers.get("content-type")?.split(";", 1)[0] ?? "";
     if (!response.ok || !["image/jpeg", "image/png", "image/webp"].includes(contentType))
       return undefined;
@@ -151,8 +219,12 @@ async function cacheImage(
     await evictCacheEntries(directory);
     const filePath = join(directory, `${appId}.img`);
     await writeFile(filePath, body);
-    await writeFile(join(directory, `${appId}.json`), JSON.stringify({ contentType }), "utf8");
-    return { filePath, contentType };
+    await writeFile(
+      join(directory, `${appId}.json`),
+      JSON.stringify({ version: CACHE_VERSION, contentType, orientation: candidate.orientation }),
+      "utf8",
+    );
+    return { filePath, contentType, orientation: candidate.orientation };
   } catch {
     return undefined;
   }

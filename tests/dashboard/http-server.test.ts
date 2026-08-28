@@ -230,4 +230,43 @@ describe("dashboard HTTP server", () => {
     expect(generic.body).not.toContain(secret);
     service.updateStatus.mockRejectedValueOnce(new InputError("bad status"));
   });
+  test("serves artwork orientation metadata with the cached image", async () => {
+    root = await mkdtemp(join(tmpdir(), "dashboard-http-"));
+    const artworkFile = join(root, "cover.img");
+    await Promise.all([
+      writeFile(join(root, "index.html"), "<!doctype html><title>Dashboard</title>"),
+      writeFile(artworkFile, new Uint8Array([1, 2, 3])),
+    ]);
+    const service = {
+      getLibrary: vi.fn(async () => ({
+        ...library,
+        games: [
+          {
+            appId: 10,
+            name: "Celeste",
+            status: "backlog",
+            coverUrl: "/api/artwork/10",
+            accessType: "owned",
+            isPlayable: true,
+            playtimeMinutes: 0,
+          },
+        ] as const,
+      })),
+      syncLibrary: vi.fn(async () => library),
+      updateStatus: vi.fn(async () => update),
+    };
+    const artworkResolver: ArtworkResolver = {
+      resolve: vi.fn(async () => ({
+        filePath: artworkFile,
+        contentType: "image/jpeg",
+        orientation: "portrait" as const,
+      })),
+    };
+    const started = await startServer(service, root, artworkResolver);
+    server = started.server;
+
+    const response = await call(started.port, "/api/artwork/10");
+    expect(response.status).toBe(200);
+    expect(response.headers["x-artwork-orientation"]).toBe("portrait");
+  });
 });
