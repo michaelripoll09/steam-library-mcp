@@ -51,6 +51,18 @@ export const MIGRATIONS = Object.freeze([
       "CREATE UNIQUE INDEX one_playing_entry ON tracker_entries (status) WHERE status = 'playing'",
     ],
   }),
+  createMigration({
+    version: 3,
+    name: "create-recommendation-preferences",
+    statements: [
+      `CREATE TABLE recommendation_preferences (
+        app_id INTEGER PRIMARY KEY,
+        priority TEXT NOT NULL CHECK (priority IN ('normal', 'high')),
+        excluded_from_recommendations INTEGER NOT NULL CHECK (excluded_from_recommendations IN (0, 1)),
+        play_mode TEXT NOT NULL CHECK (play_mode IN ('any', 'solo', 'with_friends'))
+      )`,
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (

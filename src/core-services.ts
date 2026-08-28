@@ -11,6 +11,11 @@ import {
 } from "./tracker/gaming-tracker-service.js";
 import { openTrackerDatabase } from "./tracker/sqlite/database.js";
 import { SqliteTrackerRepository } from "./tracker/sqlite/tracker-repository.js";
+import {
+  createRecommendationPreferencesService,
+  type RecommendationPreferencesService,
+} from "./recommendations/recommendation-preferences-service.js";
+import { SqliteRecommendationPreferenceRepository } from "./recommendations/sqlite/recommendation-preference-repository.js";
 
 export type CoreServiceOverrides = Readonly<{
   config?: AppConfig;
@@ -20,12 +25,14 @@ export type CoreServiceOverrides = Readonly<{
   steamClient?: SteamApiClient;
   steamService?: SteamService;
   gamingTrackerService?: GamingTrackerService;
+  recommendationPreferencesService?: RecommendationPreferencesService;
   metadataService?: MetadataService;
 }>;
 
 export type CoreServices = Readonly<{
   steamService: SteamService;
   gamingTrackerService: GamingTrackerService;
+  recommendationPreferencesService: RecommendationPreferencesService;
   metadataService: MetadataService;
 }>;
 
@@ -48,10 +55,18 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
   const gamingTrackerService =
     overrides.gamingTrackerService ??
     createDefaultGamingTrackerService(config(), clock, steamService);
+  const recommendationPreferencesService =
+    overrides.recommendationPreferencesService ??
+    createDefaultRecommendationPreferencesService(config());
   const metadataService =
     overrides.metadataService ?? createDefaultMetadataService(steamService, clock, overrides.fetch);
 
-  return Object.freeze({ steamService, gamingTrackerService, metadataService });
+  return Object.freeze({
+    steamService,
+    gamingTrackerService,
+    recommendationPreferencesService,
+    metadataService,
+  });
 }
 
 function createDefaultMetadataService(
@@ -91,6 +106,20 @@ function createDefaultGamingTrackerService(
       clock,
       ownershipLookup: { getOwnedGames: async () => (await steamService.getLibrary()).games },
       repository: new SqliteTrackerRepository(openTrackerDatabase(config.trackerDatabasePath)),
+    });
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
+}
+
+function createDefaultRecommendationPreferencesService(
+  config: AppConfig,
+): RecommendationPreferencesService {
+  try {
+    return createRecommendationPreferencesService({
+      repository: new SqliteRecommendationPreferenceRepository(
+        openTrackerDatabase(config.trackerDatabasePath),
+      ),
     });
   } catch (error) {
     throw new TrackerPersistenceError(error);

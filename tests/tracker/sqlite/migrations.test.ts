@@ -54,6 +54,30 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
+  test("adds recommendation preferences to an existing version-two tracker database", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database, MIGRATIONS.slice(0, 2));
+      migrateDatabase(database);
+
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'recommendation_preferences'",
+          )
+          .get(),
+      ).toEqual({ name: "recommendation_preferences" });
+      expect(
+        database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get(),
+      ).toEqual({
+        version: 3,
+      });
+    } finally {
+      database.close();
+    }
+  });
+
   test("rejects an edited migration history without applying pending migrations", () => {
     const database = new Database(":memory:");
     migrateDatabase(database);
