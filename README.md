@@ -1,10 +1,12 @@
 # Steam Library MCP
 
-Give an MCP client safe access to a Steam library, including games owned by the configured account and optional Steam Families games, with explicit local game-progress tracking and optional metadata. The server runs over stdio and never changes Steam account data.
+Steam Library MCP provides a local stdio MCP server for a configured Steam library, plus an optional local dashboard. Steam reads are non-destructive; game-progress status is stored locally in SQLite and never written back to Steam.
 
-## Quick start
+## Choose a quick path
 
-1. Install **Node.js 22+** and provide a Steam Web API key plus the 64-bit SteamID to query.
+### MCP client (stdio)
+
+1. Install **Node.js 22+**.
 2. Install dependencies and create a local configuration file:
 
    ```sh
@@ -20,7 +22,29 @@ Give an MCP client safe access to a Steam library, including games owned by the 
    npm start
    ```
 
-For development, `npm run dev` rebuilds the project and starts the server. Shell-provided environment variables take precedence over `.env`, so an MCP client can supply configuration through its own environment.
+The server speaks MCP over stdio, so stdout is reserved for protocol traffic. Configure your MCP client to launch the local `npm start` process from this repository and provide the same environment variables described below.
+
+### Dashboard (optional)
+
+The dashboard uses the same local configuration and tracker database as the MCP server:
+
+```sh
+npm run build
+npm run dashboard
+```
+
+Open <http://127.0.0.1:4173>.
+
+For development, use separate processes:
+
+```sh
+npm run dev
+npm run dev:dashboard
+```
+
+`npm run dev` is the stdio server path only. `npm run dev:dashboard` starts the dashboard API at `127.0.0.1:4173` and the Vite UI at `127.0.0.1:5173`.
+
+Shell-provided environment variables take precedence over `.env`, so an MCP client or local process can supply configuration through its own environment.
 
 ## Configuration
 
@@ -33,10 +57,20 @@ Start from the tracked [`.env.example`](.env.example) file. Do not copy real cre
 | `STEAM_WEBAPI_TOKEN`    | For Families | Temporary Steam web-session credential for family-library syncing.                  |
 | `STEAMGRIDDB_API_KEY`   | No           | Optional SteamGridDB key for portrait artwork when public Steam art is unavailable. |
 | `TRACKER_DATABASE_PATH` | No           | Local SQLite location; defaults to `.steam-library/tracker.sqlite`.                 |
+| `DASHBOARD_PORT`        | No           | Local dashboard API port; defaults to `4173`.                                       |
 | `IGDB_CLIENT_ID`        | Optional     | Twitch developer client ID for IGDB metadata and last-resort dashboard covers.      |
 | `IGDB_CLIENT_SECRET`    | Optional     | Twitch developer client secret for IGDB metadata and last-resort dashboard covers.  |
 
 If `STEAM_WEBAPI_TOKEN` is absent or expires, Steam Families synchronization is skipped and the owned library continues to work. If the optional IGDB credentials are not set, metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result, while dashboard artwork simply skips the IGDB fallback. IGDB uses free Twitch developer credentials; no dashboard client receives them.
+
+## Dashboard flows
+
+The dashboard is a local view over the configured library and tracker:
+
+- Load and synchronize the library, including Steam Families when its optional token is available.
+- Filter the library and open a game's details.
+- Update local status such as playing, completed, or dropped.
+- Keep those status updates in the local tracker database; Steam account data remains unchanged.
 
 ## Tool surface
 
