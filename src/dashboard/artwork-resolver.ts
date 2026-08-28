@@ -1,11 +1,13 @@
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { IgdbCredentials } from "../config.js";
+import { IgdbTokenProvider } from "../igdb/token-provider.js";
 import type { FetchLike } from "../steam/client.js";
 
 export type ArtworkOrientation = "portrait" | "landscape";
 export type ArtworkResolver = Readonly<{
-  resolve(appId: number): Promise<ResolvedArtwork | undefined>;
+  resolve(appId: number, title?: string): Promise<ResolvedArtwork | undefined>;
 }>;
 export type ResolvedArtwork = Readonly<{
   filePath: string;
@@ -15,29 +17,50 @@ export type ResolvedArtwork = Readonly<{
 type Dependencies = Readonly<{
   cacheDirectory: string;
   steamGridDbApiKey?: string;
+  igdbCredentials?: IgdbCredentials;
   fetch?: FetchLike;
 }>;
-type Metadata = Readonly<{
+type LegacyMetadata = Readonly<{
   version: 2;
   contentType: string;
   orientation: ArtworkOrientation;
 }>;
-type ArtworkCandidate = Readonly<{ url: URL; orientation: ArtworkOrientation }>;
+type Metadata = Readonly<{
+  version: 3;
+  contentType: string;
+  orientation: ArtworkOrientation;
+  source: ArtworkSource;
+}>;
+type ArtworkSource = "steam" | "steamgriddb" | "igdb";
+type ArtworkCandidate = Readonly<{
+  url: URL;
+  orientation: ArtworkOrientation;
+  source: ArtworkSource;
+}>;
+type IgdbCover = Readonly<{ name: string; url: URL; exactTitle: boolean }>;
 
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const allowedSteamHosts = new Set([
   "shared.akamai.steamstatic.com",
   "cdn.cloudflare.steamstatic.com",
 ]);
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_CACHE_ENTRIES = 128;
+const allowedIgdbImageHosts = new Set(["images.igdb.com"]);
+const IGDB_GAMES_URL = "https://api.igdb.com/v4/games";
 
 export function createArtworkResolver({
   cacheDirectory,
   steamGridDbApiKey,
+  igdbCredentials,
   fetch = globalThis.fetch,
 }: Dependencies): ArtworkResolver {
-  async function resolve(appId: number): Promise<ResolvedArtwork | undefined> {
+  const igdbTokenProvider =
+    igdbCredentials === undefined
+      ? undefined
+      : new IgdbTokenProvider({ credentials: igdbCredentials, fetch });
+
+  async function resolve(appId: number, title?: string): Promise<ResolvedArtwork | undefined> {
     if (!Number.isSafeInteger(appId) || appId <= 0) return undefined;
     const cached = await readCached(cacheDirectory, appId);
     if (cached !== undefined) return cached;
@@ -58,15 +81,27 @@ export function createArtworkResolver({
       fetch,
       cacheDirectory,
       appId,
-      gridUrls.map((url) => ({ url, orientation: "portrait" as const })),
+      gridUrls.map((url) => ({
+        url,
+        orientation: "portrait" as const,
+        source: "steamgriddb" as const,
+      })),
     );
     if (grid !== undefined) return grid;
+
+    const landscape = await cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      await publicSteamLandscapeArtwork(fetch, appId),
+    );
+    if (landscape !== undefined) return landscape;
 
     return cacheFirst(
       fetch,
       cacheDirectory,
       appId,
-      await publicSteamLandscapeArtwork(fetch, appId),
+      await igdbArtwork(fetch, igdbCredentials, igdbTokenProvider, title),
     );
   }
   return Object.freeze({ resolve });
@@ -77,14 +112,8 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
   try {
     const metadata = JSON.parse(
       await readFile(join(directory, `${appId}.json`), "utf8"),
-    ) as Metadata;
-    if (
-      metadata.version !== CACHE_VERSION ||
-      !["image/jpeg", "image/png", "image/webp"].includes(metadata.contentType) ||
-      !["portrait", "landscape"].includes(metadata.orientation)
-    ) {
-      return undefined;
-    }
+    ) as unknown;
+    if (!isReadableMetadata(metadata)) return undefined;
     await access(filePath);
     return { filePath, contentType: metadata.contentType, orientation: metadata.orientation };
   } catch {
@@ -99,6 +128,7 @@ function directSteamPortraitArtwork(appId: number): readonly ArtworkCandidate[] 
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
       ),
       orientation: "portrait",
+      source: "steam",
     },
   ];
 }
@@ -111,12 +141,14 @@ async function publicSteamLandscapeArtwork(
     {
       url: new URL(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`),
       orientation: "landscape",
+      source: "steam",
     },
     {
       url: new URL(
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
       ),
       orientation: "landscape",
+      source: "steam",
     },
   ];
   try {
@@ -133,7 +165,7 @@ async function publicSteamLandscapeArtwork(
         : undefined;
     return headerImage === undefined
       ? directCandidates
-      : [{ url: headerImage, orientation: "landscape" }, ...directCandidates];
+      : [{ url: headerImage, orientation: "landscape", source: "steam" }, ...directCandidates];
   } catch {
     return directCandidates;
   }
@@ -168,10 +200,13 @@ function allowedSteamGridUrl(value: unknown): URL | undefined {
   try {
     const url = new URL(value);
     const isLegacySteamGridAsset =
-      url.hostname === "s3.amazonaws.com" && /^\/steamgriddb\/.+/.test(url.pathname);
+      url.hostname === "s3.amazonaws.com" &&
+      /^\/steamgriddb\/(?:[a-zA-Z0-9._-]+\/)*[a-zA-Z0-9._-]+$/.test(url.pathname);
     const isCurrentSteamGridAsset =
-      url.hostname === "cdn2.steamgriddb.com" && /^\/file\/sgdb-cdn\/grid\/.+/.test(url.pathname);
-    return url.protocol === "https:" && (isLegacySteamGridAsset || isCurrentSteamGridAsset)
+      url.hostname === "cdn2.steamgriddb.com" &&
+      (/^\/file\/sgdb-cdn\/grid\/[a-zA-Z0-9._-]+$/.test(url.pathname) ||
+        /^\/grid\/[a-zA-Z0-9]+$/.test(url.pathname));
+    return isStrictHttpsUrl(url) && (isLegacySteamGridAsset || isCurrentSteamGridAsset)
       ? url
       : undefined;
   } catch {
@@ -183,10 +218,134 @@ function allowedUrl(value: unknown, hosts: ReadonlySet<string>): URL | undefined
   if (typeof value !== "string") return undefined;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && hosts.has(url.hostname) ? url : undefined;
+    return isStrictHttpsUrl(url) && hosts.has(url.hostname) ? url : undefined;
   } catch {
     return undefined;
   }
+}
+
+async function igdbArtwork(
+  fetch: FetchLike,
+  credentials: IgdbCredentials | undefined,
+  tokenProvider: IgdbTokenProvider | undefined,
+  title: string | undefined,
+): Promise<readonly ArtworkCandidate[]> {
+  const cleanTitle = title?.trim();
+  if (
+    credentials === undefined ||
+    tokenProvider === undefined ||
+    cleanTitle === undefined ||
+    cleanTitle === ""
+  ) {
+    return [];
+  }
+  try {
+    const accessToken = await tokenProvider.getAccessToken();
+    const response = await fetch(IGDB_GAMES_URL, {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        "Client-ID": credentials.clientId,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: `search ${JSON.stringify(cleanTitle)}; fields name,cover.url; limit 10;`,
+    });
+    if (!response.ok) return [];
+    return parseIgdbCovers(await response.json(), cleanTitle).map(({ url }) => ({
+      url,
+      orientation: "portrait" as const,
+      source: "igdb" as const,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function parseIgdbCovers(payload: unknown, title: string): readonly IgdbCover[] {
+  if (!Array.isArray(payload)) return [];
+  const normalizedTitle = normalizeSpanishTitle(title);
+  if (normalizedTitle === "") return [];
+  const covers = payload.flatMap((value): readonly IgdbCover[] => {
+    if (value === null || typeof value !== "object") return [];
+    const name = "name" in value ? value.name : undefined;
+    const cover = "cover" in value ? value.cover : undefined;
+    const url =
+      cover !== null && typeof cover === "object" && "url" in cover
+        ? allowedIgdbCoverUrl(cover.url)
+        : undefined;
+    if (typeof name !== "string" || url === undefined) return [];
+    const normalizedName = normalizeSpanishTitle(name);
+    const exactTitle = normalizedName === normalizedTitle;
+    return exactTitle || normalizedName.includes(normalizedTitle)
+      ? [{ name, url, exactTitle }]
+      : [];
+  });
+  return covers.sort(
+    (left, right) =>
+      Number(right.exactTitle) - Number(left.exactTitle) ||
+      left.name.localeCompare(right.name, "es"),
+  );
+}
+
+function normalizeSpanishTitle(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase("es")
+    .normalize("NFD")
+    .replace(/\p{Mark}/gu, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function allowedIgdbCoverUrl(value: unknown): URL | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = value.startsWith("//") ? new URL(`https:${value}`) : new URL(value);
+    const path =
+      /^\/igdb\/image\/upload\/(?:t_thumb|t_cover_big|t_cover_big_2x)\/([a-zA-Z0-9_-]+\.(?:jpe?g|png|webp))$/.exec(
+        url.pathname,
+      );
+    if (!isStrictHttpsUrl(url) || !allowedIgdbImageHosts.has(url.hostname) || path === null) {
+      return undefined;
+    }
+    return new URL(`https://images.igdb.com/igdb/image/upload/t_cover_big_2x/${path[1]}`);
+  } catch {
+    return undefined;
+  }
+}
+
+function isStrictHttpsUrl(url: URL): boolean {
+  return (
+    url.protocol === "https:" &&
+    url.port === "" &&
+    url.username === "" &&
+    url.password === "" &&
+    url.search === "" &&
+    url.hash === ""
+  );
+}
+
+function isReadableMetadata(metadata: unknown): metadata is Metadata | LegacyMetadata {
+  if (metadata === null || typeof metadata !== "object") return false;
+  const candidate = metadata as Readonly<{
+    version?: unknown;
+    contentType?: unknown;
+    orientation?: unknown;
+    source?: unknown;
+  }>;
+  const isCommonShape =
+    typeof candidate.contentType === "string" &&
+    ["image/jpeg", "image/png", "image/webp"].includes(candidate.contentType) &&
+    (candidate.orientation === "portrait" || candidate.orientation === "landscape");
+  if (!isCommonShape) return false;
+  if (candidate.version === CACHE_VERSION) {
+    return (
+      candidate.source === "steam" ||
+      candidate.source === "steamgriddb" ||
+      candidate.source === "igdb"
+    );
+  }
+  return candidate.version === 2 && candidate.orientation === "portrait";
 }
 
 async function cacheFirst(
@@ -221,7 +380,12 @@ async function cacheImage(
     await writeFile(filePath, body);
     await writeFile(
       join(directory, `${appId}.json`),
-      JSON.stringify({ version: CACHE_VERSION, contentType, orientation: candidate.orientation }),
+      JSON.stringify({
+        version: CACHE_VERSION,
+        contentType,
+        orientation: candidate.orientation,
+        source: candidate.source,
+      }),
       "utf8",
     );
     return { filePath, contentType, orientation: candidate.orientation };

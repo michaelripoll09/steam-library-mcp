@@ -115,6 +115,35 @@ describe("artwork resolver", () => {
     });
   });
 
+  test("accepts SteamGridDB's current direct portrait CDN path without relaxing its allowlist", async () => {
+    await withDirectory(async (directory) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("steamgriddb.com/api/v2/grids/steam/2149010")) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: [{ url: "https://cdn2.steamgriddb.com/grid/portraitHash" }],
+            }),
+          );
+        }
+        if (url === "https://cdn2.steamgriddb.com/grid/portraitHash") return image([2, 1, 4]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        steamGridDbApiKey: "grid-key",
+        fetch,
+      });
+
+      await expect(resolver.resolve(2149010)).resolves.toMatchObject({ orientation: "portrait" });
+      expect(fetch.mock.calls.map(([input]) => String(input))).toContain(
+        "https://cdn2.steamgriddb.com/grid/portraitHash",
+      );
+    });
+  });
+
   test("skips unsafe SteamGridDB entries until it finds a safe portrait grid", async () => {
     await withDirectory(async (directory) => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
@@ -220,7 +249,183 @@ describe("artwork resolver", () => {
       await expect(resolver.resolve(480)).resolves.toMatchObject({ orientation: "portrait" });
       expect(fetch).toHaveBeenCalled();
       await expect(readFile(join(directory, "480.img"))).resolves.toEqual(Buffer.from([4, 8, 0]));
-      await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toContain('"version":2');
+      await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toContain('"version":3');
+    });
+  });
+
+  test("re-resolves a version two cached landscape cover without deleting current portrait cache entries", async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, "4513840.img"), new Uint8Array([9]));
+      await writeFile(
+        join(directory, "4513840.json"),
+        JSON.stringify({ version: 2, contentType: "image/jpeg", orientation: "landscape" }),
+      );
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        if (String(input).endsWith("/library_600x900.jpg")) return image([4, 5, 1]);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(4513840)).resolves.toMatchObject({ orientation: "portrait" });
+      await expect(readFile(join(directory, "4513840.img"))).resolves.toEqual(
+        Buffer.from([4, 5, 1]),
+      );
+      await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
+        '"version":3',
+      );
+    });
+  });
+
+  test("uses a Spanish-normalized IGDB high-quality cover only after Steam and SteamGridDB fail", async () => {
+    await withDirectory(async (directory) => {
+      const fakeClientSecret = "fake-client-secret";
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("steamgriddb.com/api/v2/grids/steam/4513840")) {
+          return new Response(JSON.stringify({ success: true, data: [] }));
+        }
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+        if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg")) {
+          return new Response(null, { status: 404 });
+        }
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          expect(String(init?.body)).toContain(fakeClientSecret);
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          expect(String(init?.body)).toContain('search "El Niño"');
+          return new Response(
+            JSON.stringify([
+              {
+                name: "Other Game",
+                cover: { url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/other.jpg" },
+              },
+              {
+                name: "El Nino",
+                cover: { url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/nino.jpg" },
+              },
+            ]),
+          );
+        }
+        if (url === "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/nino.jpg") {
+          return image([4, 5, 1]);
+        }
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        steamGridDbApiKey: "grid-key",
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: fakeClientSecret },
+        fetch,
+      });
+
+      await expect(resolver.resolve(4513840, "El Niño")).resolves.toMatchObject({
+        orientation: "portrait",
+      });
+      const calls = fetch.mock.calls.map(([input]) => String(input));
+      expect(calls).toContain("https://images.igdb.com/igdb/image/upload/t_cover_big_2x/nino.jpg");
+      expect(JSON.stringify(calls)).not.toContain(fakeClientSecret);
+      await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
+        '"source":"igdb"',
+      );
+    });
+  });
+
+  test.each([
+    ["disabled", undefined],
+    ["no result", { clientId: "fake-client-id", clientSecret: "fake-client-secret" }],
+    ["provider error", { clientId: "fake-client-id", clientSecret: "fake-client-secret" }],
+  ] as const)(
+    "does not cache an IGDB cover when the provider is %s",
+    async (_caseName, credentials) => {
+      await withDirectory(async (directory) => {
+        const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+          const url = String(input);
+          if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+          if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+          if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg"))
+            return new Response(null, { status: 404 });
+          if (url === "https://id.twitch.tv/oauth2/token") {
+            return new Response(
+              JSON.stringify({
+                access_token: "temporary-artwork-token",
+                token_type: "bearer",
+                expires_in: 3600,
+              }),
+            );
+          }
+          if (url === "https://api.igdb.com/v4/games") {
+            return _caseName === "provider error"
+              ? new Response("unavailable", { status: 503 })
+              : new Response(JSON.stringify([]));
+          }
+          return new Response(null, { status: 404 });
+        });
+        const resolver = createArtworkResolver({
+          cacheDirectory: directory,
+          igdbCredentials: credentials,
+          fetch,
+        });
+
+        await expect(resolver.resolve(4513840, "Embers")).resolves.toBeUndefined();
+        await expect(readFile(join(directory, "4513840.img"))).rejects.toThrow();
+        expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+          "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/unsafe.jpg",
+        );
+      });
+    },
+  );
+
+  test("rejects unsafe IGDB image hosts before they can be fetched", async () => {
+    await withDirectory(async (directory) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+        if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg"))
+          return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          return new Response(
+            JSON.stringify([
+              { name: "Embers", cover: { url: "https://127.0.0.1/private.jpg" } },
+              {
+                name: "Embers",
+                cover: { url: "//images.igdb.com/igdb/image/upload/t_thumb/unsafe.jpg" },
+              },
+            ]),
+          );
+        }
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(4513840, "Embers")).resolves.toBeUndefined();
+      expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+        "https://127.0.0.1/private.jpg",
+      );
+      expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+        "https://images.igdb.com/igdb/image/upload/t_thumb/unsafe.jpg",
+      );
     });
   });
 

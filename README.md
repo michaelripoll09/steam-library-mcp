@@ -33,10 +33,10 @@ Start from the tracked [`.env.example`](.env.example) file. Do not copy real cre
 | `STEAM_WEBAPI_TOKEN`    | For Families | Temporary Steam web-session credential for family-library syncing.                  |
 | `STEAMGRIDDB_API_KEY`   | No           | Optional SteamGridDB key for portrait artwork when public Steam art is unavailable. |
 | `TRACKER_DATABASE_PATH` | No           | Local SQLite location; defaults to `.steam-library/tracker.sqlite`.                 |
-| `IGDB_CLIENT_ID`        | For metadata | Twitch developer client ID for IGDB metadata tools.                                 |
-| `IGDB_CLIENT_SECRET`    | For metadata | Twitch developer client secret for IGDB metadata tools.                             |
+| `IGDB_CLIENT_ID`        | Optional     | Twitch developer client ID for IGDB metadata and last-resort dashboard covers.      |
+| `IGDB_CLIENT_SECRET`    | Optional     | Twitch developer client secret for IGDB metadata and last-resort dashboard covers.  |
 
-If `STEAM_WEBAPI_TOKEN` is absent or expires, Steam Families synchronization is skipped and the owned library continues to work. If the IGDB credentials are not set, metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result.
+If `STEAM_WEBAPI_TOKEN` is absent or expires, Steam Families synchronization is skipped and the owned library continues to work. If the optional IGDB credentials are not set, metadata tools remain discoverable and return a safe `METADATA_UNAVAILABLE` result, while dashboard artwork simply skips the IGDB fallback. IGDB uses free Twitch developer credentials; no dashboard client receives them.
 
 ## Tool surface
 

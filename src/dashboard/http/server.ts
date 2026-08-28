@@ -154,11 +154,12 @@ async function handleApi(
     }
     try {
       const library = await dashboardService.getLibrary();
-      if (!library.games.some((game) => game.appId === appId)) {
+      const game = library.games.find((entry) => entry.appId === appId);
+      if (game === undefined) {
         sendArtworkNotFound(response, method);
         return;
       }
-      const artwork = await artworkResolver.resolve(appId);
+      const artwork = await artworkResolver.resolve(appId, game.name);
       if (artwork === undefined) {
         sendArtworkNotFound(response, method);
         return;

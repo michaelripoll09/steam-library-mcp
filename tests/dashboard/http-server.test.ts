@@ -268,5 +268,6 @@ describe("dashboard HTTP server", () => {
     const response = await call(started.port, "/api/artwork/10");
     expect(response.status).toBe(200);
     expect(response.headers["x-artwork-orientation"]).toBe("portrait");
+    expect(artworkResolver.resolve).toHaveBeenCalledWith(10, "Celeste");
   });
 });

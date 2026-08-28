@@ -2,7 +2,13 @@ import { type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 
 import { createCoreServices, type CoreServiceOverrides } from "../core-services.js";
-import { DEFAULT_TRACKER_DATABASE_PATH, loadConfig, type AppConfig } from "../config.js";
+import {
+  DEFAULT_TRACKER_DATABASE_PATH,
+  loadConfig,
+  loadIgdbConfig,
+  type AppConfig,
+  type IgdbConfig,
+} from "../config.js";
 import { createDashboardService, type DashboardService } from "./dashboard-service.js";
 import { createArtworkResolver, type ArtworkResolver } from "./artwork-resolver.js";
 import {
@@ -14,6 +20,7 @@ import {
 export type DashboardStartOptions = CoreServiceOverrides &
   Readonly<{
     config?: AppConfig;
+    igdbConfig?: IgdbConfig;
     dashboardService?: DashboardService;
     artworkResolver?: ArtworkResolver;
     staticRoot?: string;
@@ -23,6 +30,7 @@ export type DashboardStartOptions = CoreServiceOverrides &
 
 export async function startDashboardServer(options: DashboardStartOptions = {}): Promise<Server> {
   const config = options.config ?? loadConfig();
+  const igdbConfig = options.igdbConfig ?? loadIgdbConfig();
   const dashboardService =
     options.dashboardService ?? createDashboardService(createCoreServices({ ...options, config }));
   const server = createDashboardHttpServer({
@@ -37,6 +45,7 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
         ...(config.steamGridDbApiKey === undefined
           ? {}
           : { steamGridDbApiKey: config.steamGridDbApiKey }),
+        ...(igdbConfig.enabled ? { igdbCredentials: igdbConfig } : {}),
         fetch: options.fetch,
       }),
     staticRoot: options.staticRoot ?? dashboardStaticRootFromModule(import.meta.url),
