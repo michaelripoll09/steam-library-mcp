@@ -7,7 +7,7 @@ import {
   type MetadataQuery,
 } from "../domain/metadata.js";
 import type { MetadataUnavailableEnvelope } from "../errors.js";
-import type { IgdbClient } from "../igdb/client.js";
+import type { IgdbGamesClient } from "../igdb/client.js";
 import type { SteamService } from "./steam-service.js";
 
 const POSITIVE_TTL = 86_400_000;
@@ -15,7 +15,11 @@ const NEGATIVE_TTL = 3_600_000;
 const STALE_TTL = 604_800_000;
 const CONCURRENCY = 4;
 type Entry = Readonly<{ value: GameMetadata; createdAt: number; ttl: number }>;
-type Dependencies = Readonly<{ steamService: SteamService; igdbClient: IgdbClient; clock: Clock }>;
+type Dependencies = Readonly<{
+  steamService: SteamService;
+  igdbClient: IgdbGamesClient;
+  clock: Clock;
+}>;
 export type MetadataService = Readonly<{
   getOwnedGameMetadata(appId: number): Promise<GameMetadata | MetadataUnavailableEnvelope>;
   queryOwnedMetadata(query: MetadataQuery): Promise<readonly GameMetadata[]>;

@@ -2,6 +2,12 @@ import { TtlCache, type Cache, type Clock } from "./cache/ttl-cache.js";
 import { loadConfig, loadIgdbConfig, type AppConfig } from "./config.js";
 import { createMetadataUnavailableEnvelope, TrackerPersistenceError } from "./errors.js";
 import { createIgdbClient } from "./igdb/client.js";
+import {
+  createGameDurationService,
+  createUnavailableGameDurationService,
+  type GameDurationService,
+} from "./durations/game-duration-service.js";
+import { SqliteGameDurationRepository } from "./durations/sqlite/game-duration-repository.js";
 import { createMetadataService, type MetadataService } from "./services/metadata-service.js";
 import { createSteamService, type SteamService } from "./services/steam-service.js";
 import { createSteamApiClient, type FetchLike, type SteamApiClient } from "./steam/client.js";
@@ -27,6 +33,7 @@ export type CoreServiceOverrides = Readonly<{
   gamingTrackerService?: GamingTrackerService;
   recommendationPreferencesService?: RecommendationPreferencesService;
   metadataService?: MetadataService;
+  gameDurationService?: GameDurationService;
 }>;
 
 export type CoreServices = Readonly<{
@@ -34,6 +41,7 @@ export type CoreServices = Readonly<{
   gamingTrackerService: GamingTrackerService;
   recommendationPreferencesService: RecommendationPreferencesService;
   metadataService: MetadataService;
+  gameDurationService: GameDurationService;
 }>;
 
 export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreServices {
@@ -60,12 +68,16 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     createDefaultRecommendationPreferencesService(config());
   const metadataService =
     overrides.metadataService ?? createDefaultMetadataService(steamService, clock, overrides.fetch);
+  const gameDurationService =
+    overrides.gameDurationService ??
+    createDefaultGameDurationService(config(), clock, overrides.fetch);
 
   return Object.freeze({
     steamService,
     gamingTrackerService,
     recommendationPreferencesService,
     metadataService,
+    gameDurationService,
   });
 }
 
@@ -94,6 +106,28 @@ function disabledMetadataService(): MetadataService {
     getOwnedGameMetadata: async () => unavailable(),
     queryOwnedMetadata: async () => unavailable() as never,
   };
+}
+
+function createDefaultGameDurationService(
+  config: AppConfig,
+  clock: Clock,
+  fetch: FetchLike | undefined,
+): GameDurationService {
+  const metadataConfig = loadIgdbConfig();
+  try {
+    const repository = new SqliteGameDurationRepository(
+      openTrackerDatabase(config.trackerDatabasePath),
+    );
+    return metadataConfig.enabled
+      ? createGameDurationService({
+          clock,
+          igdbClient: createIgdbClient({ credentials: metadataConfig, fetch }),
+          repository,
+        })
+      : createUnavailableGameDurationService({ repository });
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
 }
 
 function createDefaultGamingTrackerService(

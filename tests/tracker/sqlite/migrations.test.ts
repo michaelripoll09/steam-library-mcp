@@ -71,8 +71,30 @@ describe("tracker SQLite migrations", () => {
       expect(
         database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get(),
       ).toEqual({
-        version: 3,
+        version: 4,
       });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("adds local game-duration estimates to existing tracker storage", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database, MIGRATIONS.slice(0, 3));
+      migrateDatabase(database);
+
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'game_duration_estimates'",
+          )
+          .get(),
+      ).toEqual({ name: "game_duration_estimates" });
+      expect(
+        database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get(),
+      ).toEqual({ version: 4 });
     } finally {
       database.close();
     }

@@ -1,11 +1,17 @@
 import type { IgdbCredentials } from "../config.js";
 import { createMetadataUnavailableEnvelope, type MetadataUnavailableEnvelope } from "../errors.js";
-import { igdbGamesResponseSchema, type IgdbGame } from "./schemas.js";
+import {
+  igdbGameTimeToBeatsResponseSchema,
+  igdbGamesResponseSchema,
+  type IgdbGame,
+  type IgdbGameTimeToBeat,
+} from "./schemas.js";
 import { IgdbTokenProvider, isMetadataUnavailable } from "./token-provider.js";
 
 const IGDB_GAMES_URL = "https://api.igdb.com/v4/games";
+const IGDB_GAME_TIME_TO_BEATS_URL = "https://api.igdb.com/v4/game_time_to_beats";
 const IGDB_GAME_FIELDS =
-  "id,external_games.category,external_games.uid,genres.name,keywords.name,themes.name,first_release_date";
+  "id,name,external_games.category,external_games.uid,genres.name,keywords.name,themes.name,first_release_date";
 const RATE_LIMIT_BACKOFF_MS = 500;
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -19,9 +25,16 @@ type IgdbClientDependencies = Readonly<{
   tokenProvider?: IgdbTokenProvider;
 }>;
 
-export type IgdbClient = Readonly<{
+export type IgdbGamesClient = Readonly<{
   findGamesForSteamApp(appId: number): Promise<readonly IgdbGame[] | MetadataUnavailableEnvelope>;
 }>;
+
+export type IgdbClient = IgdbGamesClient &
+  Readonly<{
+    findGameTimeToBeat(
+      gameId: number,
+    ): Promise<readonly IgdbGameTimeToBeat[] | MetadataUnavailableEnvelope>;
+  }>;
 
 const wait: Sleep = async (milliseconds) => {
   await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -87,6 +100,39 @@ export function createIgdbClient({
           }
 
           return igdbGamesResponseSchema.parse(await response.json());
+        }
+        return unavailable();
+      } catch (cause) {
+        if (isMetadataUnavailable(cause)) {
+          return cause;
+        }
+        return unavailable();
+      }
+    },
+    async findGameTimeToBeat(
+      gameId: number,
+    ): Promise<readonly IgdbGameTimeToBeat[] | MetadataUnavailableEnvelope> {
+      try {
+        const accessToken = await tokenProvider.getAccessToken();
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const response = await fetchWithTimeout(fetchLike, IGDB_GAME_TIME_TO_BEATS_URL, {
+            method: "POST",
+            headers: {
+              "Client-ID": credentials.clientId,
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: `fields game_id,hastily,normally,completely; where game_id = ${gameId};`,
+          });
+
+          if (response.status === 429 && attempt === 0) {
+            await sleep(retryDelay(response));
+            continue;
+          }
+          if (!response.ok) {
+            return unavailable();
+          }
+
+          return igdbGameTimeToBeatsResponseSchema.parse(await response.json());
         }
         return unavailable();
       } catch (cause) {

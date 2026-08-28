@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { createCoreServices } from "../src/core-services.js";
+import type { GameDurationService } from "../src/durations/game-duration-service.js";
 import type { RecommendationPreferencesService } from "../src/recommendations/recommendation-preferences-service.js";
 import type { MetadataService } from "../src/services/metadata-service.js";
 import type { SteamService } from "../src/services/steam-service.js";
@@ -12,12 +13,14 @@ describe("core services", () => {
     const gamingTrackerService = {} as GamingTrackerService;
     const recommendationPreferencesService = {} as RecommendationPreferencesService;
     const metadataService = {} as MetadataService;
+    const gameDurationService = {} as GameDurationService;
 
     const services = createCoreServices({
       steamService,
       gamingTrackerService,
       recommendationPreferencesService,
       metadataService,
+      gameDurationService,
     });
 
     expect(services).toEqual({
@@ -25,6 +28,7 @@ describe("core services", () => {
       gamingTrackerService,
       recommendationPreferencesService,
       metadataService,
+      gameDurationService,
     });
   });
 });

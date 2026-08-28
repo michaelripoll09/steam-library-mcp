@@ -119,6 +119,26 @@ describe("IGDB schemas", () => {
 });
 
 describe("IGDB client", () => {
+  test("requests Game Time To Beat records by verified IGDB game ID", async () => {
+    const fetchLike = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockImplementationOnce(async (url: string | URL | Request, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.igdb.com/v4/game_time_to_beats");
+        expect(String(init?.body)).toContain("fields game_id,hastily,normally,completely;");
+        expect(String(init?.body)).toContain("where game_id = 3;");
+        return new Response(
+          JSON.stringify([{ game_id: 3, hastily: 5_400, normally: 7_200, completely: 9_000 }]),
+          { status: 200 },
+        );
+      });
+    const client = createIgdbClient({ credentials, fetch: fetchLike as typeof fetch });
+
+    await expect(client.findGameTimeToBeat(3)).resolves.toEqual([
+      { game_id: 3, hastily: 5_400, normally: 7_200, completely: 9_000 },
+    ]);
+  });
+
   test("requests the nested fields required to parse a successful game lookup", async () => {
     const expandedGame = [
       {

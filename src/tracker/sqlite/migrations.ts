@@ -63,6 +63,27 @@ export const MIGRATIONS = Object.freeze([
       )`,
     ],
   }),
+  createMigration({
+    version: 4,
+    name: "create-game-duration-estimates",
+    statements: [
+      `CREATE TABLE game_duration_estimates (
+        app_id INTEGER PRIMARY KEY,
+        igdb_game_id INTEGER NOT NULL,
+        igdb_game_name TEXT,
+        source TEXT NOT NULL CHECK (source = 'igdb'),
+        refreshed_at TEXT NOT NULL,
+        hastily_minutes INTEGER CHECK (hastily_minutes IS NULL OR hastily_minutes > 0),
+        normally_minutes INTEGER CHECK (normally_minutes IS NULL OR normally_minutes > 0),
+        completely_minutes INTEGER CHECK (completely_minutes IS NULL OR completely_minutes > 0),
+        CHECK (
+          hastily_minutes IS NOT NULL OR
+          normally_minutes IS NOT NULL OR
+          completely_minutes IS NOT NULL
+        )
+      )`,
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (

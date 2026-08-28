@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { createMetadataService } from "../../src/services/metadata-service.js";
 import { filterMetadata, normalizeMetadata, selectSteamMatch } from "../../src/domain/metadata.js";
-import type { IgdbClient } from "../../src/igdb/client.js";
+import type { IgdbGamesClient } from "../../src/igdb/client.js";
 import type { SteamService } from "../../src/services/steam-service.js";
 
 const game = (id: number, uid = "620") => ({
@@ -103,10 +103,12 @@ describe("metadata service", () => {
       if (appId === 999) throw new Error("not owned");
       return { appId, name: "Portal 2", playtimeMinutes: 1 };
     });
-    const findGamesForSteamApp = vi.fn<IgdbClient["findGamesForSteamApp"]>(async () => [game(3)]);
+    const findGamesForSteamApp = vi.fn<IgdbGamesClient["findGamesForSteamApp"]>(async () => [
+      game(3),
+    ]);
     const service = createMetadataService({
       steamService: { getGame } as unknown as SteamService,
-      igdbClient: { findGamesForSteamApp } as IgdbClient,
+      igdbClient: { findGamesForSteamApp } as IgdbGamesClient,
       clock: { now: () => now },
     });
 
@@ -150,7 +152,7 @@ describe("metadata service", () => {
           active -= 1;
           return [game(appId, String(appId))];
         }),
-      } as IgdbClient,
+      } as IgdbGamesClient,
       clock: { now: () => 0 },
     });
 
@@ -161,7 +163,7 @@ describe("metadata service", () => {
   test("expires negative entries after one hour and refuses stale positives after seven days", async () => {
     let now = 0;
     const findGamesForSteamApp = vi
-      .fn<IgdbClient["findGamesForSteamApp"]>()
+      .fn<IgdbGamesClient["findGamesForSteamApp"]>()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([game(3, "621")])
@@ -173,7 +175,7 @@ describe("metadata service", () => {
       steamService: {
         getGame: vi.fn(async (appId) => ({ appId, name: "Portal 2", playtimeMinutes: 0 })),
       } as unknown as SteamService,
-      igdbClient: { findGamesForSteamApp } as IgdbClient,
+      igdbClient: { findGamesForSteamApp } as IgdbGamesClient,
       clock: { now: () => now },
     });
 
@@ -208,7 +210,7 @@ describe("metadata service", () => {
       } as unknown as SteamService,
       igdbClient: {
         findGamesForSteamApp: vi.fn(async (appId) => [game(appId, String(appId))]),
-      } as IgdbClient,
+      } as IgdbGamesClient,
       clock: { now: () => 0 },
     });
 

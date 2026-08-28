@@ -20,6 +20,15 @@ export type MetadataUnavailableEnvelope = Readonly<{
   }>;
 }>;
 
+export type DurationUnavailableEnvelope = Readonly<{
+  isError: true;
+  error: Readonly<{
+    code: "DURATION_UNAVAILABLE";
+    message: string;
+    retryable: boolean;
+  }>;
+}>;
+
 type MetadataUnavailableOptions = Readonly<{
   message: string;
   retryable: boolean;
@@ -33,6 +42,19 @@ export function createMetadataUnavailableEnvelope(
     isError: true,
     error: Object.freeze({
       code: "METADATA_UNAVAILABLE" as const,
+      message: options.message,
+      retryable: options.retryable,
+    }),
+  });
+}
+
+export function createDurationUnavailableEnvelope(
+  options: MetadataUnavailableOptions,
+): DurationUnavailableEnvelope {
+  return Object.freeze({
+    isError: true,
+    error: Object.freeze({
+      code: "DURATION_UNAVAILABLE" as const,
       message: options.message,
       retryable: options.retryable,
     }),

@@ -11,6 +11,7 @@ export const twitchTokenSchema = z.object({
 export const igdbGamesResponseSchema = z.array(
   z.object({
     id: z.number().int().positive(),
+    name: z.string().trim().min(1).optional(),
     external_games: z.array(
       z.object({ category: z.number().int().optional(), uid: z.string().trim().min(1) }),
     ),
@@ -22,3 +23,14 @@ export const igdbGamesResponseSchema = z.array(
 );
 
 export type IgdbGame = z.infer<typeof igdbGamesResponseSchema>[number];
+
+export const igdbGameTimeToBeatsResponseSchema = z.array(
+  z.object({
+    game_id: z.number().int().positive(),
+    hastily: z.number().int().finite().optional(),
+    normally: z.number().int().finite().optional(),
+    completely: z.number().int().finite().optional(),
+  }),
+);
+
+export type IgdbGameTimeToBeat = z.infer<typeof igdbGameTimeToBeatsResponseSchema>[number];
