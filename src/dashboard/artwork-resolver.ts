@@ -97,6 +97,13 @@ export function createArtworkResolver({
   async function resolve(appId: number, title?: string): Promise<ResolvedArtwork | undefined> {
     if (!Number.isSafeInteger(appId) || appId <= 0) return undefined;
     const cached = await readCached(cacheDirectory, appId);
+    const curatedOverride = await cacheFirst(
+      fetch,
+      cacheDirectory,
+      appId,
+      await curatedIgdbOverrideArtwork(fetch, igdbCredentials, igdbTokenProvider, appId, title),
+    );
+    if (curatedOverride !== undefined) return curatedOverride;
     if (cached !== undefined) return cached;
 
     const portrait = await cacheFirst(
@@ -106,14 +113,6 @@ export function createArtworkResolver({
       directSteamPortraitArtwork(appId),
     );
     if (portrait !== undefined) return portrait;
-
-    const curatedOverride = await cacheFirst(
-      fetch,
-      cacheDirectory,
-      appId,
-      await curatedIgdbOverrideArtwork(fetch, igdbCredentials, igdbTokenProvider, appId, title),
-    );
-    if (curatedOverride !== undefined) return curatedOverride;
 
     const gridUrls =
       steamGridDbApiKey === undefined
