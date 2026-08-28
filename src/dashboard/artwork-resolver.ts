@@ -349,11 +349,12 @@ function parseIgdbCovers(payload: unknown, title: string): readonly IgdbCover[] 
     const exactTitle = normalizedName === normalizedTitle;
     return exactTitle ? [{ name, url, exactTitle }] : [];
   });
-  return covers.sort(
+  const sortedCovers = covers.sort(
     (left, right) =>
       Number(right.exactTitle) - Number(left.exactTitle) ||
       left.name.localeCompare(right.name, "es"),
   );
+  return sortedCovers.length === 1 ? sortedCovers : [];
 }
 
 function normalizeSpanishTitle(value: string): string {

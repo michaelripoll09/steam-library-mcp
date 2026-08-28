@@ -623,6 +623,74 @@ describe("artwork resolver", () => {
     });
   });
 
+  test("rejects multiple normalized-exact IGDB title covers before Steam landscape recovery", async () => {
+    await withDirectory(async (directory) => {
+      const appId = 19980;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") {
+          const body = String(init?.body);
+          if (
+            body.includes(
+              `where external_games.category = 1 & external_games.uid = "${appId}"; limit 10;`,
+            )
+          ) {
+            return new Response(JSON.stringify([]));
+          }
+          expect(body).toContain('search "Prince of Persia"');
+          return new Response(
+            JSON.stringify([
+              {
+                name: "Prince of Persia",
+                cover: {
+                  url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/remake-one.jpg",
+                },
+              },
+              {
+                name: "Prince-of-Persia",
+                cover: {
+                  url: "//images.igdb.com/igdb/image/upload/t_cover_big_2x/remake-two.jpg",
+                },
+              },
+            ]),
+          );
+        }
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg")) {
+          return new Response(null, { status: 404 });
+        }
+        if (url.endsWith("/remake-one.jpg") || url.endsWith("/remake-two.jpg")) {
+          return image([1, 9, 9]);
+        }
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await expect(resolver.resolve(appId, "Prince of Persia")).resolves.toBeUndefined();
+      const calls = fetch.mock.calls.map(([input]) => String(input));
+      expect(calls).not.toContain(
+        "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/remake-one.jpg",
+      );
+      expect(calls).not.toContain(
+        "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/remake-two.jpg",
+      );
+    });
+  });
+
   test("re-resolves legacy generic IGDB cache records through the Steam app identity", async () => {
     await withDirectory(async (directory) => {
       const appId = 15100;
