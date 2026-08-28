@@ -16,6 +16,7 @@ export interface GameRecommendationPreference extends RecommendationPreference {
 
 export interface RecommendationPreferenceRepository {
   get(appId: number): GameRecommendationPreference | undefined;
+  list(): readonly GameRecommendationPreference[];
   save(preference: GameRecommendationPreference): void;
   remove(appId: number): void;
 }

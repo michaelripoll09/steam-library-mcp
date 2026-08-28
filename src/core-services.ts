@@ -22,6 +22,15 @@ import {
   type RecommendationPreferencesService,
 } from "./recommendations/recommendation-preferences-service.js";
 import { SqliteRecommendationPreferenceRepository } from "./recommendations/sqlite/recommendation-preference-repository.js";
+import {
+  createPlayNowRecommendationService,
+  type PlayNowRecommendationService,
+} from "./recommendations/play-now-recommendation-service.js";
+import {
+  createBacklogPlanService,
+  type BacklogPlanService,
+} from "./backlog/backlog-plan-service.js";
+import { SqliteBacklogPlanRepository } from "./backlog/sqlite/backlog-plan-repository.js";
 
 export type CoreServiceOverrides = Readonly<{
   config?: AppConfig;
@@ -34,6 +43,8 @@ export type CoreServiceOverrides = Readonly<{
   recommendationPreferencesService?: RecommendationPreferencesService;
   metadataService?: MetadataService;
   gameDurationService?: GameDurationService;
+  playNowRecommendationService?: PlayNowRecommendationService;
+  backlogPlanService?: BacklogPlanService;
 }>;
 
 export type CoreServices = Readonly<{
@@ -42,6 +53,8 @@ export type CoreServices = Readonly<{
   recommendationPreferencesService: RecommendationPreferencesService;
   metadataService: MetadataService;
   gameDurationService: GameDurationService;
+  playNowRecommendationService: PlayNowRecommendationService;
+  backlogPlanService: BacklogPlanService;
 }>;
 
 export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreServices {
@@ -71,6 +84,12 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
   const gameDurationService =
     overrides.gameDurationService ??
     createDefaultGameDurationService(config(), clock, overrides.fetch);
+  const playNowRecommendationService =
+    overrides.playNowRecommendationService ??
+    createDefaultPlayNowRecommendationService(config(), steamService, gameDurationService);
+  const backlogPlanService =
+    overrides.backlogPlanService ??
+    createDefaultBacklogPlanService(config(), clock, playNowRecommendationService);
 
   return Object.freeze({
     steamService,
@@ -78,6 +97,8 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     recommendationPreferencesService,
     metadataService,
     gameDurationService,
+    playNowRecommendationService,
+    backlogPlanService,
   });
 }
 
@@ -154,6 +175,40 @@ function createDefaultRecommendationPreferencesService(
       repository: new SqliteRecommendationPreferenceRepository(
         openTrackerDatabase(config.trackerDatabasePath),
       ),
+    });
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
+}
+
+function createDefaultPlayNowRecommendationService(
+  config: AppConfig,
+  steamService: SteamService,
+  gameDurationService: GameDurationService,
+): PlayNowRecommendationService {
+  try {
+    const database = openTrackerDatabase(config.trackerDatabasePath);
+    return createPlayNowRecommendationService({
+      library: steamService,
+      trackerRepository: new SqliteTrackerRepository(database),
+      preferenceRepository: new SqliteRecommendationPreferenceRepository(database),
+      gameDurationService,
+    });
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
+}
+
+function createDefaultBacklogPlanService(
+  config: AppConfig,
+  clock: Clock,
+  recommendationService: PlayNowRecommendationService,
+): BacklogPlanService {
+  try {
+    return createBacklogPlanService({
+      clock,
+      recommendationService,
+      repository: new SqliteBacklogPlanRepository(openTrackerDatabase(config.trackerDatabasePath)),
     });
   } catch (error) {
     throw new TrackerPersistenceError(error);

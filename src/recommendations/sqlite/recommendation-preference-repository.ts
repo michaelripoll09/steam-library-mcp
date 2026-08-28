@@ -44,6 +44,31 @@ export class SqliteRecommendationPreferenceRepository implements RecommendationP
         });
   }
 
+  list(): readonly GameRecommendationPreference[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT
+          app_id AS appId,
+          priority,
+          excluded_from_recommendations AS excludedFromRecommendations,
+          play_mode AS playMode
+        FROM recommendation_preferences
+        ORDER BY app_id ASC`,
+      )
+      .all() as RecommendationPreferenceRow[];
+
+    return Object.freeze(
+      rows.map((row) =>
+        Object.freeze({
+          appId: row.appId,
+          priority: row.priority,
+          excludedFromRecommendations: row.excludedFromRecommendations === 1,
+          playMode: row.playMode,
+        }),
+      ),
+    );
+  }
+
   save(preference: GameRecommendationPreference): void {
     this.#database
       .prepare(

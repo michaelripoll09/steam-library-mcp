@@ -4,8 +4,10 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 import { createCoreServices, type CoreServiceOverrides } from "./core-services.js";
 import { registerGamingTools } from "./tools/register-gaming-tools.js";
+import { registerIntelligenceTools } from "./tools/register-intelligence-tools.js";
 import { registerMetadataTools } from "./tools/register-metadata-tools.js";
 import { registerSteamTools, type ToolRegistrar } from "./tools/register-steam-tools.js";
+import { registerIntelligencePromptsAndResources } from "./intelligence-mcp-registration.js";
 
 export type ServerOverrides = CoreServiceOverrides;
 
@@ -16,12 +18,29 @@ type StartServerOptions = ServerOverrides &
   }>;
 
 export function createServer(overrides: ServerOverrides = {}): McpServer {
-  const { steamService, gamingTrackerService, metadataService } = createCoreServices(overrides);
+  const {
+    steamService,
+    gamingTrackerService,
+    metadataService,
+    recommendationPreferencesService,
+    playNowRecommendationService,
+    backlogPlanService,
+  } = createCoreServices(overrides);
   const server = new McpServer({ name: "steam-library-mcp", version: "0.1.0" });
 
   registerSteamTools(server as unknown as ToolRegistrar, steamService);
   registerGamingTools(server as unknown as ToolRegistrar, gamingTrackerService);
   registerMetadataTools(server as unknown as ToolRegistrar, metadataService);
+  registerIntelligenceTools(server as unknown as ToolRegistrar, {
+    preferences: recommendationPreferencesService,
+    recommendations: playNowRecommendationService,
+    plans: backlogPlanService,
+  });
+  registerIntelligencePromptsAndResources(server, {
+    preferences: recommendationPreferencesService,
+    plans: backlogPlanService,
+    steam: steamService,
+  });
   return server;
 }
 

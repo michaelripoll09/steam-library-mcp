@@ -19,6 +19,7 @@ type RecommendationPreferencesServiceDependencies = Readonly<{
 
 export type RecommendationPreferencesService = Readonly<{
   get(appId: unknown): GameRecommendationPreference;
+  list(): readonly GameRecommendationPreference[];
   save(appId: unknown, preference: unknown): GameRecommendationPreference;
 }>;
 
@@ -32,6 +33,9 @@ export function createRecommendationPreferencesService({
         repository.get(appId) ??
         createGameRecommendationPreference({ appId, ...DEFAULT_RECOMMENDATION_PREFERENCE })
       );
+    },
+    list(): readonly GameRecommendationPreference[] {
+      return repository.list();
     },
     save(appId: unknown, preference: unknown): GameRecommendationPreference {
       assertAppId(appId);

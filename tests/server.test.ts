@@ -42,7 +42,7 @@ function createGamingTrackerService(): GamingTrackerService {
 }
 
 describe("MCP server composition", () => {
-  test("lists the complete thirteen-tool Steam, tracker, and metadata surface", async () => {
+  test("lists the complete nineteen-tool Steam, tracker, metadata, and intelligence surface", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
       config,
@@ -57,7 +57,9 @@ describe("MCP server composition", () => {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
 
-    await expect(client.listTools()).resolves.toMatchObject({
+    const listedTools = await client.listTools();
+    expect(listedTools.tools).toHaveLength(19);
+    expect(listedTools).toMatchObject({
       tools: [
         { name: "steam_get_library" },
         { name: "steam_search_library" },
@@ -102,6 +104,12 @@ describe("MCP server composition", () => {
         },
         { name: "steam_get_game_metadata" },
         { name: "steam_query_library_metadata" },
+        { name: "recommendation_get_game_preference" },
+        { name: "recommendation_set_game_preference" },
+        { name: "recommendation_get_play_now" },
+        { name: "backlog_create_plan" },
+        { name: "backlog_list_active_plans" },
+        { name: "backlog_update_plan_item_progress" },
       ],
     });
     await expect(

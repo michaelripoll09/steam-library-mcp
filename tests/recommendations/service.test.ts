@@ -7,6 +7,7 @@ import { createRecommendationPreferencesService } from "../../src/recommendation
 function createRepository(): RecommendationPreferenceRepository {
   return {
     get: vi.fn(() => undefined),
+    list: vi.fn(() => []),
     save: vi.fn(),
     remove: vi.fn(),
   };

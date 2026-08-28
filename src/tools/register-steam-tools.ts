@@ -17,6 +17,7 @@ type ToolResult = Readonly<{
 type ToolConfiguration = Readonly<{
   description: string;
   inputSchema: z.ZodRawShape | z.ZodType;
+  annotations?: Readonly<{ readOnlyHint?: boolean }>;
 }>;
 
 export interface ToolRegistrar {

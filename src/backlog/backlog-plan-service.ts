@@ -119,7 +119,7 @@ export function createBacklogPlanService({
 
       const plan = repository.getById(planId);
       const item = plan?.items.find((candidate) => candidate.id === itemId);
-      if (item === undefined) {
+      if (plan === undefined || item === undefined) {
         throw new InputError("The requested plan item does not exist.");
       }
       if (plan.lifecycle !== "active") {
