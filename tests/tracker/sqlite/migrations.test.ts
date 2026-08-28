@@ -71,7 +71,7 @@ describe("tracker SQLite migrations", () => {
       expect(
         database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get(),
       ).toEqual({
-        version: 4,
+        version: MIGRATIONS.at(-1)?.version,
       });
     } finally {
       database.close();
@@ -94,7 +94,38 @@ describe("tracker SQLite migrations", () => {
       ).toEqual({ name: "game_duration_estimates" });
       expect(
         database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get(),
-      ).toEqual({ version: 4 });
+      ).toEqual({ version: MIGRATIONS.at(-1)?.version });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("adds durable backlog plans and items to existing version-four tracker storage", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database, MIGRATIONS.slice(0, 4));
+      migrateDatabase(database);
+
+      expect(
+        database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'backlog_plans'")
+          .get(),
+      ).toEqual({ name: "backlog_plans" });
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'backlog_plan_items'",
+          )
+          .get(),
+      ).toEqual({ name: "backlog_plan_items" });
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'one_active_backlog_plan_per_cadence'",
+          )
+          .get(),
+      ).toEqual({ name: "one_active_backlog_plan_per_cadence" });
     } finally {
       database.close();
     }

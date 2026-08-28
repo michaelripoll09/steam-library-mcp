@@ -84,6 +84,36 @@ export const MIGRATIONS = Object.freeze([
       )`,
     ],
   }),
+  createMigration({
+    version: 5,
+    name: "create-backlog-plans",
+    statements: [
+      `CREATE TABLE backlog_plans (
+        id TEXT PRIMARY KEY,
+        cadence TEXT NOT NULL CHECK (cadence IN ('weekly', 'monthly')),
+        available_minutes INTEGER NOT NULL CHECK (available_minutes > 0),
+        target_game_count INTEGER NOT NULL CHECK (target_game_count > 0),
+        lifecycle TEXT NOT NULL CHECK (lifecycle IN ('active', 'archived')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT
+      )`,
+      `CREATE TABLE backlog_plan_items (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES backlog_plans(id) ON DELETE CASCADE,
+        rank INTEGER NOT NULL CHECK (rank > 0),
+        app_id INTEGER NOT NULL CHECK (app_id > 0),
+        game_name TEXT NOT NULL,
+        duration_estimate_minutes INTEGER CHECK (duration_estimate_minutes IS NULL OR duration_estimate_minutes > 0),
+        explanation TEXT NOT NULL,
+        progress TEXT NOT NULL CHECK (progress IN ('not_started', 'in_progress', 'done', 'skipped')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (plan_id, rank)
+      )`,
+      "CREATE UNIQUE INDEX one_active_backlog_plan_per_cadence ON backlog_plans (cadence) WHERE lifecycle = 'active'",
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
