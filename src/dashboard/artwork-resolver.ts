@@ -50,7 +50,6 @@ type ArtworkCandidate = Readonly<{
 }>;
 type IgdbCover = Readonly<{ name: string; url: URL; exactTitle: boolean }>;
 type CuratedIgdbOverride = Readonly<{
-  expectedSteamTitle: string;
   gameId: number;
   expectedIgdbName: string;
 }>;
@@ -68,7 +67,6 @@ const curatedIgdbOverrides = new Map<number, CuratedIgdbOverride>([
   [
     15100,
     {
-      expectedSteamTitle: "Assassin's Creed™: Director's Cut Edition",
       gameId: 27827,
       expectedIgdbName: "Assassin's Creed: Director's Cut Edition",
     },
@@ -76,7 +74,6 @@ const curatedIgdbOverrides = new Map<number, CuratedIgdbOverride>([
   [
     19980,
     {
-      expectedSteamTitle: "Prince of Persia®",
       gameId: 2438,
       expectedIgdbName: "Prince of Persia",
     },
@@ -101,7 +98,7 @@ export function createArtworkResolver({
       fetch,
       cacheDirectory,
       appId,
-      await curatedIgdbOverrideArtwork(fetch, igdbCredentials, igdbTokenProvider, appId, title),
+      await curatedIgdbOverrideArtwork(fetch, igdbCredentials, igdbTokenProvider, appId),
     );
     if (curatedOverride !== undefined) return curatedOverride;
     if (cached !== undefined) return cached;
@@ -301,10 +298,9 @@ async function curatedIgdbOverrideArtwork(
   credentials: IgdbCredentials | undefined,
   tokenProvider: IgdbTokenProvider | undefined,
   appId: number,
-  title: string | undefined,
 ): Promise<readonly ArtworkCandidate[]> {
   const override = curatedIgdbOverrides.get(appId);
-  if (override === undefined || title !== override.expectedSteamTitle) return [];
+  if (override === undefined) return [];
   const payload = await requestIgdbGames(fetch, credentials, tokenProvider, {
     body: `fields id,name,cover.url; where id = ${override.gameId}; limit 1;`,
   });

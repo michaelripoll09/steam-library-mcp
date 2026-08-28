@@ -422,8 +422,8 @@ describe("artwork resolver", () => {
   });
 
   test.each([
-    [15100, "Assassin's Creed: Director's Cut"],
-    [19980, "Prince of Persia (2008)"],
+    [4513840, "App-bound game"],
+    [4513841, "Another app-bound game"],
   ])(
     "uses Steam app-bound IGDB cover for %i before generic title variants",
     async (appId, title) => {
@@ -921,14 +921,14 @@ describe("artwork resolver", () => {
   test.each([
     {
       appId: 15100,
-      title: "Assassin's Creed™: Director's Cut Edition",
+      title: "Assassin's Creed",
       gameId: 27827,
       gameName: "Assassin's Creed: Director's Cut Edition",
       imageName: "curated-assassins-creed.jpg",
     },
     {
       appId: 19980,
-      title: "Prince of Persia®",
+      title: "Prince of Persia",
       gameId: 2438,
       gameName: "Prince of Persia",
       imageName: "curated-prince-of-persia.jpg",
@@ -1011,7 +1011,7 @@ describe("artwork resolver", () => {
     });
   });
 
-  test("rejects a curated override when its Steam title or IGDB game identity does not match", async () => {
+  test("rejects a curated override when its IGDB game identity does not match", async () => {
     await withDirectory(async (directory) => {
       const appId = 15100;
       const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
@@ -1052,10 +1052,7 @@ describe("artwork resolver", () => {
         fetch,
       });
 
-      await expect(
-        resolver.resolve(appId, "Assassin's Creed™: Director's Cut Edition"),
-      ).resolves.toBeUndefined();
-      await expect(resolver.resolve(appId, "Different game")).resolves.toBeUndefined();
+      await expect(resolver.resolve(appId, "Assassin's Creed")).resolves.toBeUndefined();
       expect(
         fetch.mock.calls.filter(
           ([input, init]) =>
@@ -1176,14 +1173,14 @@ describe("artwork resolver", () => {
   test.each([
     {
       appId: 15100,
-      title: "Assassin's Creed™: Director's Cut Edition",
+      title: "Assassin's Creed",
       gameId: 27827,
       gameName: "Assassin's Creed: Director's Cut Edition",
       imageName: "curated-cached-assassins-creed.jpg",
     },
     {
       appId: 19980,
-      title: "Prince of Persia®",
+      title: "Prince of Persia",
       gameId: 2438,
       gameName: "Prince of Persia",
       imageName: "curated-cached-prince-of-persia.jpg",
