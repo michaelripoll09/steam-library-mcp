@@ -131,6 +131,30 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
+  test("adds durable local tasks for polling and cancellation to existing tracker storage", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database, MIGRATIONS.slice(0, 5));
+      migrateDatabase(database);
+
+      expect(
+        database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'local_tasks'")
+          .get(),
+      ).toEqual({ name: "local_tasks" });
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'local_tasks_polling'",
+          )
+          .get(),
+      ).toEqual({ name: "local_tasks_polling" });
+    } finally {
+      database.close();
+    }
+  });
+
   test("rejects an edited migration history without applying pending migrations", () => {
     const database = new Database(":memory:");
     migrateDatabase(database);

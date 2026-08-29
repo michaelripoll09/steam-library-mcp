@@ -114,6 +114,35 @@ export const MIGRATIONS = Object.freeze([
       "CREATE UNIQUE INDEX one_active_backlog_plan_per_cadence ON backlog_plans (cadence) WHERE lifecycle = 'active'",
     ],
   }),
+  createMigration({
+    version: 6,
+    name: "create-local-tasks",
+    statements: [
+      `CREATE TABLE local_tasks (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('sync_library', 'enrich_durations', 'recalculate_plan')),
+        request_json TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+        progress_completed INTEGER NOT NULL CHECK (progress_completed >= 0),
+        progress_total INTEGER CHECK (progress_total IS NULL OR progress_total >= progress_completed),
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        cancellation_requested INTEGER NOT NULL DEFAULT 0 CHECK (cancellation_requested IN (0, 1)),
+        CHECK (
+          (state IN ('queued', 'running') AND completed_at IS NULL) OR
+          (state IN ('completed', 'failed', 'cancelled') AND completed_at IS NOT NULL)
+        ),
+        CHECK (
+          (state = 'failed' AND error_code IS NOT NULL AND error_message IS NOT NULL) OR
+          (state != 'failed' AND error_code IS NULL AND error_message IS NULL)
+        )
+      )`,
+      "CREATE INDEX local_tasks_polling ON local_tasks (created_at DESC)",
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
