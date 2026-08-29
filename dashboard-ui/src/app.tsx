@@ -7,6 +7,7 @@ import type {
   DashboardMutableStatus,
 } from "../../src/dashboard/contracts.js";
 import { createDashboardApi, type DashboardApi } from "./api.js";
+import { IntelligencePanel } from "./intelligence-panel.js";
 import {
   clearLibraryFilters,
   createLibraryFilters,
@@ -23,6 +24,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const defaultApiRef = useRef<DashboardApi | undefined>(undefined);
   const api =
     suppliedApi ?? (defaultApiRef.current ??= createDashboardApi(window.fetch.bind(window)));
+  const intelligenceApi = isIntelligenceApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
   const [initialError, setInitialError] = useState<string | undefined>();
@@ -127,6 +129,9 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
       )}
 
       {library !== undefined && <LibrarySummary library={library} />}
+      {library !== undefined && intelligenceApi && (
+        <IntelligencePanel api={api} games={library.games} />
+      )}
 
       <section className="library-panel" aria-labelledby="library-heading">
         <div className="library-panel-heading">
@@ -590,4 +595,16 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message !== ""
     ? error.message
     : "Algo salió mal. Inténtalo de nuevo.";
+}
+
+function isIntelligenceApi(api: DashboardApi): boolean {
+  return (
+    typeof api.getInsights === "function" &&
+    typeof api.getRecommendations === "function" &&
+    typeof api.getPreference === "function" &&
+    typeof api.savePreference === "function" &&
+    typeof api.getPlans === "function" &&
+    typeof api.createPlan === "function" &&
+    typeof api.updatePlanItemProgress === "function"
+  );
 }

@@ -63,6 +63,67 @@ describe("dashboard browser API", () => {
     ]);
   });
 
+  test("uses dashboard-only intelligence endpoints for reads and explicit local writes", async () => {
+    const module = await loadApi();
+    expect(module).toBeDefined();
+    if (module === undefined) return;
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}));
+    const api = module.createDashboardApi(fetch) as unknown as {
+      getInsights: () => Promise<unknown>;
+      getRecommendations: (minutes: number) => Promise<unknown>;
+      savePreference: (appId: number, preference: object) => Promise<unknown>;
+      createPlan: (request: object) => Promise<unknown>;
+      updatePlanItemProgress: (
+        planId: string,
+        itemId: string,
+        progress: string,
+      ) => Promise<unknown>;
+    };
+
+    await api.getInsights();
+    await api.getRecommendations(45);
+    await api.savePreference(10, {
+      priority: "high",
+      excludedFromRecommendations: false,
+      playMode: "solo",
+    });
+    await api.createPlan({ cadence: "weekly", availableMinutes: 45, targetGameCount: 2 });
+    await api.updatePlanItemProgress("weekly-1", "weekly-1:1", "done");
+
+    expect(fetch.mock.calls).toEqual([
+      ["/api/intelligence/insights", { method: "GET" }],
+      ["/api/intelligence/recommendations?availableMinutes=45", { method: "GET" }],
+      [
+        "/api/games/10/preference",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            priority: "high",
+            excludedFromRecommendations: false,
+            playMode: "solo",
+          }),
+        },
+      ],
+      [
+        "/api/backlog-plans",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cadence: "weekly", availableMinutes: 45, targetGameCount: 2 }),
+        },
+      ],
+      [
+        "/api/backlog-plans/weekly-1/items/weekly-1%3A1",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ progress: "done" }),
+        },
+      ],
+    ]);
+  });
+
   test("uses a safe fallback when a non-success response cannot provide an API error", async () => {
     const module = await loadApi();
     expect(module).toBeDefined();

@@ -1,6 +1,13 @@
 import type {
+  DashboardInsightSnapshot,
   DashboardLibrary,
   DashboardMutableStatus,
+  DashboardPlan,
+  DashboardPlanCreateResult,
+  DashboardPlanItem,
+  DashboardPlanItemProgress,
+  DashboardRecommendationPreference,
+  DashboardRecommendations,
   DashboardStatusUpdate,
 } from "../../src/dashboard/contracts.js";
 
@@ -25,6 +32,24 @@ export type DashboardApi = Readonly<{
     appId: number,
     status: DashboardMutableStatus,
   ) => Promise<DashboardStatusUpdate>;
+  getInsights: () => Promise<DashboardInsightSnapshot>;
+  getRecommendations: (availableMinutes: number) => Promise<DashboardRecommendations>;
+  getPreference: (appId: number) => Promise<DashboardRecommendationPreference>;
+  savePreference: (
+    appId: number,
+    preference: Omit<DashboardRecommendationPreference, "appId">,
+  ) => Promise<DashboardRecommendationPreference>;
+  getPlans: () => Promise<readonly DashboardPlan[]>;
+  createPlan: (request: {
+    cadence: "weekly" | "monthly";
+    availableMinutes: number;
+    targetGameCount: number;
+  }) => Promise<DashboardPlanCreateResult>;
+  updatePlanItemProgress: (
+    planId: string,
+    itemId: string,
+    progress: DashboardPlanItemProgress,
+  ) => Promise<DashboardPlanItem>;
 }>;
 
 export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
@@ -37,6 +62,42 @@ export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       }),
+    getInsights: () =>
+      request<DashboardInsightSnapshot>(fetch, "/api/intelligence/insights", { method: "GET" }),
+    getRecommendations: (availableMinutes) =>
+      request<DashboardRecommendations>(
+        fetch,
+        `/api/intelligence/recommendations?availableMinutes=${encodeURIComponent(String(availableMinutes))}`,
+        { method: "GET" },
+      ),
+    getPreference: (appId) =>
+      request<DashboardRecommendationPreference>(fetch, `/api/games/${appId}/preference`, {
+        method: "GET",
+      }),
+    savePreference: (appId, preference) =>
+      request<DashboardRecommendationPreference>(fetch, `/api/games/${appId}/preference`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(preference),
+      }),
+    getPlans: () =>
+      request<readonly DashboardPlan[]>(fetch, "/api/backlog-plans", { method: "GET" }),
+    createPlan: (plan) =>
+      request<DashboardPlanCreateResult>(fetch, "/api/backlog-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(plan),
+      }),
+    updatePlanItemProgress: (planId, itemId, progress) =>
+      request<DashboardPlanItem>(
+        fetch,
+        `/api/backlog-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ progress }),
+        },
+      ),
   };
 }
 

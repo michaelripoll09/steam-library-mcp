@@ -81,7 +81,22 @@ async function startProxy() {
     library,
   }));
   dashboardServer = createDashboardHttpServer({
-    dashboardService: { getLibrary, syncLibrary, updateStatus },
+    dashboardService: {
+      getLibrary,
+      syncLibrary,
+      updateStatus,
+      getIntelligenceSnapshot: vi.fn(async () => ({
+        library: {},
+        activePlans: [],
+        preferences: {},
+      })),
+      getRecommendations: vi.fn(async () => ({ availableMinutes: 45, recommendations: [] })),
+      getPreference: vi.fn(),
+      savePreference: vi.fn(),
+      listPlans: vi.fn(() => []),
+      createPlan: vi.fn(),
+      updatePlanItemProgress: vi.fn(),
+    } as never,
   });
   originalDashboardPort = process.env.DASHBOARD_PORT;
   dashboardServer.listen(0, "127.0.0.1");

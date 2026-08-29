@@ -40,7 +40,19 @@ const MIME_TYPES: Readonly<Record<string, string>> = Object.freeze({
 class UnsupportedMediaTypeError extends Error {}
 
 export type DashboardHttpServerOptions = Readonly<{
-  dashboardService: Pick<DashboardService, "getLibrary" | "syncLibrary" | "updateStatus">;
+  dashboardService: Pick<
+    DashboardService,
+    | "getLibrary"
+    | "syncLibrary"
+    | "updateStatus"
+    | "getIntelligenceSnapshot"
+    | "getRecommendations"
+    | "getPreference"
+    | "savePreference"
+    | "listPlans"
+    | "createPlan"
+    | "updatePlanItemProgress"
+  >;
   artworkResolver?: ArtworkResolver;
   staticRoot?: string;
   host?: string;
@@ -215,6 +227,102 @@ async function handleApi(
     return;
   }
 
+  if (pathname === "/api/intelligence/insights") {
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    await runService(response, method, () => dashboardService.getIntelligenceSnapshot(), logger);
+    return;
+  }
+
+  if (pathname === "/api/intelligence/recommendations") {
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    const availableMinutes = parsePositiveQuery(request.url, "availableMinutes");
+    if (availableMinutes === undefined) {
+      sendJson(response, 400, {
+        error: { code: "INPUT_INVALID", message: "Available minutes must be a positive integer." },
+      });
+      return;
+    }
+    await runService(
+      response,
+      method,
+      () => dashboardService.getRecommendations(availableMinutes),
+      logger,
+    );
+    return;
+  }
+
+  const preferenceMatch = /^\/api\/games\/([^/]+)\/preference$/.exec(pathname);
+  if (preferenceMatch !== null) {
+    const appId = parseAppId(preferenceMatch[1]);
+    if (appId === undefined) {
+      sendJson(response, 400, {
+        error: { code: "INVALID_INPUT", message: "The app ID must be a positive integer." },
+      });
+      return;
+    }
+    if (method === "GET") {
+      await runService(
+        response,
+        method,
+        () => Promise.resolve(dashboardService.getPreference(appId)),
+        logger,
+      );
+      return;
+    }
+    if (method !== "PUT") return sendMethodNotAllowed(response, method, "GET, PUT");
+    try {
+      const preference = parsePreferencePayload(await readJsonBody(request));
+      sendJson(response, 200, dashboardService.savePreference(appId, preference));
+    } catch (error) {
+      sendError(response, error, logger, method);
+    }
+    return;
+  }
+
+  if (pathname === "/api/backlog-plans") {
+    if (method === "GET") {
+      await runService(
+        response,
+        method,
+        () => Promise.resolve(dashboardService.listPlans()),
+        logger,
+      );
+      return;
+    }
+    if (method !== "POST") return sendMethodNotAllowed(response, method, "GET, POST");
+    try {
+      const requestBody = parsePlanPayload(await readJsonBody(request));
+      sendJson(response, 200, await dashboardService.createPlan(requestBody));
+    } catch (error) {
+      sendError(response, error, logger, method);
+    }
+    return;
+  }
+
+  const planItemMatch = /^\/api\/backlog-plans\/([^/]+)\/items\/([^/]+)$/.exec(pathname);
+  if (planItemMatch !== null) {
+    if (method !== "PATCH") return sendMethodNotAllowed(response, method, "PATCH");
+    const planId = decodeRouteId(planItemMatch[1]);
+    const itemId = decodeRouteId(planItemMatch[2]);
+    if (planId === undefined || itemId === undefined) {
+      sendJson(response, 400, {
+        error: { code: "INPUT_INVALID", message: "Invalid plan item path." },
+      });
+      return;
+    }
+    try {
+      const progress = parsePlanProgressPayload(await readJsonBody(request));
+      sendJson(
+        response,
+        200,
+        await dashboardService.updatePlanItemProgress(planId, itemId, progress),
+      );
+    } catch (error) {
+      sendError(response, error, logger, method);
+    }
+    return;
+  }
+
   const statusMatch = /^\/api\/games\/([^/]+)\/status$/.exec(pathname);
   if (statusMatch !== null) {
     if (method !== "PATCH") {
@@ -310,7 +418,8 @@ function isAllowedOrigin(
   method: string,
 ): boolean {
   const origin = request.headers.origin;
-  if (origin === undefined || (method !== "POST" && method !== "PATCH")) return true;
+  if (origin === undefined || (method !== "POST" && method !== "PATCH" && method !== "PUT"))
+    return true;
   let parsed: URL;
   try {
     parsed = new URL(origin);
@@ -381,6 +490,105 @@ function parseStatusPayload(payload: unknown): "playing" | "completed" | "droppe
     throw new InputError("Status must be one of playing, completed, or dropped.");
   }
   return (payload as { status: "playing" | "completed" | "dropped" }).status;
+}
+
+function parsePreferencePayload(payload: unknown): {
+  priority: "normal" | "high";
+  excludedFromRecommendations: boolean;
+  playMode: "any" | "solo" | "with_friends";
+} {
+  if (
+    !isExactRecord(payload, ["priority", "excludedFromRecommendations", "playMode"]) ||
+    !["normal", "high"].includes(payload.priority as string) ||
+    typeof payload.excludedFromRecommendations !== "boolean" ||
+    !["any", "solo", "with_friends"].includes(payload.playMode as string)
+  ) {
+    throw new InputError("Recommendation preference values are invalid.");
+  }
+  return payload as {
+    priority: "normal" | "high";
+    excludedFromRecommendations: boolean;
+    playMode: "any" | "solo" | "with_friends";
+  };
+}
+
+function parsePlanPayload(payload: unknown): {
+  cadence: "weekly" | "monthly";
+  availableMinutes: number;
+  targetGameCount: number;
+} {
+  if (
+    !isExactRecord(payload, ["cadence", "availableMinutes", "targetGameCount"]) ||
+    !["weekly", "monthly"].includes(payload.cadence as string) ||
+    !isPositiveSafeInteger(payload.availableMinutes) ||
+    !isPositiveSafeInteger(payload.targetGameCount)
+  ) {
+    throw new InputError(
+      "Cadence, available minutes, and target game count must be valid positive values.",
+    );
+  }
+  return payload as {
+    cadence: "weekly" | "monthly";
+    availableMinutes: number;
+    targetGameCount: number;
+  };
+}
+
+function parsePlanProgressPayload(
+  payload: unknown,
+): "not_started" | "in_progress" | "done" | "skipped" {
+  if (
+    !isExactRecord(payload, ["progress"]) ||
+    !["not_started", "in_progress", "done", "skipped"].includes(payload.progress as string)
+  ) {
+    throw new InputError("Plan-item progress must be not_started, in_progress, done, or skipped.");
+  }
+  return payload.progress as "not_started" | "in_progress" | "done" | "skipped";
+}
+
+function isExactRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === keys.length &&
+    keys.every((key) => key in value)
+  );
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function parsePositiveQuery(rawUrl: string | undefined, key: string): number | undefined {
+  const url = parseRequestUrl(rawUrl);
+  if (url === undefined || [...url.searchParams.keys()].some((name) => name !== key))
+    return undefined;
+  const values = url.searchParams.getAll(key);
+  if (values.length !== 1 || !/^\d+$/.test(values[0])) return undefined;
+  const value = Number(values[0]);
+  return isPositiveSafeInteger(value) ? value : undefined;
+}
+
+function decodeRouteId(value: string): string | undefined {
+  try {
+    const decoded = decodeURIComponent(value);
+    return decoded.length > 0 && decoded.length <= 255 && !decoded.includes("/")
+      ? decoded
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sendMethodNotAllowed(response: ServerResponse, method: string, allow: string): void {
+  sendJson(
+    response,
+    405,
+    { error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } },
+    method,
+    { Allow: allow },
+  );
 }
 
 async function handleStatic(

@@ -54,3 +54,75 @@ export type DashboardStatusUpdate = Readonly<{
   mark: DashboardMarkResult;
   library: DashboardLibrary;
 }>;
+
+export type DashboardRecommendationPreference = Readonly<{
+  appId: number;
+  priority: "normal" | "high";
+  excludedFromRecommendations: boolean;
+  playMode: "any" | "solo" | "with_friends";
+}>;
+
+export type DashboardRecommendation = Readonly<{
+  appId: number;
+  name: string;
+  durationEstimateMinutes: number | null;
+  reasons: readonly string[];
+  explanation: string;
+}>;
+
+export type DashboardRecommendations = Readonly<{
+  availableMinutes: number;
+  recommendations: readonly DashboardRecommendation[];
+}>;
+
+export type DashboardPlanItemProgress = "not_started" | "in_progress" | "done" | "skipped";
+
+export type DashboardPlanItem = Readonly<{
+  id: string;
+  rank: number;
+  appId: number;
+  name: string;
+  durationEstimateMinutes: number | null;
+  explanation: string;
+  progress: DashboardPlanItemProgress;
+}>;
+
+export type DashboardPlan = Readonly<{
+  id: string;
+  cadence: "weekly" | "monthly";
+  availableMinutes: number;
+  targetGameCount: number;
+  items: readonly DashboardPlanItem[];
+}>;
+
+export type DashboardPlanCreateResult = Readonly<{
+  plan: DashboardPlan;
+  shortfall: Readonly<{
+    requestedGameCount: number;
+    selectedGameCount: number;
+    message: string;
+  }> | null;
+}>;
+
+export type DashboardInsightSnapshot = Readonly<{
+  library: Readonly<{
+    totalGames: number;
+    playedGames: number;
+    unplayedGames: number;
+    totalPlaytimeMinutes: number;
+    recentlyPlayedGames: number;
+  }>;
+  activePlans: readonly Readonly<{
+    id: string;
+    cadence: "weekly" | "monthly";
+    itemCount: number;
+    completedItemCount: number;
+  }>[];
+  preferences: Readonly<{
+    configuredGames: number;
+    highPriorityGames: number;
+    excludedGames: number;
+    soloGames: number;
+    withFriendsGames: number;
+  }>;
+}>;

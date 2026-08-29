@@ -499,3 +499,122 @@ test("closes an open custom filter menu when tabbing to the next filter", async 
   expect(screen.queryByRole("listbox", { name: "Estado" })).not.toBeInTheDocument();
   expect(accessFilter).toHaveFocus();
 });
+
+test("shows local play-now reasons and saves a selected game's recommendation preferences explicitly", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn().mockResolvedValue({
+      library: { ...library.totals, recentlyPlayedGames: 1 },
+      activePlans: [{ id: "weekly-1", cadence: "weekly", itemCount: 1, completedItemCount: 0 }],
+      preferences: {
+        configuredGames: 1,
+        highPriorityGames: 1,
+        excludedGames: 0,
+        soloGames: 1,
+        withFriendsGames: 0,
+      },
+    }),
+    getRecommendations: vi.fn().mockResolvedValue({
+      availableMinutes: 45,
+      recommendations: [
+        {
+          appId: 10,
+          name: "Celeste",
+          durationEstimateMinutes: null,
+          reasons: ["duration_unknown"],
+          explanation: "Duration is unknown.",
+        },
+      ],
+    }),
+    getPreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "normal",
+      excludedFromRecommendations: false,
+      playMode: "any",
+    }),
+    savePreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "high",
+      excludedFromRecommendations: false,
+      playMode: "solo",
+    }),
+    getPlans: vi.fn().mockResolvedValue([]),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+
+  expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
+  expect(await screen.findByText("Duración desconocida")).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Juego para preferencias"), "10");
+  await user.selectOptions(screen.getByLabelText("Prioridad de recomendación"), "high");
+  await user.selectOptions(screen.getByLabelText("Modo de juego"), "solo");
+  await user.click(screen.getByRole("button", { name: "Guardar preferencias" }));
+
+  expect(api.savePreference).toHaveBeenCalledWith(10, {
+    priority: "high",
+    excludedFromRecommendations: false,
+    playMode: "solo",
+  });
+});
+
+test("loads the initial game's persisted preference before allowing a save", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn().mockResolvedValue({
+      library: { ...library.totals, recentlyPlayedGames: 1 },
+      activePlans: [],
+      preferences: {
+        configuredGames: 1,
+        highPriorityGames: 1,
+        excludedGames: 1,
+        soloGames: 0,
+        withFriendsGames: 1,
+      },
+    }),
+    getRecommendations: vi.fn().mockResolvedValue({ availableMinutes: 45, recommendations: [] }),
+    getPreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "high",
+      excludedFromRecommendations: true,
+      playMode: "with_friends",
+    }),
+    savePreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "high",
+      excludedFromRecommendations: true,
+      playMode: "with_friends",
+    }),
+    getPlans: vi.fn().mockResolvedValue([]),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+
+  expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
+  await waitFor(() => {
+    expect(api.getPreference).toHaveBeenCalledWith(10);
+    expect(screen.getByLabelText("Prioridad de recomendación")).toHaveValue("high");
+    expect(screen.getByLabelText("Excluir de recomendaciones")).toBeChecked();
+    expect(screen.getByLabelText("Modo de juego")).toHaveValue("with_friends");
+  });
+
+  await user.click(screen.getByRole("button", { name: "Guardar preferencias" }));
+
+  expect(api.getPreference).toHaveBeenCalledWith(10);
+  expect(api.savePreference).toHaveBeenCalledWith(10, {
+    priority: "high",
+    excludedFromRecommendations: true,
+    playMode: "with_friends",
+  });
+});

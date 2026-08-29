@@ -30,7 +30,7 @@ function startServer(
   artworkResolver?: ArtworkResolver,
 ) {
   const server = createDashboardHttpServer({
-    dashboardService: service,
+    dashboardService: service as never,
     staticRoot,
     artworkResolver,
     port: 0,
@@ -269,6 +269,157 @@ describe("dashboard HTTP server", () => {
     expect(response.status).toBe(200);
     expect(response.headers["x-artwork-orientation"]).toBe("portrait");
     expect(artworkResolver.resolve).toHaveBeenCalledWith(10, "Celeste");
+  });
+
+  test("routes intelligence reads and explicit local preference and plan writes", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, {
+      getIntelligenceSnapshot: vi.fn(async () => ({ library: { totalGames: 0 } })),
+      getRecommendations: vi.fn(async (availableMinutes: number) => ({
+        availableMinutes,
+        recommendations: [],
+      })),
+      getPreference: vi.fn((appId: number) => ({
+        appId,
+        priority: "normal",
+        excludedFromRecommendations: false,
+        playMode: "any",
+      })),
+      savePreference: vi.fn((appId: number, preference: unknown) => ({
+        appId,
+        ...(preference as object),
+      })),
+      listPlans: vi.fn(() => []),
+      createPlan: vi.fn(async (request: unknown) => ({
+        plan: { id: "weekly-1", ...(request as object), items: [] },
+        shortfall: null,
+      })),
+      updatePlanItemProgress: vi.fn(async (_planId: string, _itemId: string, progress: string) => ({
+        progress,
+      })),
+    });
+    const intelligenceService = service as unknown as {
+      getIntelligenceSnapshot: ReturnType<typeof vi.fn>;
+      getRecommendations: ReturnType<typeof vi.fn>;
+      savePreference: ReturnType<typeof vi.fn>;
+      createPlan: ReturnType<typeof vi.fn>;
+      updatePlanItemProgress: ReturnType<typeof vi.fn>;
+    };
+
+    expect((await call(port, "/api/intelligence/insights")).status).toBe(200);
+    expect(
+      JSON.parse((await call(port, "/api/intelligence/recommendations?availableMinutes=45")).body),
+    ).toEqual({ availableMinutes: 45, recommendations: [] });
+    await call(port, "/api/games/10/preference", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        priority: "high",
+        excludedFromRecommendations: false,
+        playMode: "solo",
+      }),
+    });
+    await call(port, "/api/backlog-plans", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cadence: "weekly", availableMinutes: 45, targetGameCount: 2 }),
+    });
+    await call(port, "/api/backlog-plans/weekly-1/items/weekly-1%3A1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ progress: "done" }),
+    });
+
+    expect(intelligenceService.getIntelligenceSnapshot).toHaveBeenCalledOnce();
+    expect(intelligenceService.getRecommendations).toHaveBeenCalledWith(45);
+    expect(intelligenceService.savePreference).toHaveBeenCalledWith(10, {
+      priority: "high",
+      excludedFromRecommendations: false,
+      playMode: "solo",
+    });
+    expect(intelligenceService.createPlan).toHaveBeenCalledWith({
+      cadence: "weekly",
+      availableMinutes: 45,
+      targetGameCount: 2,
+    });
+    expect(intelligenceService.updatePlanItemProgress).toHaveBeenCalledWith(
+      "weekly-1",
+      "weekly-1:1",
+      "done",
+    );
+  });
+
+  test("rejects malformed intelligence input without invoking local mutations", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, {
+      getRecommendations: vi.fn(),
+      savePreference: vi.fn(),
+      createPlan: vi.fn(),
+      updatePlanItemProgress: vi.fn(),
+    });
+    expect((await call(port, "/api/intelligence/recommendations?availableMinutes=0")).status).toBe(
+      400,
+    );
+    expect(
+      (
+        await call(port, "/api/games/10/preference", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ priority: "wrong" }),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await call(port, "/api/backlog-plans", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cadence: "daily", availableMinutes: 0, targetGameCount: 0 }),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await call(port, "/api/backlog-plans/plan/items/item", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ progress: "invalid" }),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (service as unknown as { getRecommendations: ReturnType<typeof vi.fn> }).getRecommendations,
+    ).not.toHaveBeenCalled();
+  });
+
+  test("rejects cross-origin preference writes before invoking local mutations", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, {
+      savePreference: vi.fn(() => ({
+        appId: 10,
+        priority: "high",
+        excludedFromRecommendations: false,
+        playMode: "solo",
+      })),
+    });
+
+    const response = await call(port, "/api/games/10/preference", {
+      method: "PUT",
+      headers: {
+        origin: "https://evil.example",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        priority: "high",
+        excludedFromRecommendations: false,
+        playMode: "solo",
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(
+      (service as unknown as { savePreference: ReturnType<typeof vi.fn> }).savePreference,
+    ).not.toHaveBeenCalled();
   });
 
   test("returns not found when cached artwork is evicted before its stream opens", async () => {

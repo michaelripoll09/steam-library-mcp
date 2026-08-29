@@ -53,6 +53,13 @@ function createFakes(
     steamService: {
       getLibrary: vi.fn(overrides.getLibrary ?? (async () => library)),
       refreshLibrary: vi.fn(overrides.refreshLibrary ?? (async () => library)),
+      getLibraryStats: vi.fn(async () => ({
+        totalGames: 3,
+        playedGames: 2,
+        unplayedGames: 1,
+        totalPlaytimeMinutes: 150,
+        recentlyPlayedGames: 0,
+      })),
     },
     gamingTrackerService: {
       getStatuses: vi.fn(overrides.getStatuses ?? (async () => [])),
@@ -64,6 +71,34 @@ function createFakes(
             status,
           })),
       ),
+    },
+    recommendationPreferencesService: {
+      get: vi.fn((appId: unknown) => ({
+        appId: appId as number,
+        priority: "normal" as const,
+        excludedFromRecommendations: false,
+        playMode: "any" as const,
+      })),
+      list: vi.fn(() => []),
+      save: vi.fn((appId: unknown, preference: unknown) => ({
+        appId: appId as number,
+        priority: (preference as { priority: "normal" | "high" }).priority,
+        excludedFromRecommendations: (preference as { excludedFromRecommendations: boolean })
+          .excludedFromRecommendations,
+        playMode: (preference as { playMode: "any" | "solo" | "with_friends" }).playMode,
+      })),
+    },
+    playNowRecommendationService: {
+      recommend: vi.fn(async () => ({
+        request: { availableMinutes: 1, maxResults: 5 },
+        recommendations: [],
+        exclusions: [],
+      })),
+    },
+    backlogPlanService: {
+      create: vi.fn(),
+      listActive: vi.fn(() => []),
+      setItemProgress: vi.fn(),
     },
   };
 }
@@ -77,6 +112,106 @@ type StatusFixture = Readonly<{
 }>;
 
 describe("DashboardService", () => {
+  test("projects local recommendations, plans, and preferences into a browser-safe intelligence snapshot", async () => {
+    const fakes = createFakes();
+    const service = createDashboardService({
+      ...fakes,
+      steamService: {
+        ...fakes.steamService,
+        getLibraryStats: vi.fn(async () => ({
+          totalGames: 3,
+          playedGames: 2,
+          unplayedGames: 1,
+          totalPlaytimeMinutes: 150,
+          recentlyPlayedGames: 1,
+        })),
+      },
+      recommendationPreferencesService: {
+        list: vi.fn(() => [
+          {
+            appId: 10,
+            priority: "high" as const,
+            excludedFromRecommendations: false,
+            playMode: "solo" as const,
+          },
+          {
+            appId: 20,
+            priority: "normal" as const,
+            excludedFromRecommendations: true,
+            playMode: "with_friends" as const,
+          },
+        ]),
+        get: vi.fn(),
+        save: vi.fn(),
+      },
+      playNowRecommendationService: {
+        recommend: vi.fn(async () => ({
+          request: { availableMinutes: 45, maxResults: 5 },
+          recommendations: [
+            {
+              appId: 10,
+              name: "Owned game",
+              durationEstimateMinutes: null,
+              reasons: [{ code: "duration_unknown" as const }],
+              explanation: "Duration is unknown.",
+            },
+          ],
+          exclusions: [],
+        })),
+      },
+      backlogPlanService: {
+        listActive: vi.fn(() => [
+          {
+            id: "weekly-1",
+            cadence: "weekly" as const,
+            availableMinutes: 45,
+            targetGameCount: 2,
+            lifecycle: "active" as const,
+            createdAt: "2026-08-28T00:00:00.000Z",
+            updatedAt: "2026-08-28T00:00:00.000Z",
+            archivedAt: null,
+            items: [],
+          },
+        ]),
+        create: vi.fn(),
+        get: vi.fn(),
+        setItemProgress: vi.fn(),
+      },
+    } as never) as unknown as {
+      getIntelligenceSnapshot: () => Promise<unknown>;
+      getRecommendations: (minutes: unknown) => Promise<unknown>;
+    };
+
+    await expect(service.getIntelligenceSnapshot()).resolves.toEqual({
+      library: {
+        totalGames: 3,
+        playedGames: 2,
+        unplayedGames: 1,
+        totalPlaytimeMinutes: 150,
+        recentlyPlayedGames: 1,
+      },
+      activePlans: [{ id: "weekly-1", cadence: "weekly", itemCount: 0, completedItemCount: 0 }],
+      preferences: {
+        configuredGames: 2,
+        highPriorityGames: 1,
+        excludedGames: 1,
+        soloGames: 1,
+        withFriendsGames: 1,
+      },
+    });
+    await expect(service.getRecommendations(45)).resolves.toEqual({
+      availableMinutes: 45,
+      recommendations: [
+        {
+          appId: 10,
+          name: "Owned game",
+          durationEstimateMinutes: null,
+          reasons: ["duration_unknown"],
+          explanation: "Duration is unknown.",
+        },
+      ],
+    });
+  });
   test("projects Steam and tracker data into browser-safe games, totals, and status stats", async () => {
     const fakes = createFakes({
       getStatuses: async () => [

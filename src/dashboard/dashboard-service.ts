@@ -1,5 +1,13 @@
 import type { SteamGame, SteamLibrary } from "../domain/models.js";
+import type { BacklogPlanService } from "../backlog/backlog-plan-service.js";
+import type { BacklogPlan, BacklogPlanItem } from "../domain/backlog-plan.js";
+import type { GameRecommendationPreference } from "../domain/recommendation-preferences.js";
 import { InputError, TrackerInputError } from "../errors.js";
+import type {
+  PlayNowRecommendation,
+  PlayNowRecommendationService,
+} from "../recommendations/play-now-recommendation-service.js";
+import type { RecommendationPreferencesService } from "../recommendations/recommendation-preferences-service.js";
 import type { SteamService } from "../services/steam-service.js";
 import type { GamingTrackerService, TrackerMarkResult } from "../tracker/gaming-tracker-service.js";
 import type { TrackerGame } from "../domain/tracker.js";
@@ -13,22 +21,47 @@ import {
   type DashboardStatusStats,
   type DashboardStatusUpdate,
   type DashboardTotals,
+  type DashboardInsightSnapshot,
+  type DashboardPlan,
+  type DashboardPlanCreateResult,
+  type DashboardPlanItem,
+  type DashboardPlanItemProgress,
+  type DashboardRecommendation,
+  type DashboardRecommendationPreference,
+  type DashboardRecommendations,
 } from "./contracts.js";
 
 type DashboardServiceDependencies = Readonly<{
-  steamService: Pick<SteamService, "getLibrary" | "refreshLibrary">;
+  steamService: Pick<SteamService, "getLibrary" | "refreshLibrary" | "getLibraryStats">;
   gamingTrackerService: Pick<GamingTrackerService, "getStatuses" | "mark">;
+  recommendationPreferencesService: Pick<RecommendationPreferencesService, "get" | "list" | "save">;
+  playNowRecommendationService: Pick<PlayNowRecommendationService, "recommend">;
+  backlogPlanService: Pick<BacklogPlanService, "create" | "listActive" | "setItemProgress">;
 }>;
 
 export type DashboardService = Readonly<{
   getLibrary(): Promise<DashboardLibrary>;
   syncLibrary(): Promise<DashboardLibrary>;
   updateStatus(appId: unknown, status: unknown): Promise<DashboardStatusUpdate>;
+  getIntelligenceSnapshot(): Promise<DashboardInsightSnapshot>;
+  getRecommendations(availableMinutes: unknown): Promise<DashboardRecommendations>;
+  getPreference(appId: unknown): DashboardRecommendationPreference;
+  savePreference(appId: unknown, preference: unknown): DashboardRecommendationPreference;
+  listPlans(): readonly DashboardPlan[];
+  createPlan(request: unknown): Promise<DashboardPlanCreateResult>;
+  updatePlanItemProgress(
+    planId: unknown,
+    itemId: unknown,
+    progress: unknown,
+  ): Promise<DashboardPlanItem>;
 }>;
 
 export function createDashboardService({
   steamService,
   gamingTrackerService,
+  recommendationPreferencesService,
+  playNowRecommendationService,
+  backlogPlanService,
 }: DashboardServiceDependencies): DashboardService {
   async function project(library: SteamLibrary): Promise<DashboardLibrary> {
     const statuses = await gamingTrackerService.getStatuses();
@@ -51,6 +84,121 @@ export function createDashboardService({
         library: await project(await steamService.getLibrary()),
       });
     },
+    async getIntelligenceSnapshot() {
+      const [library, preferences, plans] = await Promise.all([
+        steamService.getLibraryStats(),
+        Promise.resolve(recommendationPreferencesService.list()),
+        Promise.resolve(backlogPlanService.listActive()),
+      ]);
+      return Object.freeze({
+        library: Object.freeze({ ...library }),
+        activePlans: Object.freeze(plans.map(toDashboardPlanSummary)),
+        preferences: createPreferenceSummary(preferences),
+      });
+    },
+    async getRecommendations(availableMinutes) {
+      assertPositiveSafeInteger(
+        availableMinutes,
+        "Available minutes must be a positive safe integer.",
+      );
+      const result = await playNowRecommendationService.recommend({
+        availableMinutes,
+        maxResults: 5,
+      });
+      return Object.freeze({
+        availableMinutes: result.request.availableMinutes,
+        recommendations: Object.freeze(result.recommendations.map(toDashboardRecommendation)),
+      });
+    },
+    getPreference(appId) {
+      return toDashboardPreference(recommendationPreferencesService.get(appId));
+    },
+    savePreference(appId, preference) {
+      return toDashboardPreference(recommendationPreferencesService.save(appId, preference));
+    },
+    listPlans() {
+      return Object.freeze(backlogPlanService.listActive().map(toDashboardPlan));
+    },
+    async createPlan(request) {
+      const result = await backlogPlanService.create(request);
+      return Object.freeze({
+        plan: toDashboardPlan(result.plan),
+        shortfall: result.shortfall === null ? null : Object.freeze({ ...result.shortfall }),
+      });
+    },
+    async updatePlanItemProgress(planId, itemId, progress) {
+      return toDashboardPlanItem(
+        await backlogPlanService.setItemProgress(planId, itemId, progress),
+      );
+    },
+  });
+}
+
+function createPreferenceSummary(
+  preferences: readonly GameRecommendationPreference[],
+): DashboardInsightSnapshot["preferences"] {
+  return Object.freeze({
+    configuredGames: preferences.length,
+    highPriorityGames: preferences.filter((preference) => preference.priority === "high").length,
+    excludedGames: preferences.filter((preference) => preference.excludedFromRecommendations)
+      .length,
+    soloGames: preferences.filter((preference) => preference.playMode === "solo").length,
+    withFriendsGames: preferences.filter((preference) => preference.playMode === "with_friends")
+      .length,
+  });
+}
+
+function toDashboardPlanSummary(
+  plan: BacklogPlan,
+): DashboardInsightSnapshot["activePlans"][number] {
+  return Object.freeze({
+    id: plan.id,
+    cadence: plan.cadence,
+    itemCount: plan.items.length,
+    completedItemCount: plan.items.filter((item) => item.progress === "done").length,
+  });
+}
+
+function toDashboardRecommendation(recommendation: PlayNowRecommendation): DashboardRecommendation {
+  return Object.freeze({
+    appId: recommendation.appId,
+    name: recommendation.name,
+    durationEstimateMinutes: recommendation.durationEstimateMinutes,
+    reasons: Object.freeze(recommendation.reasons.map((reason) => reason.code)),
+    explanation: recommendation.explanation,
+  });
+}
+
+function toDashboardPreference(
+  preference: GameRecommendationPreference,
+): DashboardRecommendationPreference {
+  return Object.freeze({
+    appId: preference.appId,
+    priority: preference.priority,
+    excludedFromRecommendations: preference.excludedFromRecommendations,
+    playMode: preference.playMode,
+  });
+}
+
+function toDashboardPlan(plan: BacklogPlan): DashboardPlan {
+  return Object.freeze({
+    id: plan.id,
+    cadence: plan.cadence,
+    availableMinutes: plan.availableMinutes,
+    targetGameCount: plan.targetGameCount,
+    items: Object.freeze(plan.items.map(toDashboardPlanItem)),
+  });
+}
+
+function toDashboardPlanItem(item: BacklogPlanItem): DashboardPlanItem {
+  return Object.freeze({
+    id: item.id,
+    rank: item.rank,
+    appId: item.appId,
+    name: item.name,
+    durationEstimateMinutes: item.durationEstimateMinutes,
+    explanation: item.explanation,
+    progress: item.progress as DashboardPlanItemProgress,
   });
 }
 
@@ -117,6 +265,12 @@ function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
 function assertAppId(appId: unknown): asserts appId is number {
   if (typeof appId !== "number" || !Number.isSafeInteger(appId) || appId <= 0) {
     throw new TrackerInputError();
+  }
+}
+
+function assertPositiveSafeInteger(value: unknown, message: string): asserts value is number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new InputError(message);
   }
 }
 
