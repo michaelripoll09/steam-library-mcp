@@ -42,7 +42,7 @@ function createGamingTrackerService(): GamingTrackerService {
 }
 
 describe("MCP server composition", () => {
-  test("lists the complete nineteen-tool Steam, tracker, metadata, and intelligence surface", async () => {
+  test("lists the complete task-enabled Steam, tracker, metadata, and intelligence surface", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
       config,
@@ -58,7 +58,7 @@ describe("MCP server composition", () => {
     await client.connect(clientTransport);
 
     const listedTools = await client.listTools();
-    expect(listedTools.tools).toHaveLength(19);
+    expect(listedTools.tools).toHaveLength(22);
     expect(listedTools).toMatchObject({
       tools: [
         { name: "steam_get_library" },
@@ -110,6 +110,9 @@ describe("MCP server composition", () => {
         { name: "backlog_create_plan" },
         { name: "backlog_list_active_plans" },
         { name: "backlog_update_plan_item_progress" },
+        { name: "task_list" },
+        { name: "task_get" },
+        { name: "task_cancel" },
       ],
     });
     await expect(
@@ -123,6 +126,17 @@ describe("MCP server composition", () => {
       ],
     });
     expect(steamClient.getRecentGames).toHaveBeenCalledWith(config.steamId, 10);
+
+    const resources = await client.listResources();
+    expect(resources.resources).toEqual(
+      expect.arrayContaining([expect.objectContaining({ uri: "steam-library://tasks" })]),
+    );
+    const templates = await client.listResourceTemplates();
+    expect(templates.resourceTemplates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ uriTemplate: "steam-library://tasks/{taskId}" }),
+      ]),
+    );
 
     await client.close();
     await server.close();

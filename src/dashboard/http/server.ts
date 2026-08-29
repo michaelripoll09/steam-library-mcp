@@ -52,6 +52,9 @@ export type DashboardHttpServerOptions = Readonly<{
     | "listPlans"
     | "createPlan"
     | "updatePlanItemProgress"
+    | "listTasks"
+    | "getTask"
+    | "cancelTask"
   >;
   artworkResolver?: ArtworkResolver;
   staticRoot?: string;
@@ -224,6 +227,41 @@ async function handleApi(
       return;
     }
     await runService(response, method, () => dashboardService.syncLibrary(), logger);
+    return;
+  }
+
+  if (pathname === "/api/tasks") {
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    await runService(response, method, () => Promise.resolve(dashboardService.listTasks()), logger);
+    return;
+  }
+
+  const taskMatch = /^\/api\/tasks\/([^/]+)(?:\/(cancel))?$/.exec(pathname);
+  if (taskMatch !== null) {
+    const taskId = decodeRouteId(taskMatch[1]);
+    if (taskId === undefined) {
+      sendJson(response, 400, {
+        error: { code: "INPUT_INVALID", message: "Invalid task path." },
+      });
+      return;
+    }
+    if (taskMatch[2] === "cancel") {
+      if (method !== "POST") return sendMethodNotAllowed(response, method, "POST");
+      await runService(
+        response,
+        method,
+        () => Promise.resolve(dashboardService.cancelTask(taskId)),
+        logger,
+      );
+      return;
+    }
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    await runService(
+      response,
+      method,
+      () => Promise.resolve(dashboardService.getTask(taskId)),
+      logger,
+    );
     return;
   }
 
@@ -699,16 +737,18 @@ function sendError(
   }
   if (error instanceof AppError) {
     const status =
-      error.code === "GAME_NOT_FOUND"
-        ? 409
-        : error.code === "INPUT_INVALID" || error.code === "INVALID_INPUT"
-          ? 400
-          : error.code === "STEAM_UNAVAILABLE" ||
-              error.code === "STEAM_TIMEOUT" ||
-              error.code === "STEAM_RESPONSE_INVALID" ||
-              error.code === "OWNERSHIP_UNAVAILABLE"
-            ? 503
-            : 500;
+      error.code === "TASK_NOT_FOUND"
+        ? 404
+        : error.code === "GAME_NOT_FOUND"
+          ? 409
+          : error.code === "INPUT_INVALID" || error.code === "INVALID_INPUT"
+            ? 400
+            : error.code === "STEAM_UNAVAILABLE" ||
+                error.code === "STEAM_TIMEOUT" ||
+                error.code === "STEAM_RESPONSE_INVALID" ||
+                error.code === "OWNERSHIP_UNAVAILABLE"
+              ? 503
+              : 500;
     sendJson(response, status, { error: { code: error.code, message: error.safeMessage } }, method);
     return;
   }

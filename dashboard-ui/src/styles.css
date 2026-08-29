@@ -552,6 +552,26 @@ select {
   gap: 0.3rem;
 }
 
+.task-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--muted, #a8b0c2);
+}
+
+.task-list strong {
+  color: var(--text, #f2f4fa);
+}
+
 .intelligence-snapshot {
   color: var(--muted, #a8b0c2);
 }

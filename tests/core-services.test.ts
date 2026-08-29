@@ -29,7 +29,7 @@ describe("core services", () => {
       backlogPlanService,
     });
 
-    expect(services).toEqual({
+    expect(services).toMatchObject({
       steamService,
       gamingTrackerService,
       recommendationPreferencesService,
@@ -38,5 +38,6 @@ describe("core services", () => {
       playNowRecommendationService,
       backlogPlanService,
     });
+    expect(services.taskRunner.list()).toEqual([]);
   });
 });

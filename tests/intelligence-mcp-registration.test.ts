@@ -105,13 +105,14 @@ describe("intelligence MCP prompts and resources", () => {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
 
-    await expect(client.listResources()).resolves.toMatchObject({
-      resources: [
-        { uri: "steam-library://intelligence/preferences" },
-        { uri: "steam-library://intelligence/active-plans" },
-        { uri: "steam-library://intelligence/library-insights" },
-      ],
-    });
+    const resources = await client.listResources();
+    expect(resources.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ uri: "steam-library://intelligence/preferences" }),
+        expect.objectContaining({ uri: "steam-library://intelligence/active-plans" }),
+        expect.objectContaining({ uri: "steam-library://intelligence/library-insights" }),
+      ]),
+    );
     await expect(
       client.readResource({ uri: "steam-library://intelligence/preferences" }),
     ).resolves.toMatchObject({

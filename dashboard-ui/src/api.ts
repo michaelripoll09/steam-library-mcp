@@ -10,6 +10,7 @@ import type {
   DashboardRecommendations,
   DashboardStatusUpdate,
 } from "../../src/dashboard/contracts.js";
+import type { LocalTask } from "../../src/tasks/task-runner.js";
 
 export type DashboardFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -50,6 +51,9 @@ export type DashboardApi = Readonly<{
     itemId: string,
     progress: DashboardPlanItemProgress,
   ) => Promise<DashboardPlanItem>;
+  getTasks: () => Promise<readonly LocalTask[]>;
+  getTask: (id: string) => Promise<LocalTask>;
+  cancelTask: (id: string) => Promise<LocalTask>;
 }>;
 
 export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
@@ -98,6 +102,11 @@ export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
           body: JSON.stringify({ progress }),
         },
       ),
+    getTasks: () => request<readonly LocalTask[]>(fetch, "/api/tasks", { method: "GET" }),
+    getTask: (id) =>
+      request<LocalTask>(fetch, `/api/tasks/${encodeURIComponent(id)}`, { method: "GET" }),
+    cancelTask: (id) =>
+      request<LocalTask>(fetch, `/api/tasks/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   };
 }
 

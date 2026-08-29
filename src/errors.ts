@@ -7,6 +7,7 @@ export type AppErrorCode =
   | "STEAM_TIMEOUT"
   | "STEAM_RESPONSE_INVALID"
   | "GAME_NOT_FOUND"
+  | "TASK_NOT_FOUND"
   | "INVALID_INPUT"
   | "OWNERSHIP_UNAVAILABLE"
   | "PERSISTENCE_FAILURE";
@@ -127,6 +128,12 @@ export class SteamResponseError extends AppError {
 export class GameNotFoundError extends AppError {
   constructor(appId: number) {
     super("GAME_NOT_FOUND", `No accessible game was found for app ID ${appId}.`);
+  }
+}
+
+export class TaskNotFoundError extends AppError {
+  constructor() {
+    super("TASK_NOT_FOUND", "No local task was found.");
   }
 }
 

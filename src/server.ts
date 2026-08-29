@@ -8,6 +8,7 @@ import { registerIntelligenceTools } from "./tools/register-intelligence-tools.j
 import { registerMetadataTools } from "./tools/register-metadata-tools.js";
 import { registerSteamTools, type ToolRegistrar } from "./tools/register-steam-tools.js";
 import { registerIntelligencePromptsAndResources } from "./intelligence-mcp-registration.js";
+import { registerTaskResources, registerTaskTools } from "./tools/register-task-tools.js";
 
 export type ServerOverrides = CoreServiceOverrides;
 
@@ -25,6 +26,7 @@ export function createServer(overrides: ServerOverrides = {}): McpServer {
     recommendationPreferencesService,
     playNowRecommendationService,
     backlogPlanService,
+    taskRunner,
   } = createCoreServices(overrides);
   const server = new McpServer({ name: "steam-library-mcp", version: "0.1.0" });
 
@@ -36,6 +38,8 @@ export function createServer(overrides: ServerOverrides = {}): McpServer {
     recommendations: playNowRecommendationService,
     plans: backlogPlanService,
   });
+  registerTaskTools(server as unknown as ToolRegistrar, taskRunner);
+  registerTaskResources(server, taskRunner);
   registerIntelligencePromptsAndResources(server, {
     preferences: recommendationPreferencesService,
     plans: backlogPlanService,

@@ -56,7 +56,13 @@ describe("DashboardApp", () => {
     await screen.findByRole("article", { name: "Celeste" });
     rerender(<DashboardApp />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(fetch.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["/api/library", { method: "GET" }],
+        ["/api/tasks", { method: "GET" }],
+      ]),
+    );
   });
 
   test("uses the official cover URL once and replaces a failed image with an identifiable fallback", () => {

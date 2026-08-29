@@ -2,7 +2,8 @@ import type { SteamGame, SteamLibrary } from "../domain/models.js";
 import type { BacklogPlanService } from "../backlog/backlog-plan-service.js";
 import type { BacklogPlan, BacklogPlanItem } from "../domain/backlog-plan.js";
 import type { GameRecommendationPreference } from "../domain/recommendation-preferences.js";
-import { InputError, TrackerInputError } from "../errors.js";
+import { InputError, TaskNotFoundError, TrackerInputError } from "../errors.js";
+import type { LocalTask, TaskRunner } from "../tasks/task-runner.js";
 import type {
   PlayNowRecommendation,
   PlayNowRecommendationService,
@@ -37,6 +38,7 @@ type DashboardServiceDependencies = Readonly<{
   recommendationPreferencesService: Pick<RecommendationPreferencesService, "get" | "list" | "save">;
   playNowRecommendationService: Pick<PlayNowRecommendationService, "recommend">;
   backlogPlanService: Pick<BacklogPlanService, "create" | "listActive" | "setItemProgress">;
+  taskRunner?: Pick<TaskRunner, "list" | "get" | "cancel">;
 }>;
 
 export type DashboardService = Readonly<{
@@ -54,6 +56,9 @@ export type DashboardService = Readonly<{
     itemId: unknown,
     progress: unknown,
   ): Promise<DashboardPlanItem>;
+  listTasks(): readonly LocalTask[];
+  getTask(id: unknown): LocalTask;
+  cancelTask(id: unknown): LocalTask;
 }>;
 
 export function createDashboardService({
@@ -62,6 +67,7 @@ export function createDashboardService({
   recommendationPreferencesService,
   playNowRecommendationService,
   backlogPlanService,
+  taskRunner,
 }: DashboardServiceDependencies): DashboardService {
   async function project(library: SteamLibrary): Promise<DashboardLibrary> {
     const statuses = await gamingTrackerService.getStatuses();
@@ -130,6 +136,21 @@ export function createDashboardService({
       return toDashboardPlanItem(
         await backlogPlanService.setItemProgress(planId, itemId, progress),
       );
+    },
+    listTasks() {
+      return taskRunner?.list() ?? [];
+    },
+    getTask(id) {
+      assertTaskId(id);
+      const task = taskRunner?.get(id);
+      if (task === undefined) throw new TaskNotFoundError();
+      return task;
+    },
+    cancelTask(id) {
+      assertTaskId(id);
+      const task = taskRunner?.cancel(id);
+      if (task === undefined) throw new TaskNotFoundError();
+      return task;
     },
   });
 }
@@ -265,6 +286,12 @@ function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
 function assertAppId(appId: unknown): asserts appId is number {
   if (typeof appId !== "number" || !Number.isSafeInteger(appId) || appId <= 0) {
     throw new TrackerInputError();
+  }
+}
+
+function assertTaskId(id: unknown): asserts id is string {
+  if (typeof id !== "string" || id.trim().length === 0 || id.length > 255) {
+    throw new InputError("Task ID must be a non-empty string up to 255 characters.");
   }
 }
 
