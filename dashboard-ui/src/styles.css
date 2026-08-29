@@ -26,6 +26,7 @@ button {
   cursor: pointer;
 }
 button:focus-visible,
+a:focus-visible,
 input:focus-visible,
 select:focus-visible {
   outline: 3px solid #d8b56c;
@@ -84,6 +85,41 @@ h2 {
 .sync-button:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+.steam-families-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 1.4rem 0;
+  border: 1px solid #292c35;
+  border-radius: 1rem;
+  background: rgba(18, 20, 28, 0.9);
+  padding: 1.25rem 1.4rem;
+}
+.steam-families-panel h2 {
+  margin-bottom: 0.5rem;
+}
+.steam-families-panel p:not(.eyebrow) {
+  max-width: 50rem;
+  margin-bottom: 0.45rem;
+  color: #c9c7c3;
+  line-height: 1.5;
+}
+.steam-families-panel .steam-families-note {
+  margin-bottom: 0;
+  color: #a7a6aa;
+  font-size: 0.86rem;
+}
+.steam-families-button {
+  flex: 0 0 auto;
+  border: 1px solid #d8b56c;
+  border-radius: 0.55rem;
+  background: #d8b56c;
+  color: #131419;
+  padding: 0.7rem 1rem;
+  font-weight: 750;
+  text-decoration: none;
 }
 .summary-grid {
   display: grid;

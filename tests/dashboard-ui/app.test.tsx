@@ -43,6 +43,33 @@ afterEach(() => {
 });
 
 describe("DashboardApp", () => {
+  test("links to the official Steam Families page and shows missing credential guidance", async () => {
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getSteamFamiliesReconnect: vi.fn().mockResolvedValue({
+        managementUrl: "https://store.steampowered.com/account/familymanagement",
+        credentialStatus: "missing",
+        guidance:
+          "No Steam Families credential is configured. Update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
+      }),
+    };
+
+    render(<DashboardApp api={api} />);
+
+    expect(await screen.findByRole("heading", { name: "Steam Families" })).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Reconnect Steam Families" });
+    expect(link).toHaveAttribute("href", "https://store.steampowered.com/account/familymanagement");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
+    expect(
+      screen.getByText(
+        "No Steam Families credential is configured. Update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   test("uses one default API client for the initial library request across rerenders", async () => {
     const fetch = vi.spyOn(window, "fetch").mockImplementation(() =>
       Promise.resolve(
@@ -56,10 +83,11 @@ describe("DashboardApp", () => {
     await screen.findByRole("article", { name: "Celeste" });
     rerender(<DashboardApp />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     expect(fetch.mock.calls).toEqual(
       expect.arrayContaining([
         ["/api/library", { method: "GET" }],
+        ["/api/steam-families/reconnect", { method: "GET" }],
         ["/api/tasks", { method: "GET" }],
       ]),
     );

@@ -32,7 +32,11 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
   const config = options.config ?? loadConfig();
   const igdbConfig = options.igdbConfig ?? loadIgdbConfig();
   const dashboardService =
-    options.dashboardService ?? createDashboardService(createCoreServices({ ...options, config }));
+    options.dashboardService ??
+    createDashboardService({
+      ...createCoreServices({ ...options, config }),
+      steamFamiliesTokenConfigured: config.steamWebApiToken !== undefined,
+    });
   const server = createDashboardHttpServer({
     dashboardService,
     artworkResolver:

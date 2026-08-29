@@ -21,6 +21,7 @@ import {
   type DashboardMutableStatus,
   type DashboardStatusStats,
   type DashboardStatusUpdate,
+  type DashboardSteamFamiliesReconnect,
   type DashboardTotals,
   type DashboardInsightSnapshot,
   type DashboardPlan,
@@ -39,12 +40,14 @@ type DashboardServiceDependencies = Readonly<{
   playNowRecommendationService: Pick<PlayNowRecommendationService, "recommend">;
   backlogPlanService: Pick<BacklogPlanService, "create" | "listActive" | "setItemProgress">;
   taskRunner?: Pick<TaskRunner, "list" | "get" | "cancel">;
+  steamFamiliesTokenConfigured?: boolean;
 }>;
 
 export type DashboardService = Readonly<{
   getLibrary(): Promise<DashboardLibrary>;
   syncLibrary(): Promise<DashboardLibrary>;
   updateStatus(appId: unknown, status: unknown): Promise<DashboardStatusUpdate>;
+  getSteamFamiliesReconnect(): DashboardSteamFamiliesReconnect;
   getIntelligenceSnapshot(): Promise<DashboardInsightSnapshot>;
   getRecommendations(availableMinutes: unknown): Promise<DashboardRecommendations>;
   getPreference(appId: unknown): DashboardRecommendationPreference;
@@ -68,6 +71,7 @@ export function createDashboardService({
   playNowRecommendationService,
   backlogPlanService,
   taskRunner,
+  steamFamiliesTokenConfigured = false,
 }: DashboardServiceDependencies): DashboardService {
   async function project(library: SteamLibrary): Promise<DashboardLibrary> {
     const statuses = await gamingTrackerService.getStatuses();
@@ -89,6 +93,9 @@ export function createDashboardService({
         mark: toDashboardMarkResult(mark),
         library: await project(await steamService.getLibrary()),
       });
+    },
+    getSteamFamiliesReconnect() {
+      return createSteamFamiliesReconnect(steamFamiliesTokenConfigured);
     },
     async getIntelligenceSnapshot() {
       const [library, preferences, plans] = await Promise.all([
@@ -152,6 +159,16 @@ export function createDashboardService({
       if (task === undefined) throw new TaskNotFoundError();
       return task;
     },
+  });
+}
+
+function createSteamFamiliesReconnect(tokenConfigured: boolean): DashboardSteamFamiliesReconnect {
+  return Object.freeze({
+    managementUrl: "https://store.steampowered.com/account/familymanagement",
+    credentialStatus: tokenConfigured ? "configured" : "missing",
+    guidance: tokenConfigured
+      ? "A Steam Families credential is configured. If the next library sync does not include family games, it may have expired. Open Steam, update STEAM_WEBAPI_TOKEN in your local .env file, and restart the dashboard."
+      : "No Steam Families credential is configured. Open Steam, then update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
   });
 }
 

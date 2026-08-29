@@ -5,6 +5,7 @@ import type {
   DashboardGameStatus,
   DashboardLibrary,
   DashboardMutableStatus,
+  DashboardSteamFamiliesReconnect,
 } from "../../src/dashboard/contracts.js";
 import type { LocalTask } from "../../src/tasks/task-runner.js";
 import { createDashboardApi, type DashboardApi } from "./api.js";
@@ -27,6 +28,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     suppliedApi ?? (defaultApiRef.current ??= createDashboardApi(window.fetch.bind(window)));
   const intelligenceApi = isIntelligenceApi(api);
   const taskApi = isTaskApi(api);
+  const steamFamiliesReconnectApi = isSteamFamiliesReconnectApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
   const [initialError, setInitialError] = useState<string | undefined>();
@@ -37,6 +39,8 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
   const [statusError, setStatusError] = useState<string | undefined>();
+  const [steamFamiliesReconnect, setSteamFamiliesReconnect] =
+    useState<DashboardSteamFamiliesReconnect>();
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -55,6 +59,25 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   useEffect(() => {
     void loadLibrary();
   }, [api]);
+
+  useEffect(() => {
+    if (!steamFamiliesReconnectApi) {
+      setSteamFamiliesReconnect(undefined);
+      return;
+    }
+    let cancelled = false;
+    void api.getSteamFamiliesReconnect().then(
+      (reconnect) => {
+        if (!cancelled) setSteamFamiliesReconnect(reconnect);
+      },
+      () => {
+        if (!cancelled) setSteamFamiliesReconnect(undefined);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [api, steamFamiliesReconnectApi]);
 
   useEffect(() => {
     if (selectedGame !== undefined) closeButtonRef.current?.focus();
@@ -120,6 +143,10 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           {isSyncing ? "Sincronizando biblioteca…" : "Sincronizar biblioteca"}
         </button>
       </header>
+
+      {steamFamiliesReconnect !== undefined && (
+        <SteamFamiliesReconnectPanel reconnect={steamFamiliesReconnect} />
+      )}
 
       {syncError !== undefined && (
         <section className="notice notice-error" role="alert">
@@ -395,6 +422,31 @@ function LibrarySummary({ library }: Readonly<{ library: DashboardLibrary }>) {
         label="Tiempo invertido"
         value={formatPlaytime(library.totals.totalPlaytimeMinutes)}
       />
+    </section>
+  );
+}
+
+function SteamFamiliesReconnectPanel({
+  reconnect,
+}: Readonly<{ reconnect: DashboardSteamFamiliesReconnect }>) {
+  return (
+    <section className="steam-families-panel" aria-labelledby="steam-families-heading">
+      <div>
+        <p className="eyebrow">Account connection</p>
+        <h2 id="steam-families-heading">Steam Families</h2>
+        <p>{reconnect.guidance}</p>
+        <p className="steam-families-note">
+          This dashboard never reads browser cookies, session storage, or credentials.
+        </p>
+      </div>
+      <a
+        className="steam-families-button"
+        href={reconnect.managementUrl}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Reconnect Steam Families
+      </a>
     </section>
   );
 }
@@ -809,4 +861,10 @@ function isTaskApi(
     typeof api.getTask === "function" &&
     typeof api.cancelTask === "function"
   );
+}
+
+function isSteamFamiliesReconnectApi(
+  api: DashboardApi,
+): api is DashboardApi & Required<Pick<DashboardApi, "getSteamFamiliesReconnect">> {
+  return typeof api.getSteamFamiliesReconnect === "function";
 }

@@ -112,6 +112,28 @@ type StatusFixture = Readonly<{
 }>;
 
 describe("DashboardService", () => {
+  test("reports missing and potentially expired Steam Families credential guidance without exposing it", () => {
+    const missing = createDashboardService(createFakes()).getSteamFamiliesReconnect();
+    const configured = createDashboardService({
+      ...createFakes(),
+      steamFamiliesTokenConfigured: true,
+    }).getSteamFamiliesReconnect();
+
+    expect(missing).toEqual({
+      managementUrl: "https://store.steampowered.com/account/familymanagement",
+      credentialStatus: "missing",
+      guidance:
+        "No Steam Families credential is configured. Open Steam, then update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
+    });
+    expect(configured).toEqual({
+      managementUrl: "https://store.steampowered.com/account/familymanagement",
+      credentialStatus: "configured",
+      guidance:
+        "A Steam Families credential is configured. If the next library sync does not include family games, it may have expired. Open Steam, update STEAM_WEBAPI_TOKEN in your local .env file, and restart the dashboard.",
+    });
+    expect(JSON.stringify(configured)).not.toContain("temporary-family-token");
+  });
+
   test("projects local recommendations, plans, and preferences into a browser-safe intelligence snapshot", async () => {
     const fakes = createFakes();
     const service = createDashboardService({

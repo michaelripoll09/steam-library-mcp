@@ -55,6 +55,12 @@ export type DashboardStatusUpdate = Readonly<{
   library: DashboardLibrary;
 }>;
 
+export type DashboardSteamFamiliesReconnect = Readonly<{
+  managementUrl: string;
+  credentialStatus: "missing" | "configured";
+  guidance: string;
+}>;
+
 export type DashboardRecommendationPreference = Readonly<{
   appId: number;
   priority: "normal" | "high";

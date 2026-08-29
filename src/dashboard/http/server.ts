@@ -45,6 +45,7 @@ export type DashboardHttpServerOptions = Readonly<{
     | "getLibrary"
     | "syncLibrary"
     | "updateStatus"
+    | "getSteamFamiliesReconnect"
     | "getIntelligenceSnapshot"
     | "getRecommendations"
     | "getPreference"
@@ -227,6 +228,17 @@ async function handleApi(
       return;
     }
     await runService(response, method, () => dashboardService.syncLibrary(), logger);
+    return;
+  }
+
+  if (pathname === "/api/steam-families/reconnect") {
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    await runService(
+      response,
+      method,
+      () => Promise.resolve(dashboardService.getSteamFamiliesReconnect()),
+      logger,
+    );
     return;
   }
 

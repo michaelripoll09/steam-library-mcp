@@ -63,6 +63,26 @@ describe("dashboard browser API", () => {
     ]);
   });
 
+  test("gets Steam Families reconnect guidance without sending a credential", async () => {
+    const module = await loadApi();
+    expect(module).toBeDefined();
+    if (module === undefined) return;
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(
+      jsonResponse({
+        managementUrl: "https://store.steampowered.com/account/familymanagement",
+        credentialStatus: "missing",
+        guidance: "Update STEAM_WEBAPI_TOKEN locally.",
+      }),
+    );
+    const api = module.createDashboardApi(fetch) as unknown as {
+      getSteamFamiliesReconnect: () => Promise<unknown>;
+    };
+
+    await api.getSteamFamiliesReconnect();
+
+    expect(fetch.mock.calls).toEqual([["/api/steam-families/reconnect", { method: "GET" }]]);
+  });
+
   test("uses dashboard-only intelligence endpoints for reads and explicit local writes", async () => {
     const module = await loadApi();
     expect(module).toBeDefined();

@@ -6,7 +6,11 @@ import { request } from "node:http";
 
 import { InputError, SteamUnavailableError } from "../../src/errors.js";
 import { createDashboardHttpServer } from "../../src/dashboard/http/server.js";
-import type { DashboardLibrary, DashboardStatusUpdate } from "../../src/dashboard/contracts.js";
+import type {
+  DashboardLibrary,
+  DashboardStatusUpdate,
+  DashboardSteamFamiliesReconnect,
+} from "../../src/dashboard/contracts.js";
 import type { ArtworkResolver } from "../../src/dashboard/artwork-resolver.js";
 
 const library: DashboardLibrary = {
@@ -25,6 +29,7 @@ function startServer(
     getLibrary: () => Promise<DashboardLibrary>;
     syncLibrary: () => Promise<DashboardLibrary>;
     updateStatus: (appId: unknown, status: unknown) => Promise<DashboardStatusUpdate>;
+    getSteamFamiliesReconnect?: () => Promise<DashboardSteamFamiliesReconnect>;
   },
   staticRoot: string,
   artworkResolver?: ArtworkResolver,
@@ -118,6 +123,33 @@ describe("dashboard HTTP server", () => {
     expect(response.status).toBe(200);
     expect(service.updateStatus).toHaveBeenCalledWith(10, "playing");
     expect(JSON.parse(response.body)).toEqual(update);
+  });
+
+  test("exposes reconnect guidance without returning a Steam Families credential", async () => {
+    root = await mkdtemp(join(tmpdir(), "dashboard-http-"));
+    await writeFile(join(root, "index.html"), "<!doctype html><title>Dashboard</title>");
+    const reconnect = {
+      managementUrl: "https://store.steampowered.com/account/familymanagement",
+      credentialStatus: "missing" as const,
+      guidance:
+        "No Steam Families credential is configured. Open Steam, then update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
+    };
+    const started = await startServer(
+      {
+        getLibrary: async () => library,
+        syncLibrary: async () => library,
+        updateStatus: async () => update,
+        getSteamFamiliesReconnect: async () => reconnect,
+      },
+      root,
+    );
+    server = started.server;
+
+    const response = await call(started.port, "/api/steam-families/reconnect");
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(reconnect);
+    expect(response.body).not.toContain("temporary-family-token");
   });
 
   test("rejects malformed, oversized, invalid, and unknown API requests safely", async () => {
