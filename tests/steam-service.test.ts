@@ -1,10 +1,17 @@
 import { describe, expect, test, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { TtlCache } from "../src/cache/ttl-cache.js";
 import { loadConfig } from "../src/config.js";
 import { GameNotFoundError, InputError, SteamUnavailableError } from "../src/errors.js";
 import { createSteamService } from "../src/services/steam-service.js";
+import type { SteamLibrary } from "../src/domain/models.js";
 import type { SteamApiClient } from "../src/steam/client.js";
+import type { ManualLibraryRepository } from "../src/manual-library/manual-library.js";
+import { SqliteManualLibraryRepository } from "../src/manual-library/manual-library.js";
+import { openTrackerDatabase } from "../src/tracker/sqlite/database.js";
 
 const config = loadConfig({
   STEAM_API_KEY: "secret-key",
@@ -44,6 +51,34 @@ function createClient(overrides: Partial<SteamApiClient> = {}): SteamApiClient {
 }
 
 describe("SteamService", () => {
+  test("does not rewrite or invalidate the library for an unchanged manual entry", async () => {
+    const entry = {
+      appId: 413150,
+      name: "Stardew Valley",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const repository: ManualLibraryRepository = {
+      list: vi.fn(() => [entry]),
+      upsert: vi.fn(),
+      remove: vi.fn(),
+    };
+    const cache = new TtlCache<SteamLibrary>();
+    const steamClient = createClient();
+    const service = createSteamService({
+      config,
+      steamClient,
+      cache,
+      clock: { now: () => Date.parse("2026-01-02T00:00:00.000Z") },
+      manualRepository: repository,
+      publicGameLookup: vi.fn(async () => ({ appId: 413150, name: "Stardew Valley" })),
+    });
+    await service.getLibrary();
+    await expect(service.addManualCollection?.("413150")).resolves.toEqual(entry);
+    expect(repository.upsert).not.toHaveBeenCalled();
+    await service.getLibrary();
+    expect(steamClient.getOwnedGames).toHaveBeenCalledTimes(1);
+  });
   test("normalizes library games and reuses a fresh SteamID-keyed cache entry", async () => {
     let now = 1_700_000_000_000;
     const steamClient = createClient();
@@ -81,7 +116,7 @@ describe("SteamService", () => {
         },
       ],
     });
-    expect(second).toBe(first);
+    expect(second).toEqual(first);
     expect(steamClient.getOwnedGames).toHaveBeenCalledTimes(1);
 
     now += config.libraryCacheTtlMs;
@@ -144,7 +179,7 @@ describe("SteamService", () => {
 
     const cached = await service.getLibrary();
     await expect(service.refreshLibrary()).rejects.toBeInstanceOf(SteamUnavailableError);
-    await expect(service.getLibrary()).resolves.toBe(cached);
+    await expect(service.getLibrary()).resolves.toEqual(cached);
     expect(getOwnedGames).toHaveBeenCalledTimes(2);
   });
 
@@ -245,136 +280,82 @@ describe("SteamService", () => {
       recentlyPlayedGames: 1,
     });
   });
-  test("merges playable Steam Families games into the accessible library without relabeling owned games", async () => {
-    const familyConfig = loadConfig({
-      STEAM_API_KEY: "secret-key",
-      STEAM_ID: "76561198000000000",
-      STEAM_WEBAPI_TOKEN: "temporary-family-token",
-    });
-    const getFamilyGames = vi.fn(async () => [
+  test("merges persistent manual games with owned games while owned data wins duplicates", async () => {
+    const manualGames = [
       {
-        appid: 620,
-        name: "Portal 2",
-        owner_steamids: [familyConfig.steamId],
-        exclude_reason: 0,
-        rt_playtime: 135,
+        appId: 413150,
+        name: "Stardew Valley",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
       },
       {
-        appid: 1196590,
-        name: "Resident Evil Village",
-        owner_steamids: ["76561198000000001"],
-        exclude_reason: 0,
-        rt_playtime: 285,
+        appId: 620,
+        name: "Old Portal 2",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
       },
-      {
-        appid: 999,
-        name: "Unavailable shared game",
-        owner_steamids: ["76561198000000001"],
-        exclude_reason: 1,
-        rt_playtime: 0,
-      },
-    ]);
+    ];
     const service = createSteamService({
-      config: familyConfig,
-      steamClient: Object.assign(createClient(), { getFamilyGames }) as SteamApiClient,
+      config,
+      steamClient: createClient(),
       cache: new TtlCache(),
       clock: { now: () => 0 },
+      manualRepository: { list: vi.fn(() => manualGames), upsert: vi.fn(), remove: vi.fn() },
     });
 
     await expect(service.getLibrary()).resolves.toMatchObject({
       games: [
-        { appId: 620, accessType: "owned", isPlayable: true },
+        { appId: 620, accessType: "owned", isPlayable: true, playtimeMinutes: 135 },
         { appId: 440, accessType: "owned", isPlayable: true },
-        { appId: 1196590, accessType: "family_shared", isPlayable: true },
-        { appId: 999, accessType: "family_shared", isPlayable: false },
-      ],
-    });
-  });
-
-  test("falls back to owned games when the optional family synchronization fails", async () => {
-    const familyConfig = loadConfig({
-      STEAM_API_KEY: "secret-key",
-      STEAM_ID: "76561198000000000",
-      STEAM_WEBAPI_TOKEN: "temporary-family-token",
-    });
-    const service = createSteamService({
-      config: familyConfig,
-      steamClient: Object.assign(createClient(), {
-        getFamilyGames: vi.fn(async () => {
-          throw new SteamUnavailableError(new Error("temporary-family-token"));
-        }),
-      }) as SteamApiClient,
-      cache: new TtlCache(),
-      clock: { now: () => 0 },
-    });
-
-    await expect(service.getLibrary()).resolves.toMatchObject({
-      games: [
-        { appId: 620, accessType: "owned" },
-        { appId: 440, accessType: "owned" },
-      ],
-    });
-  });
-
-  test("exposes the last played date for a family-shared game", async () => {
-    const familyConfig = loadConfig({
-      STEAM_API_KEY: "secret-key",
-      STEAM_ID: "76561198000000000",
-      STEAM_WEBAPI_TOKEN: "temporary-family-token",
-    });
-    const service = createSteamService({
-      config: familyConfig,
-      steamClient: Object.assign(
-        createClient({ getOwnedGames: vi.fn(async () => ({ response: { games: [] } })) }),
         {
-          getFamilyGames: vi.fn(async () => [
-            {
-              appid: 1196590,
-              name: "Resident Evil Village",
-              owner_steamids: ["76561198000000001"],
-              exclude_reason: 0,
-              rt_playtime: 285,
-              rt_last_played: 1_700_000_000,
-            },
-          ]),
+          appId: 413150,
+          name: "Stardew Valley",
+          accessType: "manual",
+          isPlayable: false,
+          playtimeMinutes: 0,
+          manualCollection: true,
         },
-      ) as SteamApiClient,
-      cache: new TtlCache(),
-      clock: { now: () => 0 },
-    });
-
-    await expect(service.getGame(1196590)).resolves.toMatchObject({
-      accessType: "family_shared",
-      lastPlayedAt: "2023-11-14T22:13:20.000Z",
+      ],
     });
   });
 
-  test("retains an owned game supplied only by the Steam Families catalog", async () => {
-    const familyConfig = loadConfig({
-      STEAM_API_KEY: "secret-key",
-      STEAM_ID: "76561198000000000",
-      STEAM_WEBAPI_TOKEN: "temporary-family-token",
-    });
-    const service = createSteamService({
-      config: familyConfig,
-      steamClient: Object.assign(createClient(), {
-        getFamilyGames: vi.fn(async () => [
-          {
-            appid: 730,
-            name: "Counter-Strike 2",
-            owner_steamids: [familyConfig.steamId],
-            exclude_reason: 0,
-            rt_playtime: 0,
-          },
-        ]),
-      }) as SteamApiClient,
+  test("merges the latest manual collection into each independently cached library", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "steam-library-parity-"));
+    const databasePath = join(directory, "tracker.sqlite");
+    const dashboardDatabase = openTrackerDatabase(databasePath);
+    const mcpDatabase = openTrackerDatabase(databasePath);
+    const dashboardService = createSteamService({
+      config,
+      steamClient: createClient(),
       cache: new TtlCache(),
       clock: { now: () => 0 },
+      manualRepository: new SqliteManualLibraryRepository(dashboardDatabase),
+      publicGameLookup: vi.fn(async () => ({ appId: 413150, name: "Stardew Valley" })),
+    });
+    const mcpService = createSteamService({
+      config,
+      steamClient: createClient(),
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+      manualRepository: new SqliteManualLibraryRepository(mcpDatabase),
+      publicGameLookup: vi.fn(async () => ({ appId: 413150, name: "Stardew Valley" })),
     });
 
-    await expect(service.getGame(730)).resolves.toMatchObject({
-      accessType: "owned",
-      isPlayable: true,
-    });
+    try {
+      await mcpService.getLibrary();
+      await dashboardService.addManualCollection?.("413150");
+      await expect(mcpService.getLibrary()).resolves.toMatchObject({
+        games: expect.arrayContaining([
+          expect.objectContaining({ appId: 413150, accessType: "manual" }),
+        ]),
+      });
+      await expect(mcpService.getLibraryStats()).resolves.toMatchObject({ totalGames: 3 });
+      await dashboardService.removeManualCollection?.(413150);
+      await expect(mcpService.searchLibrary("Stardew")).resolves.toEqual([]);
+    } finally {
+      dashboardDatabase.close();
+      mcpDatabase.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

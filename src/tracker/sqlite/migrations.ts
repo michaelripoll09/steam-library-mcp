@@ -143,6 +143,18 @@ export const MIGRATIONS = Object.freeze([
       "CREATE INDEX local_tasks_polling ON local_tasks (created_at DESC)",
     ],
   }),
+  createMigration({
+    version: 7,
+    name: "create-manual-library-games",
+    statements: [
+      `CREATE TABLE manual_library_games (
+        app_id INTEGER PRIMARY KEY CHECK (app_id > 0),
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (

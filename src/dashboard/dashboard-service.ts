@@ -10,6 +10,7 @@ import type {
 } from "../recommendations/play-now-recommendation-service.js";
 import type { RecommendationPreferencesService } from "../recommendations/recommendation-preferences-service.js";
 import type { SteamService } from "../services/steam-service.js";
+import type { ManualLibraryGame } from "../manual-library/manual-library.js";
 import type { GamingTrackerService, TrackerMarkResult } from "../tracker/gaming-tracker-service.js";
 import type { TrackerGame } from "../domain/tracker.js";
 import {
@@ -21,7 +22,6 @@ import {
   type DashboardMutableStatus,
   type DashboardStatusStats,
   type DashboardStatusUpdate,
-  type DashboardSteamFamiliesReconnect,
   type DashboardTotals,
   type DashboardInsightSnapshot,
   type DashboardPlan,
@@ -34,20 +34,29 @@ import {
 } from "./contracts.js";
 
 type DashboardServiceDependencies = Readonly<{
-  steamService: Pick<SteamService, "getLibrary" | "refreshLibrary" | "getLibraryStats">;
+  steamService: Pick<
+    SteamService,
+    | "getLibrary"
+    | "refreshLibrary"
+    | "getLibraryStats"
+    | "getManualCollection"
+    | "addManualCollection"
+    | "removeManualCollection"
+  >;
   gamingTrackerService: Pick<GamingTrackerService, "getStatuses" | "mark">;
   recommendationPreferencesService: Pick<RecommendationPreferencesService, "get" | "list" | "save">;
   playNowRecommendationService: Pick<PlayNowRecommendationService, "recommend">;
   backlogPlanService: Pick<BacklogPlanService, "create" | "listActive" | "setItemProgress">;
   taskRunner?: Pick<TaskRunner, "list" | "get" | "cancel">;
-  steamFamiliesTokenConfigured?: boolean;
 }>;
 
 export type DashboardService = Readonly<{
   getLibrary(): Promise<DashboardLibrary>;
   syncLibrary(): Promise<DashboardLibrary>;
   updateStatus(appId: unknown, status: unknown): Promise<DashboardStatusUpdate>;
-  getSteamFamiliesReconnect(): DashboardSteamFamiliesReconnect;
+  getManualCollection(): readonly ManualLibraryGame[];
+  addManualCollection(steam: unknown): Promise<ManualLibraryGame>;
+  removeManualCollection(appId: unknown): boolean;
   getIntelligenceSnapshot(): Promise<DashboardInsightSnapshot>;
   getRecommendations(availableMinutes: unknown): Promise<DashboardRecommendations>;
   getPreference(appId: unknown): DashboardRecommendationPreference;
@@ -71,7 +80,6 @@ export function createDashboardService({
   playNowRecommendationService,
   backlogPlanService,
   taskRunner,
-  steamFamiliesTokenConfigured = false,
 }: DashboardServiceDependencies): DashboardService {
   async function project(library: SteamLibrary): Promise<DashboardLibrary> {
     const statuses = await gamingTrackerService.getStatuses();
@@ -94,8 +102,19 @@ export function createDashboardService({
         library: await project(await steamService.getLibrary()),
       });
     },
-    getSteamFamiliesReconnect() {
-      return createSteamFamiliesReconnect(steamFamiliesTokenConfigured);
+    getManualCollection() {
+      return steamService.getManualCollection?.() ?? [];
+    },
+    addManualCollection(steam) {
+      if (steamService.addManualCollection === undefined)
+        throw new InputError("Manual collections are unavailable.");
+      return steamService.addManualCollection(steam);
+    },
+    removeManualCollection(appId) {
+      assertAppId(appId);
+      if (steamService.removeManualCollection === undefined)
+        throw new InputError("Manual collections are unavailable.");
+      return steamService.removeManualCollection(appId);
     },
     async getIntelligenceSnapshot() {
       const [library, preferences, plans] = await Promise.all([
@@ -159,16 +178,6 @@ export function createDashboardService({
       if (task === undefined) throw new TaskNotFoundError();
       return task;
     },
-  });
-}
-
-function createSteamFamiliesReconnect(tokenConfigured: boolean): DashboardSteamFamiliesReconnect {
-  return Object.freeze({
-    managementUrl: "https://store.steampowered.com/account/familymanagement",
-    credentialStatus: tokenConfigured ? "configured" : "missing",
-    guidance: tokenConfigured
-      ? "A Steam Families credential is configured. If the next library sync does not include family games, it may have expired. Open Steam, update STEAM_WEBAPI_TOKEN in your local .env file, and restart the dashboard."
-      : "No Steam Families credential is configured. Open Steam, then update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
   });
 }
 
@@ -263,6 +272,7 @@ function toDashboardGame(game: SteamGame, status: DashboardGameStatus): Dashboar
     coverUrl: `/api/artwork/${game.appId}`,
     accessType: game.accessType ?? "owned",
     isPlayable: game.isPlayable ?? true,
+    ...(game.manualCollection === true ? { manualCollection: true } : {}),
     playtimeMinutes: game.playtimeMinutes,
     ...(game.recentPlaytimeMinutes === undefined
       ? {}

@@ -5,8 +5,9 @@ import { describe, expect, test, vi } from "vitest";
 
 import { createArtworkResolver } from "../../src/dashboard/artwork-resolver.js";
 
+const jpeg = (bytes: readonly number[] = []) => [0xff, 0xd8, 0xff, ...bytes];
 const image = (bytes = [1, 2, 3]) =>
-  new Response(new Uint8Array(bytes), { headers: { "content-type": "image/jpeg" } });
+  new Response(new Uint8Array(jpeg(bytes)), { headers: { "content-type": "image/jpeg" } });
 const appDetails = (appId: number, success = false, headerImage?: string) =>
   new Response(
     JSON.stringify({
@@ -43,7 +44,7 @@ describe("artwork resolver", () => {
       });
       expect(fetch).toHaveBeenCalledTimes(1);
       await expect(readFile(join(directory, "3527290.img"))).resolves.toEqual(
-        Buffer.from([1, 2, 3]),
+        Buffer.from(jpeg([1, 2, 3])),
       );
       await expect(readFile(join(directory, "3527290.json"), "utf8")).resolves.toContain(
         '"orientation":"portrait"',
@@ -293,7 +294,9 @@ describe("artwork resolver", () => {
 
       await expect(resolver.resolve(480)).resolves.toMatchObject({ orientation: "portrait" });
       expect(fetch).toHaveBeenCalled();
-      await expect(readFile(join(directory, "480.img"))).resolves.toEqual(Buffer.from([4, 8, 0]));
+      await expect(readFile(join(directory, "480.img"))).resolves.toEqual(
+        Buffer.from(jpeg([4, 8, 0])),
+      );
       await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toContain('"version":4');
     });
   });
@@ -313,7 +316,7 @@ describe("artwork resolver", () => {
 
       await expect(resolver.resolve(4513840)).resolves.toMatchObject({ orientation: "portrait" });
       await expect(readFile(join(directory, "4513840.img"))).resolves.toEqual(
-        Buffer.from([4, 5, 1]),
+        Buffer.from(jpeg([4, 5, 1])),
       );
       await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
         '"version":4',
@@ -383,7 +386,7 @@ describe("artwork resolver", () => {
         "https://cdn.cloudflare.steamstatic.com/steam/apps/4513840/library_600x900.jpg",
       );
       await expect(readFile(join(directory, "4513840.img"))).resolves.toEqual(
-        Buffer.from([4, 5, 1]),
+        Buffer.from(jpeg([4, 5, 1])),
       );
       await expect(readFile(join(directory, "4513840.json"), "utf8")).resolves.toContain(
         '"orientation":"portrait"',
@@ -749,7 +752,7 @@ describe("artwork resolver", () => {
         orientation: "portrait",
       });
       await expect(readFile(join(directory, `${appId}.img`))).resolves.toEqual(
-        Buffer.from([1, 5, 1]),
+        Buffer.from(jpeg([1, 5, 1])),
       );
       await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
         '"identity":"steam-app"',
@@ -933,7 +936,9 @@ describe("artwork resolver", () => {
         orientation: "portrait",
       });
       expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([pinnedCover]);
-      await expect(readFile(join(directory, "480.img"))).resolves.toEqual(Buffer.from([4, 8, 0]));
+      await expect(readFile(join(directory, "480.img"))).resolves.toEqual(
+        Buffer.from(jpeg([4, 8, 0])),
+      );
       await expect(readFile(join(directory, "480.json"), "utf8")).resolves.toEqual(
         JSON.stringify({
           version: 4,
@@ -1316,7 +1321,7 @@ describe("artwork resolver", () => {
           orientation: "portrait",
         });
         await expect(readFile(join(directory, `${override.appId}.img`))).resolves.toEqual(
-          Buffer.from([override.appId % 256]),
+          Buffer.from(jpeg([override.appId % 256])),
         );
         await expect(
           readFile(join(directory, `${override.appId}.json`), "utf8"),
@@ -1387,7 +1392,7 @@ describe("artwork resolver", () => {
           orientation: "portrait",
         });
         await expect(readFile(join(directory, `${appId}.img`))).resolves.toEqual(
-          Buffer.from([5, 1, 5]),
+          Buffer.from(jpeg([5, 1, 5])),
         );
         await expect(readFile(join(directory, `${appId}.json`), "utf8")).resolves.toContain(
           '"source":"igdb-curated-override"',
@@ -1436,7 +1441,7 @@ describe("artwork resolver", () => {
       await expect(resolver.resolve(appId)).resolves.toMatchObject({ orientation: "portrait" });
       expect(fetch).toHaveBeenCalledTimes(1);
       await expect(readFile(join(directory, `${appId}.img`))).resolves.toEqual(
-        Buffer.from([5, 1, 5]),
+        Buffer.from(jpeg([5, 1, 5])),
       );
     });
   });
@@ -1470,6 +1475,146 @@ describe("artwork resolver", () => {
     });
   });
 
+  test.each([
+    { contentType: "image/jpeg", bytes: [0xff, 0xd8, 0xff, 0xe0] },
+    { contentType: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+    {
+      contentType: "image/webp",
+      bytes: [0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50],
+    },
+  ])(
+    "caches artwork only when the $contentType signature matches",
+    async ({ contentType, bytes }) => {
+      await withDirectory(async (directory) => {
+        const fetch = vi.fn<typeof globalThis.fetch>(
+          async () =>
+            new Response(new Uint8Array(bytes), { headers: { "content-type": contentType } }),
+        );
+        const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+        await expect(resolver.resolve(3527290)).resolves.toMatchObject({ contentType });
+        await expect(readFile(join(directory, "3527290.img"))).resolves.toEqual(Buffer.from(bytes));
+      });
+    },
+  );
+
+  test("rejects artwork with a mismatched or unknown image signature without caching it", async () => {
+    await withDirectory(async (directory) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        async () =>
+          new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+            headers: { "content-type": "image/jpeg" },
+          }),
+      );
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(3527290)).resolves.toBeUndefined();
+      await expect(readFile(join(directory, "3527290.img"))).rejects.toThrow();
+      await expect(readFile(join(directory, "3527290.json"))).rejects.toThrow();
+    });
+  });
+
+  test("rejects unsupported artwork content types without caching them", async () => {
+    await withDirectory(async (directory) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        async () =>
+          new Response(new Uint8Array([0x47, 0x49, 0x46, 0x38]), {
+            headers: { "content-type": "image/gif" },
+          }),
+      );
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(3527290)).resolves.toBeUndefined();
+      await expect(readFile(join(directory, "3527290.img"))).rejects.toThrow();
+      await expect(readFile(join(directory, "3527290.json"))).rejects.toThrow();
+    });
+  });
+
+  test("aborts a stalled artwork download after the standard request timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      await withDirectory(async (directory) => {
+        let notifyFetchStarted: (() => void) | undefined;
+        const fetchStarted = new Promise<void>((resolve) => {
+          notifyFetchStarted = resolve;
+        });
+        let signal: AbortSignal | undefined;
+        const fetch = vi.fn<typeof globalThis.fetch>((_input, options) => {
+          signal ??= options?.signal ?? undefined;
+          notifyFetchStarted?.();
+          if (signal === undefined || signal.aborted)
+            return Promise.resolve(new Response(null, { status: 404 }));
+          return new Promise<Response>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          });
+        });
+        const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+        const resolution = resolver.resolve(3527290);
+
+        await fetchStarted;
+        expect(signal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(10_000);
+
+        expect(signal?.aborted).toBe(true);
+        await expect(resolution).resolves.toBeUndefined();
+        await expect(readFile(join(directory, "3527290.img"))).rejects.toThrow();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("aborts and cancels an artwork body that stalls after response headers arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      await withDirectory(async (directory) => {
+        let notifyFetchStarted: (() => void) | undefined;
+        const fetchStarted = new Promise<void>((resolve) => {
+          notifyFetchStarted = resolve;
+        });
+        let signal: AbortSignal | undefined;
+        let streamCanceled = false;
+        let notifyBodyRead: (() => void) | undefined;
+        const bodyRead = new Promise<void>((resolve) => {
+          notifyBodyRead = resolve;
+        });
+        const body = new ReadableStream<Uint8Array>(
+          {
+            start(controller) {
+              controller.enqueue(new Uint8Array(jpeg()));
+            },
+            pull() {
+              notifyBodyRead?.();
+            },
+            cancel() {
+              streamCanceled = true;
+            },
+          },
+          { highWaterMark: 0 },
+        );
+        const fetch = vi.fn<typeof globalThis.fetch>((_input, options) => {
+          signal ??= options?.signal ?? undefined;
+          notifyFetchStarted?.();
+          return Promise.resolve(new Response(body, { headers: { "content-type": "image/jpeg" } }));
+        });
+        const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+        const resolution = resolver.resolve(3527290);
+
+        await fetchStarted;
+        await bodyRead;
+        expect(vi.getTimerCount()).toBe(1);
+        await vi.runAllTimersAsync();
+
+        expect(signal?.aborted).toBe(true);
+        await expect(resolution).resolves.toBeUndefined();
+        expect(streamCanceled).toBe(true);
+        await expect(readFile(join(directory, "3527290.img"))).rejects.toThrow();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("caps the artwork cache and evicts the lowest app ID deterministically", async () => {
     await withDirectory(async (directory) => {
       const cacheEntries = Array.from({ length: 128 }, (_, index) => index + 1);
@@ -1487,7 +1632,7 @@ describe("artwork resolver", () => {
 
       await expect(resolver.resolve(999)).resolves.toBeDefined();
       await expect(readFile(join(directory, "1.img"))).rejects.toThrow();
-      await expect(readFile(join(directory, "999.img"))).resolves.toEqual(Buffer.from([9]));
+      await expect(readFile(join(directory, "999.img"))).resolves.toEqual(Buffer.from(jpeg([9])));
     });
   });
 });

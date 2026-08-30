@@ -4,6 +4,8 @@ import type { SteamService } from "../services/steam-service.js";
 import { AppError, InputError, SteamUnavailableError } from "../errors.js";
 import {
   emptyInputSchema,
+  manualCollectionAddInputSchema,
+  manualCollectionRemoveInputSchema,
   recentGamesInputSchema,
   searchLibraryInputSchema,
   steamGameInputSchema,
@@ -33,7 +35,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     "steam_get_library",
     {
       description:
-        "Get the configured user's normalized accessible Steam library, including Steam Families games when configured.",
+        "Get the configured user's normalized Steam library, including their persistent manual collection.",
       inputSchema: emptyInputSchema.shape,
     },
     createHandler(emptyInputSchema, () => service.getLibrary()),
@@ -41,7 +43,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_search_library",
     {
-      description: "Search the configured user's accessible Steam library by game name.",
+      description: "Search the configured user's Steam library by game name.",
       inputSchema: searchLibraryInputSchema.shape,
     },
     createHandler(searchLibraryInputSchema, ({ query }) => service.searchLibrary(query)),
@@ -49,7 +51,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_get_game",
     {
-      description: "Get one normalized accessible Steam game by app ID.",
+      description: "Get one normalized Steam game by app ID.",
       inputSchema: steamGameInputSchema.shape,
     },
     createHandler(steamGameInputSchema, ({ appId }) => service.getGame(appId)),
@@ -66,11 +68,59 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
   server.registerTool(
     "steam_get_library_stats",
     {
-      description: "Get aggregate statistics for the configured user's accessible Steam library.",
+      description: "Get aggregate statistics for the configured user's Steam library.",
       inputSchema: emptyInputSchema.shape,
     },
     createHandler(emptyInputSchema, () => service.getLibraryStats()),
   );
+  server.registerTool(
+    "steam_get_manual_collection",
+    {
+      description: "List the persistent manual Steam collection.",
+      inputSchema: emptyInputSchema.shape,
+      annotations: { readOnlyHint: true },
+    },
+    createHandler(emptyInputSchema, async () => manualCollection(service).getManualCollection()),
+  );
+  server.registerTool(
+    "steam_add_manual_collection",
+    {
+      description: "Look up and add a public Steam game to the persistent manual collection.",
+      inputSchema: manualCollectionAddInputSchema.shape,
+    },
+    createHandler(manualCollectionAddInputSchema, async ({ steam }) =>
+      manualCollection(service).addManualCollection(steam),
+    ),
+  );
+  server.registerTool(
+    "steam_remove_manual_collection",
+    {
+      description: "Remove a game from the persistent manual Steam collection by app ID.",
+      inputSchema: manualCollectionRemoveInputSchema.shape,
+    },
+    createHandler(manualCollectionRemoveInputSchema, async ({ appId }) =>
+      manualCollection(service).removeManualCollection(appId),
+    ),
+  );
+}
+
+function manualCollection(
+  service: SteamService,
+): Required<
+  Pick<SteamService, "getManualCollection" | "addManualCollection" | "removeManualCollection">
+> {
+  if (
+    service.getManualCollection === undefined ||
+    service.addManualCollection === undefined ||
+    service.removeManualCollection === undefined
+  ) {
+    throw new InputError("Manual collections are unavailable.");
+  }
+  return {
+    getManualCollection: service.getManualCollection,
+    addManualCollection: service.addManualCollection,
+    removeManualCollection: service.removeManualCollection,
+  };
 }
 
 function createHandler<TInput>(

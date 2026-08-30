@@ -21,6 +21,14 @@ export const steamGameInputSchema = z
   })
   .strict();
 
+export const manualCollectionAddInputSchema = z
+  .object({
+    steam: z.string().trim().min(1, "Steam app ID or store URL must not be blank."),
+  })
+  .strict();
+
+export const manualCollectionRemoveInputSchema = steamGameInputSchema;
+
 export const metadataQueryInputSchema = z
   .object({
     genres: z.array(z.string().trim().min(1)).min(1).optional(),

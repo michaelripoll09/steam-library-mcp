@@ -5,10 +5,10 @@ import type {
   DashboardGameStatus,
   DashboardLibrary,
   DashboardMutableStatus,
-  DashboardSteamFamiliesReconnect,
 } from "../../src/dashboard/contracts.js";
 import type { LocalTask } from "../../src/tasks/task-runner.js";
 import { createDashboardApi, type DashboardApi } from "./api.js";
+import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
 import { IntelligencePanel } from "./intelligence-panel.js";
 import {
   clearLibraryFilters,
@@ -28,7 +28,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     suppliedApi ?? (defaultApiRef.current ??= createDashboardApi(window.fetch.bind(window)));
   const intelligenceApi = isIntelligenceApi(api);
   const taskApi = isTaskApi(api);
-  const steamFamiliesReconnectApi = isSteamFamiliesReconnectApi(api);
+  const manualCollectionApi = isManualCollectionApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
   const [initialError, setInitialError] = useState<string | undefined>();
@@ -39,8 +39,10 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
   const [statusError, setStatusError] = useState<string | undefined>();
-  const [steamFamiliesReconnect, setSteamFamiliesReconnect] =
-    useState<DashboardSteamFamiliesReconnect>();
+  const [manualCollection, setManualCollection] = useState<readonly ManualLibraryGame[]>([]);
+  const [manualSteam, setManualSteam] = useState("");
+  const [manualError, setManualError] = useState<string | undefined>();
+  const [isSavingManual, setIsSavingManual] = useState(false);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -61,23 +63,36 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   }, [api]);
 
   useEffect(() => {
-    if (!steamFamiliesReconnectApi) {
-      setSteamFamiliesReconnect(undefined);
-      return;
+    if (!manualCollectionApi) return;
+    void api.getManualCollection().then(setManualCollection, () => setManualCollection([]));
+  }, [api, manualCollectionApi]);
+
+  const addManual = async () => {
+    if (!manualCollectionApi) return;
+    setIsSavingManual(true);
+    setManualError(undefined);
+    try {
+      await api.addManualCollection(manualSteam);
+      setManualSteam("");
+      setManualCollection(await api.getManualCollection());
+      setLibrary(await api.getLibrary());
+    } catch (error) {
+      setManualError(errorMessage(error));
+    } finally {
+      setIsSavingManual(false);
     }
-    let cancelled = false;
-    void api.getSteamFamiliesReconnect().then(
-      (reconnect) => {
-        if (!cancelled) setSteamFamiliesReconnect(reconnect);
-      },
-      () => {
-        if (!cancelled) setSteamFamiliesReconnect(undefined);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [api, steamFamiliesReconnectApi]);
+  };
+  const removeManual = async (appId: number) => {
+    if (!manualCollectionApi) return;
+    setManualError(undefined);
+    try {
+      await api.removeManualCollection(appId);
+      setManualCollection(await api.getManualCollection());
+      setLibrary(await api.getLibrary());
+    } catch (error) {
+      setManualError(errorMessage(error));
+    }
+  };
 
   useEffect(() => {
     if (selectedGame !== undefined) closeButtonRef.current?.focus();
@@ -144,8 +159,16 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         </button>
       </header>
 
-      {steamFamiliesReconnect !== undefined && (
-        <SteamFamiliesReconnectPanel reconnect={steamFamiliesReconnect} />
+      {manualCollectionApi && (
+        <ManualCollectionPanel
+          collection={manualCollection}
+          steam={manualSteam}
+          error={manualError}
+          saving={isSavingManual}
+          onSteamChange={setManualSteam}
+          onAdd={() => void addManual()}
+          onRemove={(appId) => void removeManual(appId)}
+        />
       )}
 
       {syncError !== undefined && (
@@ -426,27 +449,73 @@ function LibrarySummary({ library }: Readonly<{ library: DashboardLibrary }>) {
   );
 }
 
-function SteamFamiliesReconnectPanel({
-  reconnect,
-}: Readonly<{ reconnect: DashboardSteamFamiliesReconnect }>) {
+function ManualCollectionPanel({
+  collection,
+  steam,
+  error,
+  saving,
+  onSteamChange,
+  onAdd,
+  onRemove,
+}: Readonly<{
+  collection: readonly ManualLibraryGame[];
+  steam: string;
+  error: string | undefined;
+  saving: boolean;
+  onSteamChange: (value: string) => void;
+  onAdd: () => void;
+  onRemove: (appId: number) => void;
+}>) {
   return (
-    <section className="steam-families-panel" aria-labelledby="steam-families-heading">
+    <section className="manual-collection-panel" aria-labelledby="manual-collection-heading">
       <div>
-        <p className="eyebrow">Account connection</p>
-        <h2 id="steam-families-heading">Steam Families</h2>
-        <p>{reconnect.guidance}</p>
-        <p className="steam-families-note">
-          This dashboard never reads browser cookies, session storage, or credentials.
-        </p>
+        <p className="eyebrow">Colección manual</p>
+        <h2 id="manual-collection-heading">Juegos agregados manualmente</h2>
+        <p>Esta lista no confirma que Steam te dé acceso ni que el juego esté disponible ahora.</p>
       </div>
-      <a
-        className="steam-families-button"
-        href={reconnect.managementUrl}
-        target="_blank"
-        rel="noreferrer"
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAdd();
+        }}
       >
-        Reconnect Steam Families
-      </a>
+        <label htmlFor="manual-steam-input">URL de Steam o AppID</label>
+        <div className="manual-collection-form">
+          <input
+            id="manual-steam-input"
+            value={steam}
+            onChange={(event) => onSteamChange(event.target.value)}
+            placeholder="https://store.steampowered.com/app/…"
+            aria-describedby={error === undefined ? undefined : "manual-collection-error"}
+          />
+          <button type="submit" disabled={saving}>
+            {saving ? "Agregando…" : "Agregar"}
+          </button>
+        </div>
+      </form>
+      {error !== undefined && (
+        <p id="manual-collection-error" className="status-error" role="alert">
+          {error}
+        </p>
+      )}
+      {collection.length > 0 && (
+        <ul className="manual-collection-list">
+          {collection.map((game) => (
+            <li key={game.appId}>
+              <span>
+                {game.name} <small>· AppID {game.appId}</small>
+              </span>
+              <button
+                type="button"
+                onClick={() => onRemove(game.appId)}
+                aria-label={`Quitar ${game.name}`}
+              >
+                Quitar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -491,7 +560,7 @@ function LibraryToolbar({
         onChange={(accessType) =>
           onChange({ ...filters, accessType: accessType as LibraryFilters["accessType"] })
         }
-        options={["all", "owned", "family_shared"]}
+        options={["all", "owned", "manual"]}
       />
       <FilterSelect
         label="Historial de juego"
@@ -644,7 +713,7 @@ function GameCard({
           <strong className="game-card-title">{game.name}</strong>
           <span className="game-card-meta">
             {formatPlaytime(game.playtimeMinutes)} jugado ·{" "}
-            {game.accessType === "owned" ? "Propio" : "Compartido en familia"}
+            {game.accessType === "owned" ? "Propio" : "Manual"}
           </span>
         </span>
       </button>
@@ -757,11 +826,14 @@ function GameDetails({
         </button>
         <CoverImage game={game} />
         <div className="details-copy">
-          <p className="eyebrow">
-            {game.accessType === "owned" ? "Juego propio" : "Compartido en familia"}
-          </p>
+          <p className="eyebrow">{game.accessType === "owned" ? "Juego propio" : "Juego manual"}</p>
           <h2 id="game-details-title">{game.name}</h2>
           <p>{formatPlaytime(game.playtimeMinutes)} jugado</p>
+          {game.manualCollection && (
+            <p className="manual-game-notice">
+              Administrado manualmente: no confirma acceso ni disponibilidad actual en Steam.
+            </p>
+          )}
           {game.lastPlayedAt !== undefined && (
             <p>Última vez jugado: {formatLastPlayed(game.lastPlayedAt)}</p>
           )}
@@ -817,7 +889,7 @@ function formatLabel(value: string): string {
       dropped: "Abandonado",
       paused: "En pausa",
       owned: "Propio",
-      family_shared: "Compartido en familia",
+      manual: "Manual",
       played: "Jugados",
       unplayed: "Sin jugar",
     }[value] ?? value
@@ -863,8 +935,15 @@ function isTaskApi(
   );
 }
 
-function isSteamFamiliesReconnectApi(
+function isManualCollectionApi(
   api: DashboardApi,
-): api is DashboardApi & Required<Pick<DashboardApi, "getSteamFamiliesReconnect">> {
-  return typeof api.getSteamFamiliesReconnect === "function";
+): api is DashboardApi &
+  Required<
+    Pick<DashboardApi, "getManualCollection" | "addManualCollection" | "removeManualCollection">
+  > {
+  return (
+    typeof api.getManualCollection === "function" &&
+    typeof api.addManualCollection === "function" &&
+    typeof api.removeManualCollection === "function"
+  );
 }

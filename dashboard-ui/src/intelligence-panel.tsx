@@ -9,6 +9,7 @@ import type {
   DashboardRecommendations,
 } from "../../src/dashboard/contracts.js";
 import type { DashboardApi } from "./api.js";
+import { CustomSelect, type CustomSelectOption } from "./custom-select.js";
 
 const DEFAULT_PREFERENCE: Omit<DashboardRecommendationPreference, "appId"> = {
   priority: "normal",
@@ -16,11 +17,34 @@ const DEFAULT_PREFERENCE: Omit<DashboardRecommendationPreference, "appId"> = {
   playMode: "any",
 };
 
+const PRIORITY_OPTIONS = [
+  { value: "normal", label: "Normal" },
+  { value: "high", label: "Alta" },
+] as const satisfies readonly CustomSelectOption<"normal" | "high">[];
+
+const PLAY_MODE_OPTIONS = [
+  { value: "any", label: "Cualquiera" },
+  { value: "solo", label: "Solo" },
+  { value: "with_friends", label: "Con amigos" },
+] as const satisfies readonly CustomSelectOption<"any" | "solo" | "with_friends">[];
+
+const CADENCE_OPTIONS = [
+  { value: "weekly", label: "Semanal" },
+  { value: "monthly", label: "Mensual" },
+] as const satisfies readonly CustomSelectOption<"weekly" | "monthly">[];
+
+const PROGRESS_OPTIONS = [
+  { value: "not_started", label: "Sin iniciar" },
+  { value: "in_progress", label: "En progreso" },
+  { value: "done", label: "Hecho" },
+  { value: "skipped", label: "Omitido" },
+] as const satisfies readonly CustomSelectOption<DashboardPlanItemProgress>[];
+
 export function IntelligencePanel({
   api,
   games,
 }: Readonly<{ api: DashboardApi; games: readonly DashboardGame[] }>) {
-  const [availableMinutes, setAvailableMinutes] = useState(45);
+  const [availableMinutes, setAvailableMinutes] = useState("45");
   const [snapshot, setSnapshot] = useState<DashboardInsightSnapshot>();
   const [recommendations, setRecommendations] = useState<DashboardRecommendations>();
   const [plans, setPlans] = useState<readonly DashboardPlan[]>([]);
@@ -30,7 +54,7 @@ export function IntelligencePanel({
   const [isPreferenceLoading, setIsPreferenceLoading] = useState(false);
   const [preferenceLoadedFor, setPreferenceLoadedFor] = useState<number | undefined>();
   const [cadence, setCadence] = useState<"weekly" | "monthly">("weekly");
-  const [targetGameCount, setTargetGameCount] = useState(3);
+  const [targetGameCount, setTargetGameCount] = useState("3");
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const preferenceRequestRef = useRef(0);
@@ -56,12 +80,18 @@ export function IntelligencePanel({
   };
 
   const load = async () => {
+    const validAvailableMinutes = positiveSafeInteger(availableMinutes);
+    if (validAvailableMinutes === undefined) {
+      setError("Ingresa minutos disponibles válidos.");
+      return;
+    }
+
     try {
       const preferencePromise =
         selectedAppId === undefined ? Promise.resolve() : loadPreference(selectedAppId);
       const [nextSnapshot, nextRecommendations, nextPlans] = await Promise.all([
         api.getInsights(),
-        api.getRecommendations(availableMinutes),
+        api.getRecommendations(validAvailableMinutes),
         api.getPlans(),
       ]);
       await preferencePromise;
@@ -81,9 +111,15 @@ export function IntelligencePanel({
   };
 
   const refreshRecommendations = async () => {
+    const validAvailableMinutes = positiveSafeInteger(availableMinutes);
+    if (validAvailableMinutes === undefined) {
+      setError("Ingresa minutos disponibles válidos.");
+      return;
+    }
+
     try {
       setError(undefined);
-      const nextRecommendations = await api.getRecommendations(availableMinutes);
+      const nextRecommendations = await api.getRecommendations(validAvailableMinutes);
       setRecommendations(
         Array.isArray(nextRecommendations?.recommendations) ? nextRecommendations : undefined,
       );
@@ -105,9 +141,24 @@ export function IntelligencePanel({
   };
 
   const createPlan = async () => {
+    const validAvailableMinutes = positiveSafeInteger(availableMinutes);
+    if (validAvailableMinutes === undefined) {
+      setError("Ingresa minutos disponibles válidos.");
+      return;
+    }
+    const validTargetGameCount = positiveSafeInteger(targetGameCount);
+    if (validTargetGameCount === undefined) {
+      setError("Ingresa una cantidad válida de juegos.");
+      return;
+    }
+
     try {
       setError(undefined);
-      const result = await api.createPlan({ cadence, availableMinutes, targetGameCount });
+      const result = await api.createPlan({
+        cadence,
+        availableMinutes: validAvailableMinutes,
+        targetGameCount: validTargetGameCount,
+      });
       setPlans(await api.getPlans());
       setMessage(result.shortfall?.message ?? "Plan creado.");
     } catch (cause) {
@@ -137,10 +188,10 @@ export function IntelligencePanel({
           <p className="eyebrow">Inteligencia local</p>
           <h2 id="intelligence-heading">Jugar ahora</h2>
         </div>
+        <button className="intelligence-button" type="button" onClick={() => void load()}>
+          Cargar inteligencia
+        </button>
       </div>
-      <button type="button" onClick={() => void load()}>
-        Cargar inteligencia
-      </button>
       {snapshot?.library !== undefined && (
         <p className="intelligence-snapshot">
           {snapshot.library.totalGames} juegos · {snapshot.activePlans.length} planes activos ·{" "}
@@ -151,21 +202,30 @@ export function IntelligencePanel({
       {message !== undefined && <p aria-live="polite">{message}</p>}
 
       <div className="intelligence-grid">
-        <section aria-labelledby="recommendations-heading">
+        <section
+          className="intelligence-recommendations-card"
+          aria-labelledby="recommendations-heading"
+        >
           <h3 id="recommendations-heading">Recomendaciones</h3>
-          <label>
-            Minutos disponibles
-            <input
-              type="number"
-              min="1"
-              value={availableMinutes}
-              onChange={(event) => setAvailableMinutes(Number(event.target.value))}
-            />
-          </label>
-          <button type="button" onClick={() => void refreshRecommendations()}>
-            Actualizar recomendaciones
-          </button>
-          <ul>
+          <div className="recommendations-controls">
+            <label>
+              Minutos disponibles
+              <input
+                type="number"
+                min="1"
+                value={availableMinutes}
+                onChange={(event) => setAvailableMinutes(event.target.value)}
+              />
+            </label>
+            <button
+              className="intelligence-button intelligence-button-primary"
+              type="button"
+              onClick={() => void refreshRecommendations()}
+            >
+              Actualizar recomendaciones
+            </button>
+          </div>
+          <ul className="recommendation-list">
             {recommendations?.recommendations?.map((recommendation) => (
               <li key={recommendation.appId}>
                 <strong>{recommendation.name}</strong>
@@ -181,101 +241,80 @@ export function IntelligencePanel({
           </ul>
         </section>
 
-        <section aria-labelledby="preferences-heading">
-          <h3 id="preferences-heading">Preferencias</h3>
-          <label>
-            Juego para preferencias
-            <select
-              value={selectedAppId ?? ""}
-              onChange={(event) => void selectGame(Number(event.target.value))}
-            >
-              {games.map((game) => (
-                <option key={game.appId} value={game.appId}>
-                  {game.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Prioridad de recomendación
-            <select
-              value={preference.priority}
-              onChange={(event) =>
-                setPreference({ ...preference, priority: event.target.value as "normal" | "high" })
-              }
-            >
-              <option value="normal">Normal</option>
-              <option value="high">Alta</option>
-            </select>
-          </label>
-          <label>
-            Modo de juego
-            <select
-              value={preference.playMode}
-              onChange={(event) =>
-                setPreference({
-                  ...preference,
-                  playMode: event.target.value as "any" | "solo" | "with_friends",
-                })
-              }
-            >
-              <option value="any">Cualquiera</option>
-              <option value="solo">Solo</option>
-              <option value="with_friends">Con amigos</option>
-            </select>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={preference.excludedFromRecommendations}
-              onChange={(event) =>
-                setPreference({ ...preference, excludedFromRecommendations: event.target.checked })
-              }
-            />{" "}
-            Excluir de recomendaciones
-          </label>
-          <button
-            type="button"
-            onClick={() => void savePreference()}
-            disabled={
-              selectedAppId === undefined ||
-              isPreferenceLoading ||
-              preferenceLoadedFor !== selectedAppId
-            }
-            aria-busy={isPreferenceLoading}
-          >
-            Guardar preferencias
-          </button>
-        </section>
-
-        <section aria-labelledby="plans-heading">
-          <h3 id="plans-heading">Planes de backlog</h3>
-          <label>
-            Cadencia
-            <select
-              value={cadence}
-              onChange={(event) => setCadence(event.target.value as "weekly" | "monthly")}
-            >
-              <option value="weekly">Semanal</option>
-              <option value="monthly">Mensual</option>
-            </select>
-          </label>
-          <label>
-            Juegos objetivo
-            <input
-              type="number"
-              min="1"
-              value={targetGameCount}
-              onChange={(event) => setTargetGameCount(Number(event.target.value))}
+        <div className="intelligence-sidebar">
+          <section className="intelligence-side-card" aria-labelledby="preferences-heading">
+            <h3 id="preferences-heading">Preferencias</h3>
+            <CustomSelect
+              label="Juego para preferencias"
+              value={selectedAppId?.toString() ?? ""}
+              options={games.map((game) => ({ value: game.appId.toString(), label: game.name }))}
+              onChange={(appId) => void selectGame(Number(appId))}
             />
-          </label>
-          <button type="button" onClick={() => void createPlan()}>
-            Crear plan
-          </button>
-          {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} onProgress={updateProgress} />
-          ))}
-        </section>
+            <CustomSelect
+              label="Prioridad de recomendación"
+              value={preference.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(priority) => setPreference({ ...preference, priority })}
+            />
+            <CustomSelect
+              label="Modo de juego"
+              value={preference.playMode}
+              options={PLAY_MODE_OPTIONS}
+              onChange={(playMode) => setPreference({ ...preference, playMode })}
+            />
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={preference.excludedFromRecommendations}
+                onChange={(event) =>
+                  setPreference({
+                    ...preference,
+                    excludedFromRecommendations: event.target.checked,
+                  })
+                }
+              />
+              Excluir de recomendaciones
+            </label>
+            <button
+              className="intelligence-button intelligence-button-primary"
+              type="button"
+              onClick={() => void savePreference()}
+              disabled={
+                selectedAppId === undefined ||
+                isPreferenceLoading ||
+                preferenceLoadedFor !== selectedAppId
+              }
+              aria-busy={isPreferenceLoading}
+            >
+              Guardar preferencias
+            </button>
+          </section>
+
+          <section className="intelligence-side-card" aria-labelledby="plans-heading">
+            <h3 id="plans-heading">Planes de backlog</h3>
+            <CustomSelect
+              label="Cadencia"
+              value={cadence}
+              options={CADENCE_OPTIONS}
+              onChange={setCadence}
+            />
+            <label>
+              Juegos objetivo
+              <input
+                type="number"
+                min="1"
+                value={targetGameCount}
+                onChange={(event) => setTargetGameCount(event.target.value)}
+              />
+            </label>
+            <button className="intelligence-button" type="button" onClick={() => void createPlan()}>
+              Crear plan
+            </button>
+            {plans.map((plan) => (
+              <PlanCard key={plan.id} plan={plan} onProgress={updateProgress} />
+            ))}
+          </section>
+        </div>
       </div>
     </section>
   );
@@ -319,18 +358,12 @@ function PlanItem({
   return (
     <li>
       <strong>{item.name}</strong>
-      <label>
-        Progreso
-        <select
-          value={progress}
-          onChange={(event) => setProgress(event.target.value as DashboardPlanItemProgress)}
-        >
-          <option value="not_started">Sin iniciar</option>
-          <option value="in_progress">En progreso</option>
-          <option value="done">Hecho</option>
-          <option value="skipped">Omitido</option>
-        </select>
-      </label>
+      <CustomSelect
+        label="Progreso"
+        value={progress}
+        options={PROGRESS_OPTIONS}
+        onChange={setProgress}
+      />
       <button type="button" onClick={() => void onProgress(progress)}>
         Actualizar progreso
       </button>
@@ -342,4 +375,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message !== ""
     ? error.message
     : "No se pudo completar la operación.";
+}
+
+function positiveSafeInteger(value: string): number | undefined {
+  if (value.trim() === "") return undefined;
+  const parsedValue = Number(value);
+  return Number.isSafeInteger(parsedValue) && parsedValue > 0 ? parsedValue : undefined;
 }

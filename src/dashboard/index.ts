@@ -35,7 +35,6 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
     options.dashboardService ??
     createDashboardService({
       ...createCoreServices({ ...options, config }),
-      steamFamiliesTokenConfigured: config.steamWebApiToken !== undefined,
     });
   const server = createDashboardHttpServer({
     dashboardService,

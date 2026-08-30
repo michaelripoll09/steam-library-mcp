@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   DEFAULT_LIBRARY_CACHE_TTL_MS,
@@ -21,9 +22,26 @@ describe("loadConfig", () => {
       steamId: "76561198000000000",
       requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
       libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
-      trackerDatabasePath: DEFAULT_TRACKER_DATABASE_PATH,
+      trackerDatabasePath: resolve(DEFAULT_TRACKER_DATABASE_PATH),
       dashboardPort: DEFAULT_DASHBOARD_PORT,
     });
+  });
+
+  test("normalizes relative tracker paths while preserving absolute tracker paths", () => {
+    expect(
+      loadConfig({
+        STEAM_API_KEY: "test-api-key",
+        STEAM_ID: "76561198000000000",
+        TRACKER_DATABASE_PATH: "relative/tracker.sqlite",
+      }).trackerDatabasePath,
+    ).toBe(resolve("relative/tracker.sqlite"));
+    expect(
+      loadConfig({
+        STEAM_API_KEY: "test-api-key",
+        STEAM_ID: "76561198000000000",
+        TRACKER_DATABASE_PATH: "C:/shared/tracker.sqlite",
+      }).trackerDatabasePath,
+    ).toBe(resolve("C:/shared/tracker.sqlite"));
   });
 
   test.each([

@@ -45,7 +45,9 @@ export type DashboardHttpServerOptions = Readonly<{
     | "getLibrary"
     | "syncLibrary"
     | "updateStatus"
-    | "getSteamFamiliesReconnect"
+    | "getManualCollection"
+    | "addManualCollection"
+    | "removeManualCollection"
     | "getIntelligenceSnapshot"
     | "getRecommendations"
     | "getPreference"
@@ -231,12 +233,44 @@ async function handleApi(
     return;
   }
 
-  if (pathname === "/api/steam-families/reconnect") {
-    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+  if (pathname === "/api/manual-collection") {
+    if (method === "GET") {
+      await runService(
+        response,
+        method,
+        () => Promise.resolve(dashboardService.getManualCollection()),
+        logger,
+      );
+      return;
+    }
+    if (method === "POST") {
+      try {
+        const steam = parseManualCollectionPayload(await readJsonBody(request));
+        sendJson(response, 200, await dashboardService.addManualCollection(steam));
+      } catch (error) {
+        sendError(response, error, logger, method);
+      }
+      return;
+    }
+    return sendMethodNotAllowed(response, method, "GET, POST");
+  }
+  const manualCollectionMatch = /^\/api\/manual-collection\/(\d+)$/.exec(pathname);
+  if (manualCollectionMatch !== null) {
+    if (method !== "DELETE") return sendMethodNotAllowed(response, method, "DELETE");
+    const appId = parseAppId(manualCollectionMatch[1]);
+    if (appId === undefined) {
+      sendJson(
+        response,
+        400,
+        { error: { code: "INPUT_INVALID", message: "The app ID must be a positive integer." } },
+        method,
+      );
+      return;
+    }
     await runService(
       response,
       method,
-      () => Promise.resolve(dashboardService.getSteamFamiliesReconnect()),
+      () => Promise.resolve({ removed: dashboardService.removeManualCollection(appId) }),
       logger,
     );
     return;
@@ -468,7 +502,10 @@ function isAllowedOrigin(
   method: string,
 ): boolean {
   const origin = request.headers.origin;
-  if (origin === undefined || (method !== "POST" && method !== "PATCH" && method !== "PUT"))
+  if (
+    origin === undefined ||
+    (method !== "POST" && method !== "PATCH" && method !== "PUT" && method !== "DELETE")
+  )
     return true;
   let parsed: URL;
   try {
@@ -540,6 +577,13 @@ function parseStatusPayload(payload: unknown): "playing" | "completed" | "droppe
     throw new InputError("Status must be one of playing, completed, or dropped.");
   }
   return (payload as { status: "playing" | "completed" | "dropped" }).status;
+}
+
+function parseManualCollectionPayload(payload: unknown): string {
+  if (!isExactRecord(payload, ["steam"]) || typeof payload.steam !== "string") {
+    throw new InputError("Provide a positive Steam app ID or a Steam store app URL.");
+  }
+  return payload.steam;
 }
 
 function parsePreferencePayload(payload: unknown): {

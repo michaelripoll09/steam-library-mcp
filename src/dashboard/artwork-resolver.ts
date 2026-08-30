@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { IgdbCredentials } from "../config.js";
+import { DEFAULT_REQUEST_TIMEOUT_MS, type IgdbCredentials } from "../config.js";
 import { IgdbTokenProvider } from "../igdb/token-provider.js";
 import type { FetchLike } from "../steam/client.js";
 
@@ -608,37 +608,77 @@ async function cacheImage(
   candidate: ArtworkCandidate,
 ): Promise<ResolvedArtwork | undefined> {
   try {
-    const response = await fetch(candidate.url, { redirect: "error" });
-    const contentType = response.headers.get("content-type")?.split(";", 1)[0] ?? "";
-    if (!response.ok || !["image/jpeg", "image/png", "image/webp"].includes(contentType))
-      return undefined;
-    const body = await readImageBody(response);
-    if (body === undefined) return undefined;
-    await mkdir(directory, { recursive: true });
-    await evictCacheEntries(directory);
-    const filePath = join(directory, `${appId}.img`);
-    await writeFile(filePath, body);
-    await writeFile(
-      join(directory, `${appId}.json`),
-      JSON.stringify({
-        version: CACHE_VERSION,
-        contentType,
-        orientation: candidate.orientation,
-        source: candidate.source,
-        ...(candidate.identity === undefined ? {} : { identity: candidate.identity }),
-        ...(candidate.providerGameId === undefined
-          ? {}
-          : { providerGameId: candidate.providerGameId }),
-      }),
-      "utf8",
-    );
-    return { filePath, contentType, orientation: candidate.orientation };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(candidate.url, { redirect: "error", signal: controller.signal });
+      const contentType = response.headers.get("content-type")?.split(";", 1)[0] ?? "";
+      if (!response.ok || !["image/jpeg", "image/png", "image/webp"].includes(contentType))
+        return undefined;
+      const body = await readImageBody(response, controller.signal);
+      if (body === undefined || !hasMatchingImageSignature(contentType, body)) return undefined;
+      await mkdir(directory, { recursive: true });
+      await evictCacheEntries(directory);
+      const filePath = join(directory, `${appId}.img`);
+      await writeFile(filePath, body);
+      await writeFile(
+        join(directory, `${appId}.json`),
+        JSON.stringify({
+          version: CACHE_VERSION,
+          contentType,
+          orientation: candidate.orientation,
+          source: candidate.source,
+          ...(candidate.identity === undefined ? {} : { identity: candidate.identity }),
+          ...(candidate.providerGameId === undefined
+            ? {}
+            : { providerGameId: candidate.providerGameId }),
+        }),
+        "utf8",
+      );
+      return { filePath, contentType, orientation: candidate.orientation };
+    } finally {
+      clearTimeout(timeout);
+    }
   } catch {
     return undefined;
   }
 }
 
-async function readImageBody(response: Response): Promise<Uint8Array | undefined> {
+function hasMatchingImageSignature(contentType: string, body: Uint8Array): boolean {
+  if (contentType === "image/jpeg") {
+    return body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff;
+  }
+  if (contentType === "image/png") {
+    return (
+      body.length >= 8 &&
+      body[0] === 0x89 &&
+      body[1] === 0x50 &&
+      body[2] === 0x4e &&
+      body[3] === 0x47 &&
+      body[4] === 0x0d &&
+      body[5] === 0x0a &&
+      body[6] === 0x1a &&
+      body[7] === 0x0a
+    );
+  }
+  return (
+    contentType === "image/webp" &&
+    body.length >= 12 &&
+    body[0] === 0x52 &&
+    body[1] === 0x49 &&
+    body[2] === 0x46 &&
+    body[3] === 0x46 &&
+    body[8] === 0x57 &&
+    body[9] === 0x45 &&
+    body[10] === 0x42 &&
+    body[11] === 0x50
+  );
+}
+
+async function readImageBody(
+  response: Response,
+  signal: AbortSignal,
+): Promise<Uint8Array | undefined> {
   const declaredLength = response.headers.get("content-length");
   if (
     declaredLength !== null &&
@@ -651,10 +691,15 @@ async function readImageBody(response: Response): Promise<Uint8Array | undefined
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
+  const cancelOnAbort = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  signal.addEventListener("abort", cancelOnAbort, { once: true });
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (signal.aborted) return undefined;
       size += value.byteLength;
       if (size > MAX_ARTWORK_BYTES) {
         await reader.cancel();
@@ -663,8 +708,11 @@ async function readImageBody(response: Response): Promise<Uint8Array | undefined
       chunks.push(value);
     }
   } finally {
+    signal.removeEventListener("abort", cancelOnAbort);
+    if (signal.aborted) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+  if (signal.aborted) return undefined;
   if (size === 0) return undefined;
   const body = new Uint8Array(size);
   let offset = 0;

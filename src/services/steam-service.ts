@@ -9,7 +9,13 @@ import {
 } from "../domain/models.js";
 import { GameNotFoundError, InputError } from "../errors.js";
 import type { SteamApiClient } from "../steam/client.js";
-import type { SteamFamilyGameDto, SteamGameDto } from "../steam/schemas.js";
+import type { SteamGameDto } from "../steam/schemas.js";
+import {
+  parseManualSteamInput,
+  type ManualLibraryGame,
+  type ManualLibraryRepository,
+  type PublicSteamGameLookup,
+} from "../manual-library/manual-library.js";
 
 export interface SteamService {
   getLibrary(): Promise<SteamLibrary>;
@@ -18,6 +24,9 @@ export interface SteamService {
   getGame(appId: number): Promise<SteamGame>;
   getRecentGames(count?: number): Promise<readonly SteamGame[]>;
   getLibraryStats(): Promise<LibraryStats>;
+  getManualCollection?(): readonly ManualLibraryGame[];
+  addManualCollection?(steam: unknown): Promise<ManualLibraryGame>;
+  removeManualCollection?(appId: number): boolean;
 }
 
 type SteamServiceDependencies = Readonly<{
@@ -25,6 +34,8 @@ type SteamServiceDependencies = Readonly<{
   steamClient: SteamApiClient;
   cache: Cache<SteamLibrary>;
   clock: Clock;
+  manualRepository?: ManualLibraryRepository;
+  publicGameLookup?: PublicSteamGameLookup;
 }>;
 
 const libraryCacheKey = (steamId: string): string => `library:${steamId}`;
@@ -34,12 +45,14 @@ export function createSteamService({
   steamClient,
   cache,
   clock,
+  manualRepository,
+  publicGameLookup,
 }: SteamServiceDependencies): SteamService {
   async function getLibrary(): Promise<SteamLibrary> {
     const key = libraryCacheKey(config.steamId);
     const cached = cache.get(key);
     if (cached !== undefined) {
-      return cached;
+      return mergeManualCollection(cached, manualRepository?.list() ?? []);
     }
 
     return refreshLibrary();
@@ -48,14 +61,13 @@ export function createSteamService({
   async function refreshLibrary(): Promise<SteamLibrary> {
     const key = libraryCacheKey(config.steamId);
     const response = await steamClient.getOwnedGames(config.steamId);
-    const familyGames = await getFamilyGames(steamClient, config);
-    const library = createSteamLibrary({
+    const baseLibrary = createSteamLibrary({
       steamId: config.steamId,
-      games: mergeGames(response.response.games, familyGames, config.steamId),
+      games: response.response.games.map(normalizeOwnedGame),
       fetchedAt: new Date(clock.now()).toISOString(),
     });
-    cache.set(key, library, config.libraryCacheTtlMs);
-    return library;
+    cache.set(key, baseLibrary, config.libraryCacheTtlMs);
+    return mergeManualCollection(baseLibrary, manualRepository?.list() ?? []);
   }
 
   return {
@@ -90,6 +102,33 @@ export function createSteamService({
           .length,
       };
     },
+    getManualCollection() {
+      return manualRepository?.list() ?? [];
+    },
+    async addManualCollection(steam) {
+      if (manualRepository === undefined || publicGameLookup === undefined)
+        throw new InputError("Manual collections are unavailable.");
+      const appId = parseManualSteamInput(steam);
+      const game = await publicGameLookup(appId);
+      const existing = manualRepository.list().find((entry) => entry.appId === appId);
+      if (existing !== undefined && existing.name === game.name) return existing;
+      const timestamp = new Date(clock.now()).toISOString();
+      const stored = manualRepository.upsert({
+        appId,
+        name: game.name,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      });
+      cache.clear();
+      return stored;
+    },
+    removeManualCollection(appId) {
+      if (!Number.isSafeInteger(appId) || appId <= 0)
+        throw new InputError("The app ID must be a positive integer.");
+      const removed = manualRepository?.remove(appId) ?? false;
+      if (removed) cache.clear();
+      return removed;
+    },
   };
 }
 
@@ -102,34 +141,29 @@ function assertRecentGameCount(count: number | undefined): void {
   }
 }
 
-async function getFamilyGames(
-  steamClient: SteamApiClient,
-  config: AppConfig,
-): Promise<readonly SteamFamilyGameDto[]> {
-  if (config.steamWebApiToken === undefined || steamClient.getFamilyGames === undefined) {
-    return [];
-  }
-  try {
-    return await steamClient.getFamilyGames(config.steamId);
-  } catch {
-    return [];
-  }
+function mergeManualCollection(
+  baseLibrary: SteamLibrary,
+  manualGames: readonly ManualLibraryGame[],
+): SteamLibrary {
+  const ownedByAppId = new Map(baseLibrary.games.map((game) => [game.appId, game]));
+  const manualOnlyGames = manualGames
+    .filter((game) => !ownedByAppId.has(game.appId))
+    .map(normalizeManualGame);
+  return createSteamLibrary({
+    ...baseLibrary,
+    games: [...ownedByAppId.values(), ...manualOnlyGames],
+  });
 }
 
-function mergeGames(
-  ownedGames: readonly SteamGameDto[],
-  familyGames: readonly SteamFamilyGameDto[],
-  steamId: string,
-): readonly SteamGame[] {
-  const ownedByAppId = new Map(ownedGames.map((game) => [game.appid, normalizeOwnedGame(game)]));
-  const familyOnlyGames = familyGames
-    .filter((game) => !ownedByAppId.has(game.appid))
-    .map((game) =>
-      game.owner_steamids.includes(steamId)
-        ? normalizeOwnedFamilyGame(game)
-        : normalizeFamilyGame(game),
-    );
-  return [...ownedByAppId.values(), ...familyOnlyGames];
+function normalizeManualGame(game: ManualLibraryGame): SteamGame {
+  return createSteamGame({
+    appId: game.appId,
+    name: game.name,
+    playtimeMinutes: 0,
+    accessType: "manual",
+    isPlayable: false,
+    manualCollection: true,
+  });
 }
 
 function sortByLastPlayedAtDescending(left: SteamGame, right: SteamGame): number {
@@ -165,29 +199,6 @@ function normalizeGameFields(game: SteamGameDto): Parameters<typeof createSteamG
       : { lastPlayedAt: new Date(game.rtime_last_played * 1000).toISOString() }),
     ...(game.img_logo_url === undefined ? {} : { imageUrl: imageUrlFor(game) }),
   };
-}
-
-function normalizeFamilyGame(game: SteamFamilyGameDto): SteamGame {
-  return createSteamGame({
-    appId: game.appid,
-    name: game.name,
-    playtimeMinutes: game.rt_playtime,
-    accessType: "family_shared",
-    isPlayable: game.exclude_reason === 0,
-    ...(game.rt_last_played === undefined
-      ? {}
-      : { lastPlayedAt: new Date(game.rt_last_played * 1000).toISOString() }),
-  });
-}
-
-function normalizeOwnedFamilyGame(game: SteamFamilyGameDto): SteamGame {
-  return createSteamGame({
-    appId: game.appid,
-    name: game.name,
-    playtimeMinutes: game.rt_playtime,
-    accessType: "owned",
-    isPlayable: true,
-  });
 }
 
 function imageUrlFor(game: SteamGameDto): string {

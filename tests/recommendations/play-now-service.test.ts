@@ -128,8 +128,9 @@ describe("PlayNowRecommendationService", () => {
           appId: 1,
           name: "Not playable",
           playtimeMinutes: 0,
-          accessType: "family_shared",
+          accessType: "manual",
           isPlayable: false,
+          manualCollection: true,
         },
         { appId: 2, name: "Excluded", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
         {

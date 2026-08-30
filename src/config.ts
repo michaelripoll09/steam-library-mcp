@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolve } from "node:path";
 
 import { ConfigError } from "./errors.js";
 
@@ -10,7 +11,6 @@ export const DEFAULT_DASHBOARD_PORT = 4173;
 export type AppConfig = Readonly<{
   steamApiKey: string;
   steamId: string;
-  steamWebApiToken?: string;
   steamGridDbApiKey?: string;
   requestTimeoutMs: typeof DEFAULT_REQUEST_TIMEOUT_MS;
   libraryCacheTtlMs: typeof DEFAULT_LIBRARY_CACHE_TTL_MS;
@@ -34,7 +34,6 @@ type RequiredSettingName = (typeof requiredSettingNames)[number];
 const environmentSchema = z.object({
   STEAM_API_KEY: z.string().trim().min(1),
   STEAM_ID: z.string().trim().min(1),
-  STEAM_WEBAPI_TOKEN: z.string().trim().min(1).optional(),
   STEAMGRIDDB_API_KEY: z.string().trim().min(1).optional(),
   TRACKER_DATABASE_PATH: z.string().trim().min(1).optional(),
   DASHBOARD_PORT: z
@@ -73,7 +72,6 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
   const parsedEnvironment = environmentSchema.safeParse({
     STEAM_API_KEY: environment.STEAM_API_KEY,
     STEAM_ID: environment.STEAM_ID,
-    STEAM_WEBAPI_TOKEN: environment.STEAM_WEBAPI_TOKEN,
     STEAMGRIDDB_API_KEY: environment.STEAMGRIDDB_API_KEY,
     TRACKER_DATABASE_PATH: environment.TRACKER_DATABASE_PATH,
     DASHBOARD_PORT: environment.DASHBOARD_PORT,
@@ -95,16 +93,14 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
   return Object.freeze({
     steamApiKey: parsedEnvironment.data.STEAM_API_KEY,
     steamId: parsedEnvironment.data.STEAM_ID,
-    ...(parsedEnvironment.data.STEAM_WEBAPI_TOKEN === undefined
-      ? {}
-      : { steamWebApiToken: parsedEnvironment.data.STEAM_WEBAPI_TOKEN }),
     ...(parsedEnvironment.data.STEAMGRIDDB_API_KEY === undefined
       ? {}
       : { steamGridDbApiKey: parsedEnvironment.data.STEAMGRIDDB_API_KEY }),
     requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
     libraryCacheTtlMs: DEFAULT_LIBRARY_CACHE_TTL_MS,
-    trackerDatabasePath:
+    trackerDatabasePath: resolve(
       parsedEnvironment.data.TRACKER_DATABASE_PATH ?? DEFAULT_TRACKER_DATABASE_PATH,
+    ),
     dashboardPort: parsedEnvironment.data.DASHBOARD_PORT ?? DEFAULT_DASHBOARD_PORT,
   });
 }

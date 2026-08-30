@@ -27,7 +27,7 @@ const library: DashboardLibrary = {
       name: "Hades",
       status: "playing",
       coverUrl: "https://cdn.example/hades.jpg",
-      accessType: "family_shared",
+      accessType: "manual",
       isPlayable: true,
       playtimeMinutes: 125,
       lastPlayedAt: "2026-08-26T18:30:00.000Z",
@@ -43,33 +43,6 @@ afterEach(() => {
 });
 
 describe("DashboardApp", () => {
-  test("links to the official Steam Families page and shows missing credential guidance", async () => {
-    const api = {
-      getLibrary: vi.fn().mockResolvedValue(library),
-      syncLibrary: vi.fn(),
-      updateGameStatus: vi.fn(),
-      getSteamFamiliesReconnect: vi.fn().mockResolvedValue({
-        managementUrl: "https://store.steampowered.com/account/familymanagement",
-        credentialStatus: "missing",
-        guidance:
-          "No Steam Families credential is configured. Update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
-      }),
-    };
-
-    render(<DashboardApp api={api} />);
-
-    expect(await screen.findByRole("heading", { name: "Steam Families" })).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: "Reconnect Steam Families" });
-    expect(link).toHaveAttribute("href", "https://store.steampowered.com/account/familymanagement");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noreferrer");
-    expect(
-      screen.getByText(
-        "No Steam Families credential is configured. Update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
-      ),
-    ).toBeInTheDocument();
-  });
-
   test("uses one default API client for the initial library request across rerenders", async () => {
     const fetch = vi.spyOn(window, "fetch").mockImplementation(() =>
       Promise.resolve(
@@ -87,10 +60,43 @@ describe("DashboardApp", () => {
     expect(fetch.mock.calls).toEqual(
       expect.arrayContaining([
         ["/api/library", { method: "GET" }],
-        ["/api/steam-families/reconnect", { method: "GET" }],
         ["/api/tasks", { method: "GET" }],
+        ["/api/manual-collection", { method: "GET" }],
       ]),
     );
+  });
+
+  test("loads persisted manual collection entries with the default API", async () => {
+    const fetch = vi.spyOn(window, "fetch").mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            input === "/api/manual-collection"
+              ? [
+                  {
+                    appId: 413150,
+                    name: "Stardew Valley",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                  },
+                ]
+              : library,
+          ),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    render(<DashboardApp />);
+    expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/manual-collection", { method: "GET" });
+  });
+
+  test("labels manual catalog games without legacy access language", async () => {
+    render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
+
+    const manualCard = await screen.findByRole("article", { name: "Hades" });
+    expect(manualCard).toHaveTextContent(/Manual/);
+    expect(manualCard).not.toHaveTextContent(/familia/i);
   });
 
   test("uses the official cover URL once and replaces a failed image with an identifiable fallback", () => {
@@ -458,6 +464,36 @@ describe("DashboardApp", () => {
     expect(styles).toMatch(/transition:\s*none !important/);
     expect(styles).toMatch(/transform:\s*none !important/);
   });
+
+  test("keeps all four library totals in a desktop summary grid", async () => {
+    const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+
+    expect(styles).toMatch(
+      /\.summary-grid\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/s,
+    );
+  });
+
+  test("keeps the manual collection and library summary transition compact", async () => {
+    const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+
+    expect(styles).toMatch(/\.summary-grid\s*\{[^}]*margin:\s*1\.4rem\s+0;/s);
+  });
+
+  test("gives desktop game details a resilient cover gutter and title wrapping", async () => {
+    const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+    const desktopDetails = styles.match(/\.game-details\s*\{[^}]*\}/s)?.[0];
+    const detailsCopy = styles.match(/\.details-copy\s*\{[^}]*\}/s)?.[0];
+    const detailsHeading = styles.match(/\.details-copy h2\s*\{[^}]*\}/s)?.[0];
+    const mobileDetails = styles.match(
+      /@media \(max-width: 760px\)\s*\{[\s\S]*?\.game-details\s*\{[^}]*\}/s,
+    )?.[0];
+
+    expect(desktopDetails).toMatch(/column-gap:\s*1\.25rem/);
+    expect(detailsCopy).toMatch(/min-width:\s*0/);
+    expect(detailsHeading).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(detailsHeading).toMatch(/line-height:\s*1\.1/);
+    expect(mobileDetails).toMatch(/column-gap:\s*0/);
+  });
 });
 
 test("uses an accessible custom filter menu that applies selections through the keyboard", async () => {
@@ -585,9 +621,12 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
   expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   expect(await screen.findByText("Duración desconocida")).toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText("Juego para preferencias"), "10");
-  await user.selectOptions(screen.getByLabelText("Prioridad de recomendación"), "high");
-  await user.selectOptions(screen.getByLabelText("Modo de juego"), "solo");
+  await user.click(screen.getByRole("combobox", { name: "Juego para preferencias" }));
+  await user.click(screen.getByRole("option", { name: "Celeste" }));
+  await user.click(screen.getByRole("combobox", { name: "Prioridad de recomendación" }));
+  await user.click(screen.getByRole("option", { name: "Alta" }));
+  await user.click(screen.getByRole("combobox", { name: "Modo de juego" }));
+  await user.click(screen.getByRole("option", { name: "Solo" }));
   await user.click(screen.getByRole("button", { name: "Guardar preferencias" }));
 
   expect(api.savePreference).toHaveBeenCalledWith(10, {
@@ -638,9 +677,11 @@ test("loads the initial game's persisted preference before allowing a save", asy
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   await waitFor(() => {
     expect(api.getPreference).toHaveBeenCalledWith(10);
-    expect(screen.getByLabelText("Prioridad de recomendación")).toHaveValue("high");
+    expect(screen.getByRole("combobox", { name: "Prioridad de recomendación" })).toHaveTextContent(
+      "Alta",
+    );
     expect(screen.getByLabelText("Excluir de recomendaciones")).toBeChecked();
-    expect(screen.getByLabelText("Modo de juego")).toHaveValue("with_friends");
+    expect(screen.getByRole("combobox", { name: "Modo de juego" })).toHaveTextContent("Con amigos");
   });
 
   await user.click(screen.getByRole("button", { name: "Guardar preferencias" }));
@@ -650,5 +691,202 @@ test("loads the initial game's persisted preference before allowing a save", asy
     priority: "high",
     excludedFromRecommendations: true,
     playMode: "with_friends",
+  });
+});
+
+test("groups play-now controls into a primary recommendation card and compact sidebar cards", async () => {
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn(),
+    getRecommendations: vi.fn(),
+    getPreference: vi.fn(),
+    savePreference: vi.fn(),
+    getPlans: vi.fn(),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+
+  const recommendations = await screen.findByRole("heading", { name: "Recomendaciones" });
+  const preferences = screen.getByRole("heading", { name: "Preferencias" });
+  const plans = screen.getByRole("heading", { name: "Planes de backlog" });
+
+  expect(recommendations.closest("section")).toHaveClass("intelligence-recommendations-card");
+  expect(
+    screen.getByLabelText("Minutos disponibles").closest(".recommendations-controls"),
+  ).toHaveClass("recommendations-controls");
+  expect(preferences.closest("section")).toHaveClass("intelligence-side-card");
+  expect(plans.closest("section")).toHaveClass("intelligence-side-card");
+  expect(preferences.closest(".intelligence-sidebar")).toContainElement(plans);
+});
+
+test("uses accessible custom menus for every intelligence choice and closes them predictably", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn().mockResolvedValue({
+      library: { ...library.totals, recentlyPlayedGames: 1 },
+      activePlans: [],
+      preferences: {
+        configuredGames: 0,
+        highPriorityGames: 0,
+        excludedGames: 0,
+        soloGames: 0,
+        withFriendsGames: 0,
+      },
+    }),
+    getRecommendations: vi.fn().mockResolvedValue({ availableMinutes: 45, recommendations: [] }),
+    getPreference: vi.fn().mockResolvedValue({
+      appId: 20,
+      priority: "normal",
+      excludedFromRecommendations: false,
+      playMode: "any",
+    }),
+    savePreference: vi.fn(),
+    getPlans: vi.fn().mockResolvedValue([
+      {
+        id: "weekly-1",
+        cadence: "weekly",
+        availableMinutes: 45,
+        targetGameCount: 1,
+        items: [{ id: "item-1", appId: 10, name: "Celeste", progress: "not_started" }],
+      },
+    ]),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+  await user.click(await screen.findByRole("button", { name: "Cargar inteligencia" }));
+
+  const panel = screen.getByRole("heading", { name: "Jugar ahora" }).closest(".intelligence-panel");
+  expect(panel).not.toBeNull();
+  expect(panel?.querySelectorAll("select")).toHaveLength(0);
+  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(2);
+
+  const game = screen.getByRole("combobox", { name: "Juego para preferencias" });
+  expect(game).toHaveAttribute("aria-expanded", "false");
+  await user.click(game);
+  const gameMenu = screen.getByRole("listbox", { name: "Juego para preferencias" });
+  expect(game).toHaveAttribute("aria-controls", gameMenu.id);
+  await user.keyboard("{End}{Enter}");
+  expect(game).toHaveFocus();
+  await waitFor(() => expect(api.getPreference).toHaveBeenCalledWith(20));
+
+  const priority = screen.getByRole("combobox", { name: "Prioridad de recomendación" });
+  await user.click(priority);
+  await user.keyboard("{End} ");
+  expect(priority).toHaveTextContent("Alta");
+
+  const playMode = screen.getByRole("combobox", { name: "Modo de juego" });
+  await user.click(playMode);
+  await user.keyboard("{ArrowDown}");
+  expect(playMode).toHaveAttribute("aria-activedescendant", expect.any(String));
+  await user.keyboard("{Home}{Enter}");
+  expect(playMode).toHaveTextContent("Cualquiera");
+
+  const cadence = screen.getByRole("combobox", { name: "Cadencia" });
+  await user.click(cadence);
+  expect(screen.getByRole("listbox", { name: "Cadencia" })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
+  await user.click(cadence);
+  await user.click(screen.getByRole("heading", { name: "Planes de backlog" }));
+  expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
+
+  expect(screen.getByRole("combobox", { name: "Modo de juego" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Progreso" })).toBeInTheDocument();
+});
+
+test("hides intelligence number steppers without changing numeric input semantics", async () => {
+  const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+
+  expect(styles).toMatch(
+    /\.intelligence-panel input\[type="number"\]::-webkit-(?:inner|outer)-spin-button/s,
+  );
+  expect(styles).toMatch(/-moz-appearance:\s*textfield/);
+});
+
+test("bounds long intelligence custom menus and makes them vertically scrollable", async () => {
+  const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+  const menuStyles = styles.match(/\.intelligence-select-menu\s*\{[^}]*\}/s)?.[0];
+
+  expect(menuStyles).toMatch(/max-height:\s*min\([^;]*100vh/);
+  expect(menuStyles).toMatch(/overflow-x:\s*hidden/);
+  expect(menuStyles).toMatch(/overflow-y:\s*auto/);
+  expect(menuStyles).toMatch(/scrollbar-color:\s*[^;]+/);
+  expect(menuStyles).toMatch(/scrollbar-width:\s*thin/);
+  expect(styles).toMatch(/\.intelligence-select-menu::-webkit-scrollbar\s*\{/);
+  expect(styles).toMatch(/\.intelligence-select-menu::-webkit-scrollbar-thumb\s*\{/);
+});
+
+test("allows replacing recommendation minutes after clearing the field and rejects a blank submission", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn(),
+    getRecommendations: vi.fn().mockResolvedValue({ availableMinutes: 30, recommendations: [] }),
+    getPreference: vi.fn(),
+    savePreference: vi.fn(),
+    getPlans: vi.fn(),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+
+  const availableMinutes = await screen.findByLabelText("Minutos disponibles");
+  await user.clear(availableMinutes);
+  expect(availableMinutes).toHaveValue(null);
+
+  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+  expect(api.getRecommendations).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent("Ingresa minutos disponibles válidos.");
+
+  await user.type(availableMinutes, "30");
+  expect(availableMinutes).toHaveValue(30);
+  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+  expect(api.getRecommendations).toHaveBeenCalledWith(30);
+});
+
+test("allows replacing backlog target games after clearing the field and rejects a blank submission", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn(),
+    getRecommendations: vi.fn(),
+    getPreference: vi.fn(),
+    savePreference: vi.fn(),
+    getPlans: vi.fn().mockResolvedValue([]),
+    createPlan: vi.fn().mockResolvedValue({}),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+
+  const targetGameCount = await screen.findByLabelText("Juegos objetivo");
+  await user.clear(targetGameCount);
+  expect(targetGameCount).toHaveValue(null);
+
+  await user.click(screen.getByRole("button", { name: "Crear plan" }));
+  expect(api.createPlan).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent("Ingresa una cantidad válida de juegos.");
+
+  await user.type(targetGameCount, "2");
+  expect(targetGameCount).toHaveValue(2);
+  await user.click(screen.getByRole("button", { name: "Crear plan" }));
+  expect(api.createPlan).toHaveBeenCalledWith({
+    cadence: "weekly",
+    availableMinutes: 45,
+    targetGameCount: 2,
   });
 });

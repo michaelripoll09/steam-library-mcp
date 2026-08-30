@@ -36,6 +36,10 @@ import {
 } from "./backlog/backlog-plan-service.js";
 import { SqliteBacklogPlanRepository } from "./backlog/sqlite/backlog-plan-repository.js";
 import { createTaskRunner, type TaskRunner } from "./tasks/task-runner.js";
+import {
+  createPublicSteamGameLookup,
+  SqliteManualLibraryRepository,
+} from "./manual-library/manual-library.js";
 
 export type CoreServiceOverrides = Readonly<{
   config?: AppConfig;
@@ -79,6 +83,8 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
         overrides.steamClient ?? createSteamApiClient({ config: config(), fetch: overrides.fetch }),
       cache: overrides.cache ?? new TtlCache({ now: clock.now }),
       clock,
+      manualRepository: createDefaultManualLibraryRepository(config()),
+      publicGameLookup: createPublicSteamGameLookup(overrides.fetch),
     });
   const gamingTrackerService =
     overrides.gamingTrackerService ??
@@ -113,6 +119,14 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     backlogPlanService,
     taskRunner,
   });
+}
+
+function createDefaultManualLibraryRepository(config: AppConfig): SqliteManualLibraryRepository {
+  try {
+    return new SqliteManualLibraryRepository(openTrackerDatabase(config.trackerDatabasePath));
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
 }
 
 function allCoreServicesAreOverridden(overrides: CoreServiceOverrides): boolean {

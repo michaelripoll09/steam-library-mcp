@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { resolve } from "node:path";
 
 import { loadConfig } from "../../src/config.js";
 import {
@@ -14,7 +15,7 @@ describe("tracker foundation configuration", () => {
         STEAM_API_KEY: "test-api-key",
         STEAM_ID: "76561198000000000",
       }).trackerDatabasePath,
-    ).toBe(".steam-library/tracker.sqlite");
+    ).toBe(resolve(".steam-library/tracker.sqlite"));
   });
 
   test("uses the configured tracker database path", () => {
@@ -24,7 +25,7 @@ describe("tracker foundation configuration", () => {
         STEAM_ID: "76561198000000000",
         TRACKER_DATABASE_PATH: "D:/data/tracker.sqlite",
       }).trackerDatabasePath,
-    ).toBe("D:/data/tracker.sqlite");
+    ).toBe(resolve("D:/data/tracker.sqlite"));
   });
 });
 

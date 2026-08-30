@@ -24,7 +24,7 @@ const games = [
     appId: 2,
     name: "Deep Rock Galactic",
     status: "playing",
-    accessType: "family_shared",
+    accessType: "manual",
     playtimeMinutes: 125,
   },
   {
@@ -65,7 +65,7 @@ describe("dashboard library filters", () => {
       games,
       module.createLibraryFilters({
         status: "playing",
-        accessType: "family_shared",
+        accessType: "manual",
         played: "played",
       }),
     );

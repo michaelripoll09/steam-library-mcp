@@ -20,7 +20,8 @@ export type DashboardGame = Readonly<{
   name: string;
   status: DashboardGameStatus;
   coverUrl: string;
-  accessType: "owned" | "family_shared";
+  accessType: "owned" | "manual";
+  manualCollection?: boolean;
   isPlayable: boolean;
   playtimeMinutes: number;
   recentPlaytimeMinutes?: number;
@@ -53,12 +54,6 @@ export type DashboardMarkResult =
 export type DashboardStatusUpdate = Readonly<{
   mark: DashboardMarkResult;
   library: DashboardLibrary;
-}>;
-
-export type DashboardSteamFamiliesReconnect = Readonly<{
-  managementUrl: string;
-  credentialStatus: "missing" | "configured";
-  guidance: string;
 }>;
 
 export type DashboardRecommendationPreference = Readonly<{

@@ -6,11 +6,7 @@ import { request } from "node:http";
 
 import { InputError, SteamUnavailableError } from "../../src/errors.js";
 import { createDashboardHttpServer } from "../../src/dashboard/http/server.js";
-import type {
-  DashboardLibrary,
-  DashboardStatusUpdate,
-  DashboardSteamFamiliesReconnect,
-} from "../../src/dashboard/contracts.js";
+import type { DashboardLibrary, DashboardStatusUpdate } from "../../src/dashboard/contracts.js";
 import type { ArtworkResolver } from "../../src/dashboard/artwork-resolver.js";
 
 const library: DashboardLibrary = {
@@ -29,7 +25,6 @@ function startServer(
     getLibrary: () => Promise<DashboardLibrary>;
     syncLibrary: () => Promise<DashboardLibrary>;
     updateStatus: (appId: unknown, status: unknown) => Promise<DashboardStatusUpdate>;
-    getSteamFamiliesReconnect?: () => Promise<DashboardSteamFamiliesReconnect>;
   },
   staticRoot: string,
   artworkResolver?: ArtworkResolver,
@@ -125,31 +120,9 @@ describe("dashboard HTTP server", () => {
     expect(JSON.parse(response.body)).toEqual(update);
   });
 
-  test("exposes reconnect guidance without returning a Steam Families credential", async () => {
-    root = await mkdtemp(join(tmpdir(), "dashboard-http-"));
-    await writeFile(join(root, "index.html"), "<!doctype html><title>Dashboard</title>");
-    const reconnect = {
-      managementUrl: "https://store.steampowered.com/account/familymanagement",
-      credentialStatus: "missing" as const,
-      guidance:
-        "No Steam Families credential is configured. Open Steam, then update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
-    };
-    const started = await startServer(
-      {
-        getLibrary: async () => library,
-        syncLibrary: async () => library,
-        updateStatus: async () => update,
-        getSteamFamiliesReconnect: async () => reconnect,
-      },
-      root,
-    );
-    server = started.server;
-
-    const response = await call(started.port, "/api/steam-families/reconnect");
-
-    expect(response.status).toBe(200);
-    expect(JSON.parse(response.body)).toEqual(reconnect);
-    expect(response.body).not.toContain("temporary-family-token");
+  test("does not expose a Steam Families status endpoint", async () => {
+    const { port } = await setup();
+    expect((await call(port, "/api/steam-families/status")).status).toBe(404);
   });
 
   test("rejects malformed, oversized, invalid, and unknown API requests safely", async () => {
@@ -452,6 +425,30 @@ describe("dashboard HTTP server", () => {
     expect(
       (service as unknown as { savePreference: ReturnType<typeof vi.fn> }).savePreference,
     ).not.toHaveBeenCalled();
+  });
+
+  test("rejects cross-origin manual collection deletes and permits same-origin deletes", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, { removeManualCollection: vi.fn(() => true) });
+    const manualCollectionService = service as unknown as {
+      removeManualCollection: ReturnType<typeof vi.fn>;
+    };
+
+    const rejected = await call(port, "/api/manual-collection/10", {
+      method: "DELETE",
+      headers: { origin: "https://evil.example" },
+    });
+
+    expect(rejected.status).toBe(403);
+    expect(manualCollectionService.removeManualCollection).not.toHaveBeenCalled();
+
+    const permitted = await call(port, "/api/manual-collection/10", {
+      method: "DELETE",
+      headers: { origin: `http://127.0.0.1:${port}` },
+    });
+
+    expect(permitted.status).toBe(200);
+    expect(manualCollectionService.removeManualCollection).toHaveBeenCalledWith(10);
   });
 
   test("returns not found when cached artwork is evicted before its stream opens", async () => {

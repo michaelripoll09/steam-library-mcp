@@ -9,9 +9,9 @@ import type {
   DashboardRecommendationPreference,
   DashboardRecommendations,
   DashboardStatusUpdate,
-  DashboardSteamFamiliesReconnect,
 } from "../../src/dashboard/contracts.js";
 import type { LocalTask } from "../../src/tasks/task-runner.js";
+import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
 
 export type DashboardFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -34,7 +34,9 @@ export type DashboardApi = Readonly<{
     appId: number,
     status: DashboardMutableStatus,
   ) => Promise<DashboardStatusUpdate>;
-  getSteamFamiliesReconnect: () => Promise<DashboardSteamFamiliesReconnect>;
+  getManualCollection: () => Promise<readonly ManualLibraryGame[]>;
+  addManualCollection: (steam: string) => Promise<ManualLibraryGame>;
+  removeManualCollection: (appId: number) => Promise<Readonly<{ removed: boolean }>>;
   getInsights: () => Promise<DashboardInsightSnapshot>;
   getRecommendations: (availableMinutes: number) => Promise<DashboardRecommendations>;
   getPreference: (appId: number) => Promise<DashboardRecommendationPreference>;
@@ -68,9 +70,17 @@ export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       }),
-    getSteamFamiliesReconnect: () =>
-      request<DashboardSteamFamiliesReconnect>(fetch, "/api/steam-families/reconnect", {
-        method: "GET",
+    getManualCollection: () =>
+      request<readonly ManualLibraryGame[]>(fetch, "/api/manual-collection", { method: "GET" }),
+    addManualCollection: (steam) =>
+      request<ManualLibraryGame>(fetch, "/api/manual-collection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ steam }),
+      }),
+    removeManualCollection: (appId) =>
+      request<Readonly<{ removed: boolean }>>(fetch, `/api/manual-collection/${appId}`, {
+        method: "DELETE",
       }),
     getInsights: () =>
       request<DashboardInsightSnapshot>(fetch, "/api/intelligence/insights", { method: "GET" }),

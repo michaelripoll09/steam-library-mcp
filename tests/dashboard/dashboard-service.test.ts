@@ -23,12 +23,11 @@ const library: SteamLibrary = {
     },
     {
       appId: 20,
-      name: "Family game",
-      playtimeMinutes: 120,
-      recentPlaytimeMinutes: 45,
-      lastPlayedAt: "2025-01-02T00:00:00.000Z",
-      accessType: "family_shared",
+      name: "Manual game",
+      playtimeMinutes: 0,
+      accessType: "manual",
       isPlayable: false,
+      manualCollection: true,
     },
     {
       appId: 30,
@@ -55,9 +54,9 @@ function createFakes(
       refreshLibrary: vi.fn(overrides.refreshLibrary ?? (async () => library)),
       getLibraryStats: vi.fn(async () => ({
         totalGames: 3,
-        playedGames: 2,
-        unplayedGames: 1,
-        totalPlaytimeMinutes: 150,
+        playedGames: 1,
+        unplayedGames: 2,
+        totalPlaytimeMinutes: 30,
         recentlyPlayedGames: 0,
       })),
     },
@@ -112,26 +111,24 @@ type StatusFixture = Readonly<{
 }>;
 
 describe("DashboardService", () => {
-  test("reports missing and potentially expired Steam Families credential guidance without exposing it", () => {
-    const missing = createDashboardService(createFakes()).getSteamFamiliesReconnect();
-    const configured = createDashboardService({
-      ...createFakes(),
-      steamFamiliesTokenConfigured: true,
-    }).getSteamFamiliesReconnect();
-
-    expect(missing).toEqual({
-      managementUrl: "https://store.steampowered.com/account/familymanagement",
-      credentialStatus: "missing",
-      guidance:
-        "No Steam Families credential is configured. Open Steam, then update STEAM_WEBAPI_TOKEN in your local .env file and restart the dashboard.",
+  test("does not label an official library winner as manual", async () => {
+    const fakes = createFakes();
+    const service = createDashboardService({
+      ...fakes,
+      steamService: {
+        ...fakes.steamService,
+        getManualCollection: vi.fn(() => [
+          {
+            appId: 10,
+            name: "Old manual",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ]),
+      },
     });
-    expect(configured).toEqual({
-      managementUrl: "https://store.steampowered.com/account/familymanagement",
-      credentialStatus: "configured",
-      guidance:
-        "A Steam Families credential is configured. If the next library sync does not include family games, it may have expired. Open Steam, update STEAM_WEBAPI_TOKEN in your local .env file, and restart the dashboard.",
-    });
-    expect(JSON.stringify(configured)).not.toContain("temporary-family-token");
+    const result = await service.getLibrary();
+    expect(result.games.find((game) => game.appId === 10)).not.toHaveProperty("manualCollection");
   });
 
   test("projects local recommendations, plans, and preferences into a browser-safe intelligence snapshot", async () => {
@@ -239,7 +236,7 @@ describe("DashboardService", () => {
       getStatuses: async () => [
         {
           appId: 20,
-          name: "Family game",
+          name: "Manual game",
           status: "paused",
           createdAt: "2025-01-01T00:00:00.000Z",
           updatedAt: "2025-01-03T00:00:00.000Z",
@@ -268,14 +265,13 @@ describe("DashboardService", () => {
         },
         {
           appId: 20,
-          name: "Family game",
+          name: "Manual game",
           status: "paused",
           coverUrl: "/api/artwork/20",
-          accessType: "family_shared",
+          accessType: "manual",
           isPlayable: false,
-          playtimeMinutes: 120,
-          recentPlaytimeMinutes: 45,
-          lastPlayedAt: "2025-01-02T00:00:00.000Z",
+          manualCollection: true,
+          playtimeMinutes: 0,
         },
         {
           appId: 30,
@@ -290,9 +286,9 @@ describe("DashboardService", () => {
       ],
       totals: {
         totalGames: 3,
-        playedGames: 2,
-        unplayedGames: 1,
-        totalPlaytimeMinutes: 150,
+        playedGames: 1,
+        unplayedGames: 2,
+        totalPlaytimeMinutes: 30,
       },
       statusStats: { backlog: 1, playing: 0, completed: 0, dropped: 1, paused: 1 },
     });
@@ -360,7 +356,7 @@ describe("DashboardService", () => {
         },
         {
           appId: 20,
-          name: "Family game",
+          name: "Manual game",
           status: "playing",
           createdAt: "2025-01-03T00:00:00.000Z",
           updatedAt: "2025-01-03T00:00:00.000Z",
