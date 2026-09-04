@@ -48,7 +48,7 @@ describe("dashboard browser API", () => {
     const api = module.createDashboardApi(fetch);
 
     await api.syncLibrary();
-    await api.updateGameStatus(42, "completed");
+    await api.updateGameStatus(42, "paused");
 
     expect(fetch.mock.calls).toEqual([
       ["/api/library/sync", { method: "POST" }],
@@ -57,7 +57,7 @@ describe("dashboard browser API", () => {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "completed" }),
+          body: JSON.stringify({ status: "paused" }),
         },
       ],
     ]);

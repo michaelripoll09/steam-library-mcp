@@ -19,7 +19,12 @@ import {
   type LibraryFilters,
 } from "./library-filters.js";
 
-const MUTABLE_STATUSES: readonly DashboardMutableStatus[] = ["playing", "completed", "dropped"];
+const MUTABLE_STATUSES: readonly DashboardMutableStatus[] = [
+  "playing",
+  "paused",
+  "completed",
+  "dropped",
+];
 
 type DashboardAppProps = Readonly<{ api?: DashboardApi }>;
 
@@ -932,7 +937,7 @@ function formatLabel(value: string): string {
       playing: "Jugando",
       completed: "Completado",
       dropped: "Abandonado",
-      paused: "En pausa",
+      paused: "Pausado",
       owned: "Propio",
       family: "Familia",
       manual: "Manual",

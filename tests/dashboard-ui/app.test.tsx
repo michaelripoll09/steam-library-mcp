@@ -283,20 +283,23 @@ describe("DashboardApp", () => {
     expect(within(dialog).getByText("Última vez jugado: 26/08/2026")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Estado")).toHaveValue("playing");
     expect(within(dialog).getByRole("option", { name: "Jugando" })).toHaveValue("playing");
+    expect(within(dialog).getByRole("option", { name: "Pausado" })).toHaveValue("paused");
+    expect(within(dialog).getByRole("option", { name: "Completado" })).toHaveValue("completed");
+    expect(within(dialog).getByRole("option", { name: "Abandonado" })).toHaveValue("dropped");
   });
 
   test("opens a keyboard-accessible detail dialog, updates status, and restores focus on Escape", async () => {
     const user = userEvent.setup();
     const updatedLibrary: DashboardLibrary = {
       ...library,
-      games: [library.games[0], { ...library.games[1], status: "completed" }],
-      statusStats: { ...library.statusStats, playing: 0, completed: 1 },
+      games: [library.games[0], { ...library.games[1], status: "paused" }],
+      statusStats: { ...library.statusStats, playing: 0, paused: 1 },
     };
     const api = {
       getLibrary: vi.fn().mockResolvedValue(library),
       syncLibrary: vi.fn(),
       updateGameStatus: vi.fn().mockResolvedValue({
-        mark: { outcome: "updated", appId: 20, status: "completed" },
+        mark: { outcome: "updated", appId: 20, status: "paused" },
         library: updatedLibrary,
       }),
     };
@@ -308,9 +311,9 @@ describe("DashboardApp", () => {
     const dialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
     expect(within(dialog).getByText("2h 5m jugado")).toBeInTheDocument();
     expect(within(dialog).getByText("Última vez jugado: 26/08/2026")).toBeInTheDocument();
-    await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
+    await user.selectOptions(within(dialog).getByLabelText("Estado"), "paused");
 
-    expect(api.updateGameStatus).toHaveBeenCalledWith(20, "completed");
+    expect(api.updateGameStatus).toHaveBeenCalledWith(20, "paused");
     expect(await within(dialog).findByText("Estado guardado.")).toBeInTheDocument();
     await user.keyboard("{Escape}");
 
@@ -470,9 +473,9 @@ describe("DashboardApp", () => {
     const dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
 
-    expect(await within(dialog).findByDisplayValue("En pausa")).toBeInTheDocument();
+    expect(await within(dialog).findByDisplayValue("Pausado")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("article", { name: "Hades" })).getByText("En pausa"),
+      within(screen.getByRole("article", { name: "Hades" })).getByText("Pausado"),
     ).toBeInTheDocument();
   });
 

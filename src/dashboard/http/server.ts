@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { AppError, InputError } from "../../errors.js";
 import type { DashboardService } from "../dashboard-service.js";
 import type { ArtworkResolver } from "../artwork-resolver.js";
+import { DASHBOARD_MUTABLE_STATUSES, type DashboardMutableStatus } from "../contracts.js";
 
 export const DASHBOARD_HOST = "127.0.0.1";
 export const MAX_JSON_BODY_BYTES = 16 * 1024;
@@ -573,20 +574,20 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
-function parseStatusPayload(payload: unknown): "playing" | "completed" | "dropped" {
+function parseStatusPayload(payload: unknown): DashboardMutableStatus {
   if (
     payload === null ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
     Object.keys(payload).length !== 1 ||
     !("status" in payload) ||
-    !["playing", "completed", "dropped"].includes(
-      (payload as { status?: unknown }).status as string,
+    !DASHBOARD_MUTABLE_STATUSES.includes(
+      (payload as { status?: unknown }).status as DashboardMutableStatus,
     )
   ) {
-    throw new InputError("Status must be one of playing, completed, or dropped.");
+    throw new InputError("Status must be one of playing, paused, completed, or dropped.");
   }
-  return (payload as { status: "playing" | "completed" | "dropped" }).status;
+  return (payload as { status: DashboardMutableStatus }).status;
 }
 
 function parseManualCollectionPayload(payload: unknown): string {

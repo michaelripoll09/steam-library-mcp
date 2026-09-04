@@ -113,10 +113,10 @@ describe("dashboard HTTP server", () => {
     const response = await call(port, "/api/games/10/status", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: "playing" }),
+      body: JSON.stringify({ status: "paused" }),
     });
     expect(response.status).toBe(200);
-    expect(service.updateStatus).toHaveBeenCalledWith(10, "playing");
+    expect(service.updateStatus).toHaveBeenCalledWith(10, "paused");
     expect(JSON.parse(response.body)).toEqual(update);
   });
 

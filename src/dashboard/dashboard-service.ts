@@ -367,6 +367,6 @@ function assertPositiveSafeInteger(value: unknown, message: string): asserts val
 
 function assertMutableStatus(status: unknown): asserts status is DashboardMutableStatus {
   if (!DASHBOARD_MUTABLE_STATUSES.includes(status as DashboardMutableStatus)) {
-    throw new InputError("Status must be one of playing, completed, or dropped.");
+    throw new InputError("Status must be one of playing, paused, completed, or dropped.");
   }
 }

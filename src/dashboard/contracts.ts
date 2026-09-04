@@ -8,6 +8,7 @@ export const DASHBOARD_GAME_STATUSES = Object.freeze([
 
 export const DASHBOARD_MUTABLE_STATUSES = Object.freeze([
   "playing",
+  "paused",
   "completed",
   "dropped",
 ] as const);

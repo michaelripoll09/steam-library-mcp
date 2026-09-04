@@ -467,7 +467,16 @@ describe("DashboardService", () => {
     },
   );
 
-  test.each(["backlog", "paused", "invalid", undefined])(
+  test("marks a game as paused", async () => {
+    const fakes = createFakes();
+    const service = createDashboardService(fakes);
+
+    await service.updateStatus(10, "paused");
+
+    expect(fakes.gamingTrackerService.mark).toHaveBeenCalledWith(10, "paused");
+  });
+
+  test.each(["backlog", "invalid", undefined])(
     "rejects non-mutable status %p before calling the tracker",
     async (status) => {
       const fakes = createFakes();
