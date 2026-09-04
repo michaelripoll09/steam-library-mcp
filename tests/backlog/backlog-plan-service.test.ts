@@ -18,6 +18,7 @@ function recommendation(appId: number, name: string, durationEstimateMinutes: nu
     appId,
     name,
     durationEstimateMinutes,
+    estimatedRemainingMinutes: durationEstimateMinutes,
     reasons: [],
     explanation: `Recommendation for ${name}.`,
   } as const;
@@ -28,7 +29,7 @@ function createRecommendationService(
 ): Pick<PlayNowRecommendationService, "recommend"> {
   return {
     recommend: vi.fn(async () => ({
-      request: { availableMinutes: 120, maxResults: 2 },
+      request: { availableMinutes: 120, maxResults: 2, sessionMode: "solo" as const },
       recommendations,
       exclusions: [],
     })),
@@ -64,6 +65,7 @@ describe("BacklogPlanService", () => {
     expect(recommendations.recommend).toHaveBeenCalledWith({
       availableMinutes: 120,
       maxResults: 2,
+      sessionMode: "solo",
     });
     expect(result.plan).toMatchObject({
       id: "weekly-1",

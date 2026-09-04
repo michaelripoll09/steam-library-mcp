@@ -96,7 +96,10 @@ describe("dashboard browser API", () => {
     const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}));
     const api = module.createDashboardApi(fetch) as unknown as {
       getInsights: () => Promise<unknown>;
-      getRecommendations: (minutes: number) => Promise<unknown>;
+      getRecommendations: (
+        minutes: number,
+        sessionMode: "solo" | "with_friends" | "any",
+      ) => Promise<unknown>;
       savePreference: (appId: number, preference: object) => Promise<unknown>;
       createPlan: (request: object) => Promise<unknown>;
       updatePlanItemProgress: (
@@ -107,7 +110,7 @@ describe("dashboard browser API", () => {
     };
 
     await api.getInsights();
-    await api.getRecommendations(45);
+    await api.getRecommendations(45, "with_friends");
     await api.savePreference(10, {
       priority: "high",
       excludedFromRecommendations: false,
@@ -118,7 +121,10 @@ describe("dashboard browser API", () => {
 
     expect(fetch.mock.calls).toEqual([
       ["/api/intelligence/insights", { method: "GET" }],
-      ["/api/intelligence/recommendations?availableMinutes=45", { method: "GET" }],
+      [
+        "/api/intelligence/recommendations?availableMinutes=45&sessionMode=with_friends",
+        { method: "GET" },
+      ],
       [
         "/api/games/10/preference",
         {

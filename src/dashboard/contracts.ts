@@ -65,16 +65,20 @@ export type DashboardRecommendationPreference = Readonly<{
   playMode: "any" | "solo" | "with_friends";
 }>;
 
+export type DashboardSessionMode = "solo" | "with_friends" | "any";
+
 export type DashboardRecommendation = Readonly<{
   appId: number;
   name: string;
   durationEstimateMinutes: number | null;
+  estimatedRemainingMinutes: number | null;
   reasons: readonly string[];
   explanation: string;
 }>;
 
 export type DashboardRecommendations = Readonly<{
   availableMinutes: number;
+  sessionMode: DashboardSessionMode;
   recommendations: readonly DashboardRecommendation[];
 }>;
 

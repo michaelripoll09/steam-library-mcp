@@ -7,6 +7,7 @@ import type {
   DashboardPlanItemProgress,
   DashboardRecommendationPreference,
   DashboardRecommendations,
+  DashboardSessionMode,
 } from "../../src/dashboard/contracts.js";
 import type { DashboardApi } from "./api.js";
 import { CustomSelect, type CustomSelectOption } from "./custom-select.js";
@@ -28,6 +29,12 @@ const PLAY_MODE_OPTIONS = [
   { value: "with_friends", label: "Con amigos" },
 ] as const satisfies readonly CustomSelectOption<"any" | "solo" | "with_friends">[];
 
+const SESSION_MODE_OPTIONS = [
+  { value: "solo", label: "Solo" },
+  { value: "with_friends", label: "Con amigos" },
+  { value: "any", label: "Cualquiera" },
+] as const satisfies readonly CustomSelectOption<DashboardSessionMode>[];
+
 const CADENCE_OPTIONS = [
   { value: "weekly", label: "Semanal" },
   { value: "monthly", label: "Mensual" },
@@ -45,6 +52,7 @@ export function IntelligencePanel({
   games,
 }: Readonly<{ api: DashboardApi; games: readonly DashboardGame[] }>) {
   const [availableMinutes, setAvailableMinutes] = useState("45");
+  const [sessionMode, setSessionMode] = useState<DashboardSessionMode>("solo");
   const [snapshot, setSnapshot] = useState<DashboardInsightSnapshot>();
   const [recommendations, setRecommendations] = useState<DashboardRecommendations>();
   const [plans, setPlans] = useState<readonly DashboardPlan[]>([]);
@@ -91,7 +99,7 @@ export function IntelligencePanel({
         selectedAppId === undefined ? Promise.resolve() : loadPreference(selectedAppId);
       const [nextSnapshot, nextRecommendations, nextPlans] = await Promise.all([
         api.getInsights(),
-        api.getRecommendations(validAvailableMinutes),
+        api.getRecommendations(validAvailableMinutes, sessionMode),
         api.getPlans(),
       ]);
       await preferencePromise;
@@ -119,7 +127,7 @@ export function IntelligencePanel({
 
     try {
       setError(undefined);
-      const nextRecommendations = await api.getRecommendations(validAvailableMinutes);
+      const nextRecommendations = await api.getRecommendations(validAvailableMinutes, sessionMode);
       setRecommendations(
         Array.isArray(nextRecommendations?.recommendations) ? nextRecommendations : undefined,
       );
@@ -217,6 +225,12 @@ export function IntelligencePanel({
                 onChange={(event) => setAvailableMinutes(event.target.value)}
               />
             </label>
+            <CustomSelect
+              label="Modo de sesión"
+              value={sessionMode}
+              options={SESSION_MODE_OPTIONS}
+              onChange={setSessionMode}
+            />
             <button
               className="intelligence-button intelligence-button-primary"
               type="button"

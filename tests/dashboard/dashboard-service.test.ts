@@ -97,7 +97,7 @@ function createFakes(
     },
     playNowRecommendationService: {
       recommend: vi.fn(async () => ({
-        request: { availableMinutes: 1, maxResults: 5 },
+        request: { availableMinutes: 1, maxResults: 5, sessionMode: "solo" as const },
         recommendations: [],
         exclusions: [],
       })),
@@ -211,12 +211,17 @@ describe("DashboardService", () => {
       },
       playNowRecommendationService: {
         recommend: vi.fn(async () => ({
-          request: { availableMinutes: 45, maxResults: 5 },
+          request: {
+            availableMinutes: 45,
+            maxResults: 5,
+            sessionMode: "with_friends" as const,
+          },
           recommendations: [
             {
               appId: 10,
               name: "Owned game",
               durationEstimateMinutes: null,
+              estimatedRemainingMinutes: null,
               reasons: [{ code: "duration_unknown" as const }],
               explanation: "Duration is unknown.",
             },
@@ -244,7 +249,7 @@ describe("DashboardService", () => {
       },
     } as never) as unknown as {
       getIntelligenceSnapshot: () => Promise<unknown>;
-      getRecommendations: (minutes: unknown) => Promise<unknown>;
+      getRecommendations: (minutes: unknown, sessionMode: unknown) => Promise<unknown>;
     };
 
     await expect(service.getIntelligenceSnapshot()).resolves.toEqual({
@@ -264,13 +269,15 @@ describe("DashboardService", () => {
         withFriendsGames: 1,
       },
     });
-    await expect(service.getRecommendations(45)).resolves.toEqual({
+    await expect(service.getRecommendations(45, "with_friends")).resolves.toEqual({
       availableMinutes: 45,
+      sessionMode: "with_friends",
       recommendations: [
         {
           appId: 10,
           name: "Owned game",
           durationEstimateMinutes: null,
+          estimatedRemainingMinutes: null,
           reasons: ["duration_unknown"],
           explanation: "Duration is unknown.",
         },

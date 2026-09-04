@@ -641,6 +641,7 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
           appId: 10,
           name: "Celeste",
           durationEstimateMinutes: null,
+          estimatedRemainingMinutes: null,
           reasons: ["duration_unknown"],
           explanation: "Duration is unknown.",
         },
@@ -900,7 +901,40 @@ test("allows replacing recommendation minutes after clearing the field and rejec
   await user.type(availableMinutes, "30");
   expect(availableMinutes).toHaveValue(30);
   await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
-  expect(api.getRecommendations).toHaveBeenCalledWith(30);
+  expect(api.getRecommendations).toHaveBeenCalledWith(30, "solo");
+});
+
+test("loads recommendations using the selected session mode", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn().mockResolvedValue(undefined),
+    getRecommendations: vi.fn().mockResolvedValue({
+      availableMinutes: 45,
+      sessionMode: "with_friends",
+      recommendations: [],
+    }),
+    getPreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "normal",
+      excludedFromRecommendations: false,
+      playMode: "any",
+    }),
+    savePreference: vi.fn(),
+    getPlans: vi.fn().mockResolvedValue([]),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+  const sessionMode = await screen.findByRole("combobox", { name: "Modo de sesión" });
+  await user.click(sessionMode);
+  await user.click(screen.getByRole("option", { name: "Con amigos" }));
+  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+
+  expect(api.getRecommendations).toHaveBeenCalledWith(45, "with_friends");
 });
 
 test("allows replacing backlog target games after clearing the field and rejects a blank submission", async () => {

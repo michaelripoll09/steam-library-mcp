@@ -35,8 +35,12 @@ function createServerForRegistration(preferencesUnavailable = false) {
     }),
   } as unknown as RecommendationPreferencesService;
   const recommendations: PlayNowRecommendationService = {
-    recommend: vi.fn(async () => ({
-      request: { availableMinutes: 60, maxResults: 3 },
+    recommend: vi.fn(async (request) => ({
+      request: request as {
+        availableMinutes: number;
+        maxResults: number;
+        sessionMode: "solo" | "with_friends" | "any";
+      },
       recommendations: [],
       exclusions: [],
     })),
@@ -133,6 +137,31 @@ describe("intelligence MCP prompts and resources", () => {
       uri: "steam-library://intelligence/library-insights",
     });
     expect(JSON.stringify(insights)).not.toContain("secret");
+    await client.close();
+    await server.close();
+  });
+
+  test("defaults play-now session mode to solo and accepts with_friends", async () => {
+    const server = createServerForRegistration();
+    const client = new Client({ name: "test", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const withFriends = await client.callTool({
+      name: "recommendation_get_play_now",
+      arguments: { availableMinutes: 60, maxResults: 3, sessionMode: "with_friends" },
+    });
+    const defaultMode = await client.callTool({
+      name: "recommendation_get_play_now",
+      arguments: { availableMinutes: 60, maxResults: 3 },
+    });
+
+    expect(withFriends.isError).toBeUndefined();
+    expect(JSON.stringify(withFriends)).toContain('\\"sessionMode\\":\\"with_friends\\"');
+    expect(defaultMode.isError).toBeUndefined();
+    expect(JSON.stringify(defaultMode)).toContain('\\"sessionMode\\":\\"solo\\"');
+
     await client.close();
     await server.close();
   });

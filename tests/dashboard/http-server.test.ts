@@ -280,8 +280,9 @@ describe("dashboard HTTP server", () => {
     const { port, service } = await setup();
     Object.assign(service, {
       getIntelligenceSnapshot: vi.fn(async () => ({ library: { totalGames: 0 } })),
-      getRecommendations: vi.fn(async (availableMinutes: number) => ({
+      getRecommendations: vi.fn(async (availableMinutes: number, sessionMode: string) => ({
         availableMinutes,
+        sessionMode,
         recommendations: [],
       })),
       getPreference: vi.fn((appId: number) => ({
@@ -314,7 +315,7 @@ describe("dashboard HTTP server", () => {
     expect((await call(port, "/api/intelligence/insights")).status).toBe(200);
     expect(
       JSON.parse((await call(port, "/api/intelligence/recommendations?availableMinutes=45")).body),
-    ).toEqual({ availableMinutes: 45, recommendations: [] });
+    ).toEqual({ availableMinutes: 45, sessionMode: "solo", recommendations: [] });
     await call(port, "/api/games/10/preference", {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -336,7 +337,7 @@ describe("dashboard HTTP server", () => {
     });
 
     expect(intelligenceService.getIntelligenceSnapshot).toHaveBeenCalledOnce();
-    expect(intelligenceService.getRecommendations).toHaveBeenCalledWith(45);
+    expect(intelligenceService.getRecommendations).toHaveBeenCalledWith(45, "solo");
     expect(intelligenceService.savePreference).toHaveBeenCalledWith(10, {
       priority: "high",
       excludedFromRecommendations: false,

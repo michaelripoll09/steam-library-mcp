@@ -28,12 +28,16 @@ describe("core services", () => {
     });
     const playNowRecommendationService: PlayNowRecommendationService = {
       recommend: async (request) => ({
-        request: request as { availableMinutes: number; maxResults: number },
+        request: {
+          ...(request as { availableMinutes: number; maxResults: number }),
+          sessionMode: "solo" as const,
+        },
         recommendations: [
           {
             appId: 10,
             name: "Shared Game",
             durationEstimateMinutes: 90,
+            estimatedRemainingMinutes: 90,
             reasons: [],
             explanation: "Shared database test recommendation.",
           },

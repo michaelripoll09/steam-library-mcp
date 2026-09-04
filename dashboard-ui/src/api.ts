@@ -8,6 +8,7 @@ import type {
   DashboardPlanItemProgress,
   DashboardRecommendationPreference,
   DashboardRecommendations,
+  DashboardSessionMode,
   DashboardStatusUpdate,
 } from "../../src/dashboard/contracts.js";
 import type { LocalTask } from "../../src/tasks/task-runner.js";
@@ -42,7 +43,10 @@ export type DashboardApi = Readonly<{
   ) => Promise<ManualLibraryGame>;
   removeManualCollection: (appId: number) => Promise<Readonly<{ removed: boolean }>>;
   getInsights: () => Promise<DashboardInsightSnapshot>;
-  getRecommendations: (availableMinutes: number) => Promise<DashboardRecommendations>;
+  getRecommendations: (
+    availableMinutes: number,
+    sessionMode: DashboardSessionMode,
+  ) => Promise<DashboardRecommendations>;
   getPreference: (appId: number) => Promise<DashboardRecommendationPreference>;
   savePreference: (
     appId: number,
@@ -94,10 +98,10 @@ export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
       }),
     getInsights: () =>
       request<DashboardInsightSnapshot>(fetch, "/api/intelligence/insights", { method: "GET" }),
-    getRecommendations: (availableMinutes) =>
+    getRecommendations: (availableMinutes, sessionMode) =>
       request<DashboardRecommendations>(
         fetch,
-        `/api/intelligence/recommendations?availableMinutes=${encodeURIComponent(String(availableMinutes))}`,
+        `/api/intelligence/recommendations?availableMinutes=${encodeURIComponent(String(availableMinutes))}&sessionMode=${encodeURIComponent(sessionMode)}`,
         { method: "GET" },
       ),
     getPreference: (appId) =>

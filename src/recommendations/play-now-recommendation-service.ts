@@ -9,23 +9,27 @@ import {
 import type { TrackerEntry, TrackerRepository } from "../domain/tracker.js";
 import { InputError } from "../errors.js";
 
+export type PlayNowSessionMode = "solo" | "with_friends" | "any";
+
 export type PlayNowRecommendationRequest = Readonly<{
   availableMinutes: number;
   maxResults: number;
+  sessionMode: PlayNowSessionMode;
 }>;
 
 export type PlayNowReason =
   | Readonly<{
-      code: "duration_within_budget" | "duration_over_budget";
-      durationMinutes: number;
+      code: "finishable_in_session";
+      estimatedRemainingMinutes: number;
       availableMinutes: number;
     }>
-  | Readonly<{ code: "duration_unknown" | "priority_high" | "status_ongoing" }>;
+  | Readonly<{ code: "duration_unknown" | "priority_high" | "status_playing" | "status_paused" }>;
 
 export type PlayNowRecommendation = Readonly<{
   appId: number;
   name: string;
   durationEstimateMinutes: number | null;
+  estimatedRemainingMinutes: number | null;
   reasons: readonly PlayNowReason[];
   explanation: string;
 }>;
@@ -63,6 +67,7 @@ type Candidate = Readonly<{
   preference: RecommendationPreference;
   status: TrackerEntry["status"] | undefined;
   durationEstimateMinutes: number | undefined;
+  estimatedRemainingMinutes: number | undefined;
 }>;
 
 const exclusionReasonOrder: readonly ExclusionReason[] = [
@@ -96,6 +101,7 @@ export function createPlayNowRecommendationService({
           game,
           preference,
           statusesByAppId.get(game.appId),
+          request.sessionMode,
         );
         if (exclusionReason !== undefined) {
           exclusionCounts.set(exclusionReason, (exclusionCounts.get(exclusionReason) ?? 0) + 1);
@@ -105,10 +111,16 @@ export function createPlayNowRecommendationService({
       });
       const candidates = await Promise.all(
         eligible.map(async (candidate): Promise<Candidate> => {
-          const estimate = await gameDurationService.getEstimate(candidate.game);
+          const durationEstimateMinutes = getNormallyMinutes(
+            await gameDurationService.getEstimate(candidate.game),
+          );
           return {
             ...candidate,
-            durationEstimateMinutes: getNormallyMinutes(estimate),
+            durationEstimateMinutes,
+            estimatedRemainingMinutes: estimateRemainingMinutes(
+              candidate.game,
+              durationEstimateMinutes,
+            ),
           };
         }),
       );
@@ -121,6 +133,7 @@ export function createPlayNowRecommendationService({
         request: Object.freeze({
           availableMinutes: request.availableMinutes,
           maxResults: request.maxResults,
+          sessionMode: request.sessionMode,
         }),
         recommendations: Object.freeze(recommendations),
         exclusions: Object.freeze(
@@ -140,9 +153,12 @@ function assertRequest(request: unknown): asserts request is PlayNowRecommendati
     typeof request !== "object" ||
     request === null ||
     !isPositiveSafeInteger(candidate?.availableMinutes) ||
-    !isPositiveSafeInteger(candidate?.maxResults)
+    !isPositiveSafeInteger(candidate?.maxResults) ||
+    !isPlayNowSessionMode(candidate?.sessionMode)
   ) {
-    throw new InputError("Available minutes and max results must be positive safe integers.");
+    throw new InputError(
+      "Available minutes and max results must be positive safe integers and session mode must be valid.",
+    );
   }
 }
 
@@ -150,17 +166,30 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
+function isPlayNowSessionMode(value: unknown): value is PlayNowSessionMode {
+  return value === "solo" || value === "with_friends" || value === "any";
+}
+
 function getExclusionReason(
   game: SteamGame,
   preference: RecommendationPreference,
   status: TrackerEntry["status"] | undefined,
+  sessionMode: PlayNowSessionMode,
 ): ExclusionReason | undefined {
   if (game.isPlayable === false) return "not_playable";
   if (preference.excludedFromRecommendations) return "preference_excluded";
-  if (preference.playMode === "with_friends") return "with_friends_only";
+  if (!isPlayModeCompatible(preference, sessionMode)) return "with_friends_only";
   if (status === "completed") return "completed";
   if (status === "dropped") return "dropped";
   return undefined;
+}
+
+function isPlayModeCompatible(
+  preference: RecommendationPreference,
+  sessionMode: PlayNowSessionMode,
+): boolean {
+  if (sessionMode === "any" || preference.playMode === "any") return true;
+  return preference.playMode === sessionMode;
 }
 
 function getNormallyMinutes(
@@ -175,71 +204,94 @@ function isDurationEstimate(
   return !("isError" in estimate);
 }
 
+function estimateRemainingMinutes(
+  game: SteamGame,
+  durationEstimateMinutes: number | undefined,
+): number | undefined {
+  if (durationEstimateMinutes === undefined) return undefined;
+  return Math.max(durationEstimateMinutes - game.playtimeMinutes, 0);
+}
+
 function compareCandidates(left: Candidate, right: Candidate, availableMinutes: number): number {
-  const durationFitDifference =
-    durationFitRank(left, availableMinutes) - durationFitRank(right, availableMinutes);
-  if (durationFitDifference !== 0) return durationFitDifference;
+  const statusDifference = statusRank(left.status) - statusRank(right.status);
+  if (statusDifference !== 0) return statusDifference;
 
   const priorityDifference = priorityRank(left.preference) - priorityRank(right.preference);
   if (priorityDifference !== 0) return priorityDifference;
 
-  const statusDifference = ongoingStatusRank(left.status) - ongoingStatusRank(right.status);
-  if (statusDifference !== 0) return statusDifference;
+  const finishableDifference =
+    finishableRank(left, availableMinutes) - finishableRank(right, availableMinutes);
+  if (finishableDifference !== 0) return finishableDifference;
+
+  const lastPlayedDifference = (right.game.lastPlayedAt ?? "").localeCompare(
+    left.game.lastPlayedAt ?? "",
+  );
+  if (lastPlayedDifference !== 0) return lastPlayedDifference;
 
   return left.game.appId - right.game.appId;
 }
 
-function durationFitRank(candidate: Candidate, availableMinutes: number): number {
-  if (candidate.durationEstimateMinutes === undefined) return 2;
-  return candidate.durationEstimateMinutes <= availableMinutes ? 0 : 1;
+function statusRank(status: TrackerEntry["status"] | undefined): number {
+  if (status === "playing") return 0;
+  if (status === "paused") return 1;
+  return 2;
 }
 
 function priorityRank(preference: RecommendationPreference): number {
   return preference.priority === "high" ? 0 : 1;
 }
 
-function ongoingStatusRank(status: TrackerEntry["status"] | undefined): number {
-  return status === "playing" || status === "paused" ? 0 : 1;
+function finishableRank(candidate: Candidate, availableMinutes: number): number {
+  return candidate.estimatedRemainingMinutes !== undefined &&
+    candidate.estimatedRemainingMinutes <= availableMinutes
+    ? 0
+    : 1;
 }
 
 function toRecommendation(candidate: Candidate, availableMinutes: number): PlayNowRecommendation {
-  const durationReason = toDurationReason(candidate.durationEstimateMinutes, availableMinutes);
-  const reasons: PlayNowReason[] = [durationReason];
+  const reasons: PlayNowReason[] = [];
+  if (candidate.status === "playing") reasons.push(Object.freeze({ code: "status_playing" }));
+  if (candidate.status === "paused") reasons.push(Object.freeze({ code: "status_paused" }));
   if (candidate.preference.priority === "high")
     reasons.push(Object.freeze({ code: "priority_high" }));
-  if (ongoingStatusRank(candidate.status) === 0)
-    reasons.push(Object.freeze({ code: "status_ongoing" }));
+  if (
+    candidate.estimatedRemainingMinutes !== undefined &&
+    candidate.estimatedRemainingMinutes <= availableMinutes
+  ) {
+    reasons.push(
+      Object.freeze({
+        code: "finishable_in_session",
+        estimatedRemainingMinutes: candidate.estimatedRemainingMinutes,
+        availableMinutes,
+      }),
+    );
+  }
+  if (candidate.estimatedRemainingMinutes === undefined)
+    reasons.push(Object.freeze({ code: "duration_unknown" }));
 
   return Object.freeze({
     appId: candidate.game.appId,
     name: candidate.game.name,
     durationEstimateMinutes: candidate.durationEstimateMinutes ?? null,
+    estimatedRemainingMinutes: candidate.estimatedRemainingMinutes ?? null,
     reasons: Object.freeze(reasons),
     explanation: explanationFor(candidate, availableMinutes),
   });
 }
 
-function toDurationReason(
-  durationMinutes: number | undefined,
-  availableMinutes: number,
-): PlayNowReason {
-  if (durationMinutes === undefined) return Object.freeze({ code: "duration_unknown" });
-  return Object.freeze({
-    code: durationMinutes <= availableMinutes ? "duration_within_budget" : "duration_over_budget",
-    durationMinutes,
-    availableMinutes,
-  });
-}
-
 function explanationFor(candidate: Candidate, availableMinutes: number): string {
-  const duration = candidate.durationEstimateMinutes;
-  let explanation =
-    duration === undefined
-      ? `Duration is unknown, so this is a lower-confidence fit for your ${availableMinutes} minutes.`
-      : duration <= availableMinutes
-        ? `Fits your ${availableMinutes} minutes (about ${duration} minutes).`
-        : `Needs about ${duration} minutes, which exceeds your ${availableMinutes} minutes.`;
-  if (candidate.preference.priority === "high") explanation += " High priority.";
-  if (ongoingStatusRank(candidate.status) === 0) explanation += " Already in progress.";
-  return explanation;
+  const explanations: string[] = [];
+  if (candidate.status === "playing") explanations.push("Already in progress.");
+  if (candidate.status === "paused") explanations.push("Paused and ready to resume.");
+  if (candidate.preference.priority === "high") explanations.push("High priority.");
+  if (candidate.estimatedRemainingMinutes === undefined) {
+    explanations.push("Duration is unknown.");
+  } else if (candidate.estimatedRemainingMinutes <= availableMinutes) {
+    explanations.push(
+      `Can be finished in your ${availableMinutes} minutes (about ${candidate.estimatedRemainingMinutes} minutes remaining).`,
+    );
+  } else {
+    explanations.push(`About ${candidate.estimatedRemainingMinutes} minutes remaining.`);
+  }
+  return explanations.join(" ");
 }

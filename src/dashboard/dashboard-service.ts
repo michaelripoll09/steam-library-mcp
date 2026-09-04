@@ -31,6 +31,7 @@ import {
   type DashboardRecommendation,
   type DashboardRecommendationPreference,
   type DashboardRecommendations,
+  type DashboardSessionMode,
 } from "./contracts.js";
 
 type DashboardServiceDependencies = Readonly<{
@@ -63,7 +64,10 @@ export type DashboardService = Readonly<{
   ): Promise<ManualLibraryGame>;
   removeManualCollection(appId: unknown): boolean;
   getIntelligenceSnapshot(): Promise<DashboardInsightSnapshot>;
-  getRecommendations(availableMinutes: unknown): Promise<DashboardRecommendations>;
+  getRecommendations(
+    availableMinutes: unknown,
+    sessionMode: unknown,
+  ): Promise<DashboardRecommendations>;
   getPreference(appId: unknown): DashboardRecommendationPreference;
   savePreference(appId: unknown, preference: unknown): DashboardRecommendationPreference;
   listPlans(): readonly DashboardPlan[];
@@ -142,17 +146,20 @@ export function createDashboardService({
         preferences: createPreferenceSummary(preferences),
       });
     },
-    async getRecommendations(availableMinutes) {
+    async getRecommendations(availableMinutes, sessionMode) {
       assertPositiveSafeInteger(
         availableMinutes,
         "Available minutes must be a positive safe integer.",
       );
+      assertDashboardSessionMode(sessionMode);
       const result = await playNowRecommendationService.recommend({
         availableMinutes,
         maxResults: 5,
+        sessionMode,
       });
       return Object.freeze({
         availableMinutes: result.request.availableMinutes,
+        sessionMode: result.request.sessionMode,
         recommendations: Object.freeze(result.recommendations.map(toDashboardRecommendation)),
       });
     },
@@ -225,6 +232,7 @@ function toDashboardRecommendation(recommendation: PlayNowRecommendation): Dashb
     appId: recommendation.appId,
     name: recommendation.name,
     durationEstimateMinutes: recommendation.durationEstimateMinutes,
+    estimatedRemainingMinutes: recommendation.estimatedRemainingMinutes,
     reasons: Object.freeze(recommendation.reasons.map((reason) => reason.code)),
     explanation: recommendation.explanation,
   });
@@ -362,6 +370,12 @@ function assertTaskId(id: unknown): asserts id is string {
 function assertPositiveSafeInteger(value: unknown, message: string): asserts value is number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     throw new InputError(message);
+  }
+}
+
+function assertDashboardSessionMode(value: unknown): asserts value is DashboardSessionMode {
+  if (value !== "solo" && value !== "with_friends" && value !== "any") {
+    throw new InputError("Session mode must be solo, with_friends, or any.");
   }
 }
 

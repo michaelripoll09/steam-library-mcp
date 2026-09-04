@@ -22,6 +22,7 @@ const playNowSchema = z
   .object({
     availableMinutes: z.number().int().safe().positive(),
     maxResults: z.number().int().safe().positive(),
+    sessionMode: z.enum(["solo", "with_friends", "any"]).default("solo"),
   })
   .strict();
 const createPlanSchema = z

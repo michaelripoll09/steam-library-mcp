@@ -77,6 +77,7 @@ export function createBacklogPlanService({
       const recommendationResult = await recommendationService.recommend({
         availableMinutes: request.availableMinutes,
         maxResults: request.targetGameCount,
+        sessionMode: "solo",
       });
       const createdAt = toTimestamp(clock);
       const id = createId();

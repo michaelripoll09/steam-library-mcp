@@ -330,8 +330,8 @@ async function handleApi(
 
   if (pathname === "/api/intelligence/recommendations") {
     if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
-    const availableMinutes = parsePositiveQuery(request.url, "availableMinutes");
-    if (availableMinutes === undefined) {
+    const requestParameters = parsePlayNowQuery(request.url);
+    if (requestParameters === undefined) {
       sendJson(response, 400, {
         error: { code: "INPUT_INVALID", message: "Available minutes must be a positive integer." },
       });
@@ -340,7 +340,11 @@ async function handleApi(
     await runService(
       response,
       method,
-      () => dashboardService.getRecommendations(availableMinutes),
+      () =>
+        dashboardService.getRecommendations(
+          requestParameters.availableMinutes,
+          requestParameters.sessionMode,
+        ),
       logger,
     );
     return;
@@ -688,14 +692,30 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-function parsePositiveQuery(rawUrl: string | undefined, key: string): number | undefined {
+function parsePlayNowQuery(
+  rawUrl: string | undefined,
+):
+  Readonly<{ availableMinutes: number; sessionMode: "solo" | "with_friends" | "any" }> | undefined {
   const url = parseRequestUrl(rawUrl);
-  if (url === undefined || [...url.searchParams.keys()].some((name) => name !== key))
+  if (
+    url === undefined ||
+    [...url.searchParams.keys()].some(
+      (name) => name !== "availableMinutes" && name !== "sessionMode",
+    )
+  )
     return undefined;
-  const values = url.searchParams.getAll(key);
+  const values = url.searchParams.getAll("availableMinutes");
   if (values.length !== 1 || !/^\d+$/.test(values[0])) return undefined;
-  const value = Number(values[0]);
-  return isPositiveSafeInteger(value) ? value : undefined;
+  const availableMinutes = Number(values[0]);
+  const sessionModeValues = url.searchParams.getAll("sessionMode");
+  const sessionMode = sessionModeValues.length === 0 ? "solo" : sessionModeValues[0];
+  if (
+    !isPositiveSafeInteger(availableMinutes) ||
+    sessionModeValues.length > 1 ||
+    (sessionMode !== "solo" && sessionMode !== "with_friends" && sessionMode !== "any")
+  )
+    return undefined;
+  return { availableMinutes, sessionMode };
 }
 
 function decodeRouteId(value: string): string | undefined {
