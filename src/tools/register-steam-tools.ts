@@ -6,6 +6,7 @@ import {
   emptyInputSchema,
   manualCollectionAddInputSchema,
   manualCollectionRemoveInputSchema,
+  manualCollectionUpdateInputSchema,
   recentGamesInputSchema,
   searchLibraryInputSchema,
   steamGameInputSchema,
@@ -87,9 +88,22 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Look up and add a public Steam game to the persistent manual collection.",
       inputSchema: manualCollectionAddInputSchema.shape,
+      annotations: { readOnlyHint: false },
     },
-    createHandler(manualCollectionAddInputSchema, async ({ steam }) =>
-      manualCollection(service).addManualCollection(steam),
+    createHandler(manualCollectionAddInputSchema, async (input) =>
+      manualCollection(service).addManualCollection(input),
+    ),
+  );
+  server.registerTool(
+    "steam_update_manual_collection",
+    {
+      description:
+        "Update local access metadata for a manually stored Steam game without changing Steam.",
+      inputSchema: manualCollectionUpdateInputSchema.shape,
+      annotations: { readOnlyHint: false },
+    },
+    createHandler(manualCollectionUpdateInputSchema, async (input) =>
+      manualCollection(service).updateManualCollection(input),
     ),
   );
   server.registerTool(
@@ -97,6 +111,7 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Remove a game from the persistent manual Steam collection by app ID.",
       inputSchema: manualCollectionRemoveInputSchema.shape,
+      annotations: { readOnlyHint: false },
     },
     createHandler(manualCollectionRemoveInputSchema, async ({ appId }) =>
       manualCollection(service).removeManualCollection(appId),
@@ -107,11 +122,18 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
 function manualCollection(
   service: SteamService,
 ): Required<
-  Pick<SteamService, "getManualCollection" | "addManualCollection" | "removeManualCollection">
+  Pick<
+    SteamService,
+    | "getManualCollection"
+    | "addManualCollection"
+    | "updateManualCollection"
+    | "removeManualCollection"
+  >
 > {
   if (
     service.getManualCollection === undefined ||
     service.addManualCollection === undefined ||
+    service.updateManualCollection === undefined ||
     service.removeManualCollection === undefined
   ) {
     throw new InputError("Manual collections are unavailable.");
@@ -119,6 +141,7 @@ function manualCollection(
   return {
     getManualCollection: service.getManualCollection,
     addManualCollection: service.addManualCollection,
+    updateManualCollection: service.updateManualCollection,
     removeManualCollection: service.removeManualCollection,
   };
 }

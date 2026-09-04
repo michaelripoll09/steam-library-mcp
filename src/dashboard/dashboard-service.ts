@@ -108,7 +108,9 @@ export function createDashboardService({
     addManualCollection(steam) {
       if (steamService.addManualCollection === undefined)
         throw new InputError("Manual collections are unavailable.");
-      return steamService.addManualCollection(steam);
+      if (typeof steam !== "string")
+        throw new InputError("Provide a positive Steam app ID or a Steam store app URL.");
+      return steamService.addManualCollection({ steam });
     },
     removeManualCollection(appId) {
       assertAppId(appId);

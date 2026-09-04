@@ -72,4 +72,32 @@ describe("manual library", () => {
 
     database.close();
   });
+
+  it("updates only local access fields without changing the stored game name", () => {
+    const database = openTrackerDatabase(":memory:");
+    const repository = new SqliteManualLibraryRepository(database);
+    repository.upsert({
+      appId: 1245620,
+      name: "ELDEN RING",
+      accessType: "manual",
+      isPlayable: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(
+      repository.updateAccess({
+        appId: 1245620,
+        accessType: "family",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      name: "ELDEN RING",
+      accessType: "family",
+      isPlayable: false,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    database.close();
+  });
 });

@@ -51,6 +51,88 @@ function createClient(overrides: Partial<SteamApiClient> = {}): SteamApiClient {
 }
 
 describe("SteamService", () => {
+  test("defaults family entries to playable", async () => {
+    const repository: ManualLibraryRepository = {
+      list: vi.fn(() => []),
+      upsert: vi.fn((game) => game),
+      updateAccess: vi.fn(),
+      remove: vi.fn(),
+    };
+    const service = createSteamService({
+      config,
+      steamClient: createClient(),
+      cache: new TtlCache(),
+      clock: { now: () => Date.parse("2026-01-02T00:00:00.000Z") },
+      manualRepository: repository,
+      publicGameLookup: vi.fn(async () => ({ appId: 1245620, name: "ELDEN RING" })),
+    });
+
+    await expect(
+      service.addManualCollection?.({ steam: "1245620", accessType: "family" }),
+    ).resolves.toMatchObject({ accessType: "family", isPlayable: true });
+  });
+
+  test("preserves old manual default", async () => {
+    const repository: ManualLibraryRepository = {
+      list: vi.fn(() => []),
+      upsert: vi.fn((game) => game),
+      updateAccess: vi.fn(),
+      remove: vi.fn(),
+    };
+    const service = createSteamService({
+      config,
+      steamClient: createClient(),
+      cache: new TtlCache(),
+      clock: { now: () => Date.parse("2026-01-02T00:00:00.000Z") },
+      manualRepository: repository,
+      publicGameLookup: vi.fn(async () => ({ appId: 1245620, name: "ELDEN RING" })),
+    });
+
+    await expect(service.addManualCollection?.({ steam: "1245620" })).resolves.toMatchObject({
+      accessType: "manual",
+      isPlayable: false,
+    });
+  });
+
+  test("updates access without a Steam Store lookup", async () => {
+    const entry = {
+      appId: 1245620,
+      name: "ELDEN RING",
+      accessType: "manual" as const,
+      isPlayable: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const repository: ManualLibraryRepository = {
+      list: vi.fn(() => [entry]),
+      upsert: vi.fn((game) => ({ ...entry, ...game })),
+      updateAccess: vi.fn((update) => ({
+        ...entry,
+        ...(update.accessType === undefined ? {} : { accessType: update.accessType }),
+        ...(update.isPlayable === undefined ? {} : { isPlayable: update.isPlayable }),
+        updatedAt: update.updatedAt,
+      })),
+      remove: vi.fn(),
+    };
+    const lookup = vi.fn(async () => ({ appId: 1245620, name: "ELDEN RING" }));
+    const service = createSteamService({
+      config,
+      steamClient: createClient(),
+      cache: new TtlCache(),
+      clock: { now: () => Date.parse("2026-01-02T00:00:00.000Z") },
+      manualRepository: repository,
+      publicGameLookup: lookup,
+    });
+    const update = service.updateManualCollection;
+
+    expect(update).toBeTypeOf("function");
+    await expect(update?.({ appId: 1245620, accessType: "family" })).resolves.toMatchObject({
+      accessType: "family",
+      isPlayable: false,
+    });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   test("does not rewrite or invalidate the library for an unchanged manual entry", async () => {
     const entry = {
       appId: 413150,
@@ -63,6 +145,7 @@ describe("SteamService", () => {
     const repository: ManualLibraryRepository = {
       list: vi.fn(() => [entry]),
       upsert: vi.fn(),
+      updateAccess: vi.fn(),
       remove: vi.fn(),
     };
     const cache = new TtlCache<SteamLibrary>();
@@ -76,7 +159,7 @@ describe("SteamService", () => {
       publicGameLookup: vi.fn(async () => ({ appId: 413150, name: "Stardew Valley" })),
     });
     await service.getLibrary();
-    await expect(service.addManualCollection?.("413150")).resolves.toEqual(entry);
+    await expect(service.addManualCollection?.({ steam: "413150" })).resolves.toEqual(entry);
     expect(repository.upsert).not.toHaveBeenCalled();
     await service.getLibrary();
     expect(steamClient.getOwnedGames).toHaveBeenCalledTimes(1);
@@ -306,7 +389,12 @@ describe("SteamService", () => {
       steamClient: createClient(),
       cache: new TtlCache(),
       clock: { now: () => 0 },
-      manualRepository: { list: vi.fn(() => manualGames), upsert: vi.fn(), remove: vi.fn() },
+      manualRepository: {
+        list: vi.fn(() => manualGames),
+        upsert: vi.fn(),
+        updateAccess: vi.fn(),
+        remove: vi.fn(),
+      },
     });
 
     await expect(service.getLibrary()).resolves.toMatchObject({
@@ -349,7 +437,7 @@ describe("SteamService", () => {
 
     try {
       await mcpService.getLibrary();
-      await dashboardService.addManualCollection?.("413150");
+      await dashboardService.addManualCollection?.({ steam: "413150" });
       await expect(mcpService.getLibrary()).resolves.toMatchObject({
         games: expect.arrayContaining([
           expect.objectContaining({ appId: 413150, accessType: "manual" }),

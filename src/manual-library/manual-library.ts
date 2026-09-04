@@ -18,6 +18,13 @@ type ManualLibraryGameInput = Readonly<
     Partial<Pick<ManualLibraryGame, "accessType" | "isPlayable">>
 >;
 
+export type ManualLibraryAccessUpdate = Readonly<{
+  appId: number;
+  accessType?: ManualLibraryAccessType;
+  isPlayable?: boolean;
+  updatedAt: string;
+}>;
+
 type ManualLibraryGameRow = Readonly<{
   appId: number;
   name: string;
@@ -30,6 +37,7 @@ type ManualLibraryGameRow = Readonly<{
 export interface ManualLibraryRepository {
   list(): readonly ManualLibraryGame[];
   upsert(game: ManualLibraryGameInput): ManualLibraryGame;
+  updateAccess(update: ManualLibraryAccessUpdate): ManualLibraryGame | undefined;
   remove(appId: number): boolean;
 }
 
@@ -73,6 +81,29 @@ export class SqliteManualLibraryRepository implements ManualLibraryRepository {
         "SELECT app_id as appId, name, access_type as accessType, is_playable as isPlayable, created_at as createdAt, updated_at as updatedAt FROM manual_library_games WHERE app_id = ?",
       )
       .get(game.appId) as ManualLibraryGameRow;
+    return mapManualLibraryGame(row);
+  }
+  updateAccess(update: ManualLibraryAccessUpdate): ManualLibraryGame | undefined {
+    const result = this.database
+      .prepare(
+        `UPDATE manual_library_games
+         SET access_type = COALESCE(?, access_type),
+             is_playable = COALESCE(?, is_playable),
+             updated_at = ?
+         WHERE app_id = ?`,
+      )
+      .run(
+        update.accessType ?? null,
+        update.isPlayable === undefined ? null : update.isPlayable ? 1 : 0,
+        update.updatedAt,
+        update.appId,
+      );
+    if (result.changes === 0) return undefined;
+    const row = this.database
+      .prepare(
+        "SELECT app_id as appId, name, access_type as accessType, is_playable as isPlayable, created_at as createdAt, updated_at as updatedAt FROM manual_library_games WHERE app_id = ?",
+      )
+      .get(update.appId) as ManualLibraryGameRow;
     return mapManualLibraryGame(row);
   }
   remove(appId: number): boolean {

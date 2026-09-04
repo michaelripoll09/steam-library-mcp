@@ -68,7 +68,7 @@ describe("core services", () => {
         excludedFromRecommendations: false,
         playMode: "solo",
       });
-      await services.steamService.addManualCollection?.("20");
+      await services.steamService.addManualCollection?.({ steam: "20" });
       await services.backlogPlanService.create({
         cadence: "weekly",
         availableMinutes: 120,
@@ -144,7 +144,7 @@ describe("core services", () => {
 
     try {
       await mcpServices.steamService.getLibrary();
-      await dashboardServices.steamService.addManualCollection?.("413150");
+      await dashboardServices.steamService.addManualCollection?.({ steam: "413150" });
       await expect(tools.get("steam_get_library")?.({})).resolves.toMatchObject({
         content: [expect.objectContaining({ text: expect.stringContaining('"appId":413150') })],
       });
