@@ -155,6 +155,29 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
+  test("migrates existing manual games as non-playable manual access", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database, MIGRATIONS.slice(0, 7));
+      database
+        .prepare(
+          "INSERT INTO manual_library_games (app_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        )
+        .run(1245620, "ELDEN RING", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+
+      migrateDatabase(database);
+
+      expect(
+        database
+          .prepare("SELECT access_type, is_playable FROM manual_library_games WHERE app_id = ?")
+          .get(1245620),
+      ).toEqual({ access_type: "manual", is_playable: 0 });
+    } finally {
+      database.close();
+    }
+  });
+
   test("rejects an edited migration history without applying pending migrations", () => {
     const database = new Database(":memory:");
     migrateDatabase(database);

@@ -56,6 +56,8 @@ function createService(): SteamService {
     addManualCollection: vi.fn(async () => ({
       appId: 413150,
       name: "Stardew Valley",
+      accessType: "manual" as const,
+      isPlayable: false,
       createdAt: "2026-08-30T00:00:00.000Z",
       updatedAt: "2026-08-30T00:00:00.000Z",
     })),

@@ -26,12 +26,16 @@ describe("manual library", () => {
     repository.upsert({
       appId: 10,
       name: "First",
+      accessType: "manual",
+      isPlayable: false,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     repository.upsert({
       appId: 10,
       name: "Canonical",
+      accessType: "manual",
+      isPlayable: false,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
@@ -39,11 +43,33 @@ describe("manual library", () => {
       {
         appId: 10,
         name: "Canonical",
+        accessType: "manual",
+        isPlayable: false,
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
       },
     ]);
     expect(repository.remove(10)).toBe(true);
     expect(repository.remove(10)).toBe(false);
+  });
+
+  it("round-trips family access and playability", () => {
+    const database = openTrackerDatabase(":memory:");
+    const repository = new SqliteManualLibraryRepository(database);
+    const createdAt = "2026-01-01T00:00:00.000Z";
+    const updatedAt = "2026-01-02T00:00:00.000Z";
+
+    expect(
+      repository.upsert({
+        appId: 1245620,
+        name: "ELDEN RING",
+        accessType: "family",
+        isPlayable: true,
+        createdAt,
+        updatedAt,
+      }),
+    ).toMatchObject({ accessType: "family", isPlayable: true });
+
+    database.close();
   });
 });

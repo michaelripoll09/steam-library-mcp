@@ -2,40 +2,78 @@ import type Database from "better-sqlite3";
 
 import { InputError, SteamResponseError, SteamUnavailableError } from "../errors.js";
 
+export type ManualLibraryAccessType = "family" | "manual";
+
 export type ManualLibraryGame = Readonly<{
   appId: number;
   name: string;
+  accessType: ManualLibraryAccessType;
+  isPlayable: boolean;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+type ManualLibraryGameInput = Readonly<
+  Omit<ManualLibraryGame, "accessType" | "isPlayable"> &
+    Partial<Pick<ManualLibraryGame, "accessType" | "isPlayable">>
+>;
+
+type ManualLibraryGameRow = Readonly<{
+  appId: number;
+  name: string;
+  accessType: ManualLibraryAccessType;
+  isPlayable: 0 | 1;
   createdAt: string;
   updatedAt: string;
 }>;
 
 export interface ManualLibraryRepository {
   list(): readonly ManualLibraryGame[];
-  upsert(game: ManualLibraryGame): ManualLibraryGame;
+  upsert(game: ManualLibraryGameInput): ManualLibraryGame;
   remove(appId: number): boolean;
+}
+
+function mapManualLibraryGame(row: ManualLibraryGameRow): ManualLibraryGame {
+  return Object.freeze({
+    appId: row.appId,
+    name: row.name,
+    accessType: row.accessType,
+    isPlayable: row.isPlayable === 1,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  });
 }
 
 export class SqliteManualLibraryRepository implements ManualLibraryRepository {
   constructor(private readonly database: Database.Database) {}
   list(): readonly ManualLibraryGame[] {
-    return this.database
+    const rows = this.database
       .prepare(
-        "SELECT app_id as appId, name, created_at as createdAt, updated_at as updatedAt FROM manual_library_games ORDER BY name COLLATE NOCASE, app_id",
+        "SELECT app_id as appId, name, access_type as accessType, is_playable as isPlayable, created_at as createdAt, updated_at as updatedAt FROM manual_library_games ORDER BY name COLLATE NOCASE, app_id",
       )
-      .all() as ManualLibraryGame[];
+      .all() as ManualLibraryGameRow[];
+    return rows.map(mapManualLibraryGame);
   }
-  upsert(game: ManualLibraryGame): ManualLibraryGame {
+  upsert(game: ManualLibraryGameInput): ManualLibraryGame {
     this.database
       .prepare(
-        `INSERT INTO manual_library_games (app_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT(app_id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`,
+        `INSERT INTO manual_library_games (app_id, name, access_type, is_playable, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(app_id) DO UPDATE SET name = excluded.name, access_type = excluded.access_type, is_playable = excluded.is_playable, updated_at = excluded.updated_at`,
       )
-      .run(game.appId, game.name, game.createdAt, game.updatedAt);
-    return this.database
+      .run(
+        game.appId,
+        game.name,
+        game.accessType ?? "manual",
+        game.isPlayable === true ? 1 : 0,
+        game.createdAt,
+        game.updatedAt,
+      );
+    const row = this.database
       .prepare(
-        "SELECT app_id as appId, name, created_at as createdAt, updated_at as updatedAt FROM manual_library_games WHERE app_id = ?",
+        "SELECT app_id as appId, name, access_type as accessType, is_playable as isPlayable, created_at as createdAt, updated_at as updatedAt FROM manual_library_games WHERE app_id = ?",
       )
-      .get(game.appId) as ManualLibraryGame;
+      .get(game.appId) as ManualLibraryGameRow;
+    return mapManualLibraryGame(row);
   }
   remove(appId: number): boolean {
     return (

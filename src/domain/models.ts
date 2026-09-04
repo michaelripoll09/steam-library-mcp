@@ -1,3 +1,5 @@
+export type SteamAccessType = "owned" | "family" | "manual";
+
 export interface SteamGame {
   readonly appId: number;
   readonly name: string;
@@ -5,7 +7,7 @@ export interface SteamGame {
   readonly recentPlaytimeMinutes?: number;
   readonly lastPlayedAt?: string;
   readonly imageUrl?: string;
-  readonly accessType?: "owned" | "manual";
+  readonly accessType?: SteamAccessType;
   readonly isPlayable?: boolean;
   readonly manualCollection?: boolean;
 }
