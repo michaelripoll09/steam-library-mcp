@@ -16,8 +16,83 @@ import type { MetadataService } from "../src/services/metadata-service.js";
 import type { SteamService } from "../src/services/steam-service.js";
 import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
 import type { SteamApiClient } from "../src/steam/client.js";
+import { openTrackerDatabase } from "../src/tracker/sqlite/database.js";
 
 describe("core services", () => {
+  test("opens one shared database for all default repositories", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const config = loadConfig({
+      STEAM_API_KEY: "test-api-key",
+      STEAM_ID: "76561198000000000",
+      TRACKER_DATABASE_PATH: join(tmpdir(), "unused-core-services.sqlite"),
+    });
+    const playNowRecommendationService: PlayNowRecommendationService = {
+      recommend: async (request) => ({
+        request: request as { availableMinutes: number; maxResults: number },
+        recommendations: [
+          {
+            appId: 10,
+            name: "Shared Game",
+            durationEstimateMinutes: 90,
+            reasons: [],
+            explanation: "Shared database test recommendation.",
+          },
+        ],
+        exclusions: [],
+      }),
+    };
+    const services = createCoreServices({
+      database,
+      config,
+      steamClient: {
+        getOwnedGames: async () => ({
+          response: { games: [{ appid: 10, name: "Shared Game", playtime_forever: 0 }] },
+        }),
+        getRecentGames: async () => ({ response: { games: [] } }),
+      },
+      cache: new TtlCache(),
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ 20: { success: true, data: { name: "Manual Shared Game" } } }),
+        ),
+      clock: { now: () => 0 },
+      metadataService: {} as MetadataService,
+      gameDurationService: {} as GameDurationService,
+      playNowRecommendationService,
+    });
+
+    try {
+      await services.gamingTrackerService.mark(10, "playing");
+      services.recommendationPreferencesService.save(10, {
+        priority: "high",
+        excludedFromRecommendations: false,
+        playMode: "solo",
+      });
+      await services.steamService.addManualCollection?.("20");
+      await services.backlogPlanService.create({
+        cadence: "weekly",
+        availableMinutes: 120,
+        targetGameCount: 1,
+      });
+
+      expect(database.prepare("SELECT COUNT(*) AS count FROM tracker_entries").get()).toEqual({
+        count: 1,
+      });
+      expect(
+        database.prepare("SELECT COUNT(*) AS count FROM recommendation_preferences").get(),
+      ).toEqual({ count: 1 });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM manual_library_games").get()).toEqual({
+        count: 1,
+      });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM backlog_plans").get()).toEqual({
+        count: 1,
+      });
+    } finally {
+      services.close?.();
+      database.close();
+    }
+  });
+
   test("shares an absolute manual collection database across independently composed services", async () => {
     const directory = mkdtempSync(join(tmpdir(), "steam-library-core-parity-"));
     const config = loadConfig({
