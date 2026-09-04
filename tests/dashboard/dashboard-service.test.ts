@@ -111,6 +111,42 @@ type StatusFixture = Readonly<{
 }>;
 
 describe("DashboardService", () => {
+  test("updates a manual collection entry with family access and playability", async () => {
+    const updateManualCollection = vi.fn(
+      async (patch: { appId: number; accessType?: "manual" | "family"; isPlayable?: boolean }) => ({
+        appId: patch.appId,
+        name: "Manual game",
+        accessType: patch.accessType ?? "manual",
+        isPlayable: patch.isPlayable ?? false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    );
+    const fakes = createFakes();
+    const service = createDashboardService({
+      ...fakes,
+      steamService: { ...fakes.steamService, updateManualCollection },
+    } as never) as unknown as {
+      updateManualCollection: (
+        appId: unknown,
+        patch: unknown,
+      ) => Promise<{ accessType: string; isPlayable: boolean }>;
+    };
+
+    const game = await service.updateManualCollection(20, {
+      accessType: "family",
+      isPlayable: true,
+    });
+
+    expect(updateManualCollection).toHaveBeenCalledWith({
+      appId: 20,
+      accessType: "family",
+      isPlayable: true,
+    });
+    expect(game.accessType).toBe("family");
+    expect(game.isPlayable).toBe(true);
+  });
+
   test("does not label an official library winner as manual", async () => {
     const fakes = createFakes();
     const service = createDashboardService({

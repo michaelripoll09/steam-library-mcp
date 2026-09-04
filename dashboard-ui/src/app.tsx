@@ -15,6 +15,7 @@ import {
   createLibraryFilters,
   filterLibraryGames,
   formatPlaytime,
+  LIBRARY_ACCESS_FILTER_OPTIONS,
   type LibraryFilters,
 } from "./library-filters.js";
 
@@ -80,6 +81,22 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
       setManualError(errorMessage(error));
     } finally {
       setIsSavingManual(false);
+    }
+  };
+  const updateManual = async (
+    appId: number,
+    patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+  ) => {
+    if (!manualCollectionApi) return;
+    setManualError(undefined);
+    try {
+      const updated = await api.updateManualCollection(appId, patch);
+      setManualCollection((collection) =>
+        collection.map((game) => (game.appId === appId ? updated : game)),
+      );
+      setLibrary(await api.getLibrary());
+    } catch (error) {
+      setManualError(errorMessage(error));
     }
   };
   const removeManual = async (appId: number) => {
@@ -167,6 +184,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           saving={isSavingManual}
           onSteamChange={setManualSteam}
           onAdd={() => void addManual()}
+          onUpdate={(appId, patch) => void updateManual(appId, patch)}
           onRemove={(appId) => void removeManual(appId)}
         />
       )}
@@ -456,6 +474,7 @@ function ManualCollectionPanel({
   saving,
   onSteamChange,
   onAdd,
+  onUpdate,
   onRemove,
 }: Readonly<{
   collection: readonly ManualLibraryGame[];
@@ -464,6 +483,10 @@ function ManualCollectionPanel({
   saving: boolean;
   onSteamChange: (value: string) => void;
   onAdd: () => void;
+  onUpdate: (
+    appId: number,
+    patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+  ) => void;
   onRemove: (appId: number) => void;
 }>) {
   return (
@@ -505,6 +528,29 @@ function ManualCollectionPanel({
               <span>
                 {game.name} <small>· AppID {game.appId}</small>
               </span>
+              <label>
+                Acceso de {game.name}
+                <select
+                  value={game.accessType}
+                  onChange={(event) =>
+                    onUpdate(game.appId, {
+                      accessType: event.target.value as "manual" | "family",
+                    })
+                  }
+                >
+                  <option value="manual">Manual</option>
+                  <option value="family">Familia</option>
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={game.isPlayable}
+                  onChange={(event) => onUpdate(game.appId, { isPlayable: event.target.checked })}
+                />
+                Disponible para jugar: {game.name}
+              </label>
+              <span>{game.isPlayable ? "Listo para jugar" : "No disponible para jugar"}</span>
               <button
                 type="button"
                 onClick={() => onRemove(game.appId)}
@@ -560,7 +606,7 @@ function LibraryToolbar({
         onChange={(accessType) =>
           onChange({ ...filters, accessType: accessType as LibraryFilters["accessType"] })
         }
-        options={["all", "owned", "manual"]}
+        options={LIBRARY_ACCESS_FILTER_OPTIONS}
       />
       <FilterSelect
         label="Historial de juego"
@@ -712,8 +758,7 @@ function GameCard({
         <span className="game-card-content">
           <strong className="game-card-title">{game.name}</strong>
           <span className="game-card-meta">
-            {formatPlaytime(game.playtimeMinutes)} jugado ·{" "}
-            {game.accessType === "owned" ? "Propio" : "Manual"}
+            {formatPlaytime(game.playtimeMinutes)} jugado · {formatLabel(game.accessType)}
           </span>
         </span>
       </button>
@@ -826,7 +871,7 @@ function GameDetails({
         </button>
         <CoverImage game={game} />
         <div className="details-copy">
-          <p className="eyebrow">{game.accessType === "owned" ? "Juego propio" : "Juego manual"}</p>
+          <p className="eyebrow">{`Juego ${formatLabel(game.accessType).toLowerCase()}`}</p>
           <h2 id="game-details-title">{game.name}</h2>
           <p>{formatPlaytime(game.playtimeMinutes)} jugado</p>
           {game.manualCollection && (
@@ -889,6 +934,7 @@ function formatLabel(value: string): string {
       dropped: "Abandonado",
       paused: "En pausa",
       owned: "Propio",
+      family: "Familia",
       manual: "Manual",
       played: "Jugados",
       unplayed: "Sin jugar",
@@ -939,11 +985,18 @@ function isManualCollectionApi(
   api: DashboardApi,
 ): api is DashboardApi &
   Required<
-    Pick<DashboardApi, "getManualCollection" | "addManualCollection" | "removeManualCollection">
+    Pick<
+      DashboardApi,
+      | "getManualCollection"
+      | "addManualCollection"
+      | "updateManualCollection"
+      | "removeManualCollection"
+    >
   > {
   return (
     typeof api.getManualCollection === "function" &&
     typeof api.addManualCollection === "function" &&
+    typeof api.updateManualCollection === "function" &&
     typeof api.removeManualCollection === "function"
   );
 }

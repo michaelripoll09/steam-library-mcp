@@ -36,6 +36,10 @@ export type DashboardApi = Readonly<{
   ) => Promise<DashboardStatusUpdate>;
   getManualCollection: () => Promise<readonly ManualLibraryGame[]>;
   addManualCollection: (steam: string) => Promise<ManualLibraryGame>;
+  updateManualCollection: (
+    appId: number,
+    patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+  ) => Promise<ManualLibraryGame>;
   removeManualCollection: (appId: number) => Promise<Readonly<{ removed: boolean }>>;
   getInsights: () => Promise<DashboardInsightSnapshot>;
   getRecommendations: (availableMinutes: number) => Promise<DashboardRecommendations>;
@@ -77,6 +81,12 @@ export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ steam }),
+      }),
+    updateManualCollection: (appId, patch) =>
+      request<ManualLibraryGame>(fetch, `/api/manual-collection/${appId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
       }),
     removeManualCollection: (appId) =>
       request<Readonly<{ removed: boolean }>>(fetch, `/api/manual-collection/${appId}`, {

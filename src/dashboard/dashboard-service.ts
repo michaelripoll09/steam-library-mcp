@@ -41,6 +41,7 @@ type DashboardServiceDependencies = Readonly<{
     | "getLibraryStats"
     | "getManualCollection"
     | "addManualCollection"
+    | "updateManualCollection"
     | "removeManualCollection"
   >;
   gamingTrackerService: Pick<GamingTrackerService, "getStatuses" | "mark">;
@@ -56,6 +57,10 @@ export type DashboardService = Readonly<{
   updateStatus(appId: unknown, status: unknown): Promise<DashboardStatusUpdate>;
   getManualCollection(): readonly ManualLibraryGame[];
   addManualCollection(steam: unknown): Promise<ManualLibraryGame>;
+  updateManualCollection(
+    appId: unknown,
+    patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+  ): Promise<ManualLibraryGame>;
   removeManualCollection(appId: unknown): boolean;
   getIntelligenceSnapshot(): Promise<DashboardInsightSnapshot>;
   getRecommendations(availableMinutes: unknown): Promise<DashboardRecommendations>;
@@ -111,6 +116,13 @@ export function createDashboardService({
       if (typeof steam !== "string")
         throw new InputError("Provide a positive Steam app ID or a Steam store app URL.");
       return steamService.addManualCollection({ steam });
+    },
+    updateManualCollection(appId, patch) {
+      assertAppId(appId);
+      if (steamService.updateManualCollection === undefined)
+        throw new InputError("Manual collections are unavailable.");
+      assertManualCollectionPatch(patch);
+      return steamService.updateManualCollection({ appId, ...patch });
     },
     removeManualCollection(appId) {
       assertAppId(appId);
@@ -315,6 +327,27 @@ function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
 function assertAppId(appId: unknown): asserts appId is number {
   if (typeof appId !== "number" || !Number.isSafeInteger(appId) || appId <= 0) {
     throw new TrackerInputError();
+  }
+}
+
+function assertManualCollectionPatch(
+  patch: unknown,
+): asserts patch is { accessType?: "manual" | "family"; isPlayable?: boolean } {
+  if (
+    patch === null ||
+    typeof patch !== "object" ||
+    Array.isArray(patch) ||
+    Object.keys(patch).length === 0 ||
+    Object.keys(patch).some((key) => key !== "accessType" && key !== "isPlayable") ||
+    ("accessType" in patch &&
+      patch.accessType !== undefined &&
+      patch.accessType !== "manual" &&
+      patch.accessType !== "family") ||
+    ("isPlayable" in patch &&
+      patch.isPlayable !== undefined &&
+      typeof patch.isPlayable !== "boolean")
+  ) {
+    throw new InputError("At least one access field must be provided.");
   }
 }
 

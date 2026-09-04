@@ -91,6 +91,50 @@ describe("DashboardApp", () => {
     expect(fetch).toHaveBeenCalledWith("/api/manual-collection", { method: "GET" });
   });
 
+  test("updates a manual row to Familia and playable without removing or re-adding it", async () => {
+    const user = userEvent.setup();
+    const entry = {
+      appId: 413150,
+      name: "Stardew Valley",
+      accessType: "manual" as const,
+      isPlayable: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi.fn().mockResolvedValue([entry]),
+      addManualCollection: vi.fn(),
+      removeManualCollection: vi.fn(),
+      updateManualCollection: vi.fn(async (_appId: number, patch: object) => ({
+        ...entry,
+        ...patch,
+      })),
+    };
+
+    render(<DashboardApp api={api as never} />);
+
+    expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
+    expect(screen.getByText("No disponible para jugar")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Acceso de Stardew Valley"), "family");
+    await waitFor(() =>
+      expect(api.updateManualCollection).toHaveBeenCalledWith(413150, { accessType: "family" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Acceso de Stardew Valley")).toHaveValue("family"),
+    );
+
+    await user.click(screen.getByLabelText("Disponible para jugar: Stardew Valley"));
+    await waitFor(() =>
+      expect(api.updateManualCollection).toHaveBeenLastCalledWith(413150, { isPlayable: true }),
+    );
+    await waitFor(() => expect(screen.getByText("Listo para jugar")).toBeInTheDocument());
+    expect(api.addManualCollection).not.toHaveBeenCalled();
+    expect(api.removeManualCollection).not.toHaveBeenCalled();
+  });
+
   test("labels manual catalog games without legacy access language", async () => {
     render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
 

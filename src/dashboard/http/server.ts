@@ -47,6 +47,7 @@ export type DashboardHttpServerOptions = Readonly<{
     | "updateStatus"
     | "getManualCollection"
     | "addManualCollection"
+    | "updateManualCollection"
     | "removeManualCollection"
     | "getIntelligenceSnapshot"
     | "getRecommendations"
@@ -256,7 +257,6 @@ async function handleApi(
   }
   const manualCollectionMatch = /^\/api\/manual-collection\/(\d+)$/.exec(pathname);
   if (manualCollectionMatch !== null) {
-    if (method !== "DELETE") return sendMethodNotAllowed(response, method, "DELETE");
     const appId = parseAppId(manualCollectionMatch[1]);
     if (appId === undefined) {
       sendJson(
@@ -267,6 +267,16 @@ async function handleApi(
       );
       return;
     }
+    if (method === "PATCH") {
+      try {
+        const patch = parseManualCollectionUpdatePayload(await readJsonBody(request));
+        sendJson(response, 200, await dashboardService.updateManualCollection(appId, patch));
+      } catch (error) {
+        sendError(response, error, logger, method);
+      }
+      return;
+    }
+    if (method !== "DELETE") return sendMethodNotAllowed(response, method, "DELETE, PATCH");
     await runService(
       response,
       method,
@@ -584,6 +594,29 @@ function parseManualCollectionPayload(payload: unknown): string {
     throw new InputError("Provide a positive Steam app ID or a Steam store app URL.");
   }
   return payload.steam;
+}
+
+function parseManualCollectionUpdatePayload(payload: unknown): {
+  accessType?: "manual" | "family";
+  isPlayable?: boolean;
+} {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    Object.keys(payload).length === 0 ||
+    Object.keys(payload).some((key) => key !== "accessType" && key !== "isPlayable") ||
+    ("accessType" in payload &&
+      payload.accessType !== undefined &&
+      payload.accessType !== "manual" &&
+      payload.accessType !== "family") ||
+    ("isPlayable" in payload &&
+      payload.isPlayable !== undefined &&
+      typeof payload.isPlayable !== "boolean")
+  ) {
+    throw new InputError("At least one access field must be provided.");
+  }
+  return payload as { accessType?: "manual" | "family"; isPlayable?: boolean };
 }
 
 function parsePreferencePayload(payload: unknown): {

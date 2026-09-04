@@ -2,6 +2,13 @@ import type { DashboardGame, DashboardGameStatus } from "../../src/dashboard/con
 
 export type PlayedFilter = "all" | "played" | "unplayed";
 
+export const LIBRARY_ACCESS_FILTER_OPTIONS = Object.freeze([
+  "all",
+  "owned",
+  "family",
+  "manual",
+] as const);
+
 export type LibraryFilters = Readonly<{
   query: string;
   status: DashboardGameStatus | "all";

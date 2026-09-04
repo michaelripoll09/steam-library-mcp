@@ -63,6 +63,32 @@ describe("dashboard browser API", () => {
     ]);
   });
 
+  test("updates manual collection access metadata with an exact PATCH request", async () => {
+    const module = await loadApi();
+    expect(module).toBeDefined();
+    if (module === undefined) return;
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}));
+    const api = module.createDashboardApi(fetch) as unknown as {
+      updateManualCollection: (
+        appId: number,
+        patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+      ) => Promise<unknown>;
+    };
+
+    await api.updateManualCollection(1245620, { accessType: "family", isPlayable: true });
+
+    expect(fetch.mock.calls).toEqual([
+      [
+        "/api/manual-collection/1245620",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessType: "family", isPlayable: true }),
+        },
+      ],
+    ]);
+  });
+
   test("uses dashboard-only intelligence endpoints for reads and explicit local writes", async () => {
     const module = await loadApi();
     expect(module).toBeDefined();

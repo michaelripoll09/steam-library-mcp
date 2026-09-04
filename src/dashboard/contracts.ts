@@ -1,5 +1,3 @@
-import type { SteamAccessType } from "../domain/models.js";
-
 export const DASHBOARD_GAME_STATUSES = Object.freeze([
   "backlog",
   "playing",
@@ -15,6 +13,7 @@ export const DASHBOARD_MUTABLE_STATUSES = Object.freeze([
 ] as const);
 
 export type DashboardGameStatus = (typeof DASHBOARD_GAME_STATUSES)[number];
+export type DashboardAccessType = "owned" | "family" | "manual";
 export type DashboardMutableStatus = (typeof DASHBOARD_MUTABLE_STATUSES)[number];
 
 export type DashboardGame = Readonly<{
@@ -22,7 +21,7 @@ export type DashboardGame = Readonly<{
   name: string;
   status: DashboardGameStatus;
   coverUrl: string;
-  accessType: SteamAccessType;
+  accessType: DashboardAccessType;
   manualCollection?: boolean;
   isPlayable: boolean;
   playtimeMinutes: number;

@@ -427,6 +427,56 @@ describe("dashboard HTTP server", () => {
     ).not.toHaveBeenCalled();
   });
 
+  test("updates manual collection access metadata with an exact PATCH payload", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, {
+      updateManualCollection: vi.fn(async () => ({
+        appId: 1245620,
+        name: "ELDEN RING",
+        accessType: "family",
+        isPlayable: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      })),
+    });
+    const manualCollectionService = service as unknown as {
+      updateManualCollection: ReturnType<typeof vi.fn>;
+    };
+
+    const response = await call(port, "/api/manual-collection/1245620", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accessType: "family", isPlayable: true }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(manualCollectionService.updateManualCollection).toHaveBeenCalledWith(1245620, {
+      accessType: "family",
+      isPlayable: true,
+    });
+    expect(JSON.parse(response.body)).toMatchObject({ accessType: "family", isPlayable: true });
+  });
+
+  test("rejects empty manual collection PATCH payloads", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, { updateManualCollection: vi.fn() });
+
+    const response = await call(port, "/api/manual-collection/1245620", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body)).toEqual({
+      error: { code: "INPUT_INVALID", message: "At least one access field must be provided." },
+    });
+    expect(
+      (service as unknown as { updateManualCollection: ReturnType<typeof vi.fn> })
+        .updateManualCollection,
+    ).not.toHaveBeenCalled();
+  });
+
   test("rejects cross-origin manual collection deletes and permits same-origin deletes", async () => {
     const { port, service } = await setup();
     Object.assign(service, { removeManualCollection: vi.fn(() => true) });
