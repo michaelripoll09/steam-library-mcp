@@ -7,14 +7,37 @@ import { describe, expect, test, vi } from "vitest";
 
 import { TtlCache } from "../src/cache/ttl-cache.js";
 import { loadConfig } from "../src/config.js";
-import { createServer, startStdioServer } from "../src/server.js";
+import {
+  createServer,
+  createServerRuntime,
+  type ServerOverrides,
+  startStdioServer,
+} from "../src/server.js";
+import type { BacklogPlanService } from "../src/backlog/backlog-plan-service.js";
+import type { GameDurationService } from "../src/durations/game-duration-service.js";
+import type { PlayNowRecommendationService } from "../src/recommendations/play-now-recommendation-service.js";
+import type { RecommendationPreferencesService } from "../src/recommendations/recommendation-preferences-service.js";
+import type { MetadataService } from "../src/services/metadata-service.js";
+import type { SteamService } from "../src/services/steam-service.js";
 import type { SteamApiClient } from "../src/steam/client.js";
+import type { TaskRunner } from "../src/tasks/task-runner.js";
 import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
 
 const config = loadConfig({
   STEAM_API_KEY: "secret-api-key",
   STEAM_ID: "76561198000000000",
 });
+
+const allServiceOverrides = {
+  steamService: {} as SteamService,
+  gamingTrackerService: {} as GamingTrackerService,
+  recommendationPreferencesService: {} as RecommendationPreferencesService,
+  metadataService: {} as MetadataService,
+  gameDurationService: {} as GameDurationService,
+  playNowRecommendationService: {} as PlayNowRecommendationService,
+  backlogPlanService: {} as BacklogPlanService,
+  taskRunner: {} as TaskRunner,
+} satisfies ServerOverrides;
 
 function createSteamClient(): SteamApiClient {
   return {
@@ -42,6 +65,13 @@ function createGamingTrackerService(): GamingTrackerService {
 }
 
 describe("MCP server composition", () => {
+  test("server runtime exposes idempotent cleanup", () => {
+    const runtime = createServerRuntime(allServiceOverrides);
+
+    expect(() => runtime.close()).not.toThrow();
+    expect(() => runtime.close()).not.toThrow();
+  });
+
   test("lists the complete task-enabled Steam, tracker, metadata, and intelligence surface", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
