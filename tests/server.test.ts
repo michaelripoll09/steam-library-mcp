@@ -88,7 +88,7 @@ describe("MCP server composition", () => {
     await client.connect(clientTransport);
 
     const listedTools = await client.listTools();
-    expect(listedTools.tools).toHaveLength(26);
+    expect(listedTools.tools).toHaveLength(27);
     expect(listedTools).toMatchObject({
       tools: [
         { name: "steam_get_library" },
@@ -110,6 +110,14 @@ describe("MCP server composition", () => {
         },
         {
           name: "gaming_mark_playing",
+          inputSchema: {
+            type: "object",
+            properties: { appId: { type: "integer" } },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "gaming_mark_paused",
           inputSchema: {
             type: "object",
             properties: { appId: { type: "integer" } },

@@ -40,12 +40,17 @@ const library: SteamLibrary = {
   ],
 };
 
+type TrackerMark = <TStatus extends TrackerMarkStatus>(
+  appId: unknown,
+  status: TStatus,
+) => Promise<TrackerMarkResult<TStatus>>;
+
 function createFakes(
   overrides: {
     readonly getLibrary?: () => Promise<SteamLibrary>;
     readonly refreshLibrary?: () => Promise<SteamLibrary>;
     readonly getStatuses?: () => Promise<readonly TrackerGame[]>;
-    readonly mark?: (appId: unknown, status: TrackerMarkStatus) => Promise<TrackerMarkResult>;
+    readonly mark?: TrackerMark;
   } = {},
 ) {
   return {
@@ -64,12 +69,15 @@ function createFakes(
       getStatuses: vi.fn(overrides.getStatuses ?? (async () => [])),
       mark: vi.fn(
         overrides.mark ??
-          (async (appId: unknown, status: TrackerMarkStatus): Promise<TrackerMarkResult> => ({
+          (async <TStatus extends TrackerMarkStatus>(
+            appId: unknown,
+            status: TStatus,
+          ): Promise<TrackerMarkResult<TStatus>> => ({
             outcome: "updated",
             appId: appId as number,
             status,
           })),
-      ),
+      ) as unknown as TrackerMark,
     },
     recommendationPreferencesService: {
       get: vi.fn((appId: unknown) => ({
@@ -402,7 +410,14 @@ describe("DashboardService", () => {
       ]);
     const fakes = createFakes({
       getStatuses,
-      mark: async () => ({ outcome: "updated", appId: 20, status: "playing" }),
+      mark: async <TStatus extends TrackerMarkStatus>(
+        appId: unknown,
+        status: TStatus,
+      ): Promise<TrackerMarkResult<TStatus>> => ({
+        outcome: "updated",
+        appId: appId as number,
+        status,
+      }),
     });
     const service = createDashboardService(fakes);
 
@@ -424,7 +439,12 @@ describe("DashboardService", () => {
 
   test("preserves a not-owned mark outcome while returning the current projection", async () => {
     const fakes = createFakes({
-      mark: async () => ({ outcome: "not_owned", appId: 999 }),
+      mark: async <TStatus extends TrackerMarkStatus>(
+        appId: unknown,
+      ): Promise<TrackerMarkResult<TStatus>> => ({
+        outcome: "not_owned",
+        appId: appId as number,
+      }),
     });
     const service = createDashboardService(fakes);
 

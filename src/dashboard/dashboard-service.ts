@@ -318,7 +318,9 @@ function createStatusStats(games: readonly DashboardGame[]): DashboardStatusStat
   return Object.freeze(stats);
 }
 
-function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
+function toDashboardMarkResult(
+  result: TrackerMarkResult<DashboardMutableStatus>,
+): DashboardMarkResult {
   return result.outcome === "not_owned"
     ? Object.freeze({ outcome: result.outcome, appId: result.appId })
     : Object.freeze({ outcome: result.outcome, appId: result.appId, status: result.status });

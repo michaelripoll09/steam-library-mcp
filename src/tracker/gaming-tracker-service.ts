@@ -11,10 +11,10 @@ import {
   TrackerPersistenceError,
 } from "../errors.js";
 
-export type TrackerMarkStatus = Extract<GameStatus, "playing" | "completed" | "dropped">;
+export type TrackerMarkStatus = Extract<GameStatus, "playing" | "paused" | "completed" | "dropped">;
 
-export type TrackerMarkResult =
-  | Readonly<{ outcome: "updated" | "unchanged"; appId: number; status: TrackerMarkStatus }>
+export type TrackerMarkResult<TStatus extends TrackerMarkStatus = TrackerMarkStatus> =
+  | Readonly<{ outcome: "updated" | "unchanged"; appId: number; status: TStatus }>
   | Readonly<{ outcome: "not_owned"; appId: number }>;
 
 type Clock = Readonly<{ now(): number }>;
@@ -26,7 +26,10 @@ type GamingTrackerServiceDependencies = Readonly<{
 }>;
 
 export type GamingTrackerService = Readonly<{
-  mark(appId: unknown, status: TrackerMarkStatus): Promise<TrackerMarkResult>;
+  mark<TStatus extends TrackerMarkStatus>(
+    appId: unknown,
+    status: TStatus,
+  ): Promise<TrackerMarkResult<TStatus>>;
   getBacklog(): Promise<readonly TrackerGame[]>;
   getCurrentGame(): Promise<TrackerGame | null>;
   getCompleted(): Promise<readonly TrackerGame[]>;
@@ -39,7 +42,10 @@ export function createGamingTrackerService({
   repository,
 }: GamingTrackerServiceDependencies): GamingTrackerService {
   return Object.freeze({
-    async mark(appId: unknown, status: TrackerMarkStatus): Promise<TrackerMarkResult> {
+    async mark<TStatus extends TrackerMarkStatus>(
+      appId: unknown,
+      status: TStatus,
+    ): Promise<TrackerMarkResult<TStatus>> {
       assertAppId(appId);
 
       let ownedGames;

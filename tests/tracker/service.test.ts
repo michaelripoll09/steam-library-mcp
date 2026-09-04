@@ -111,6 +111,25 @@ describe("GamingTrackerService ownership gate", () => {
 });
 
 describe("GamingTrackerService lifecycle", () => {
+  test("explicitly marks an accessible game paused", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const service = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup: createOwnershipLookup([{ appId: 10, name: "Ten", playtimeMinutes: 0 }]),
+      repository: new SqliteTrackerRepository(database),
+    });
+
+    try {
+      await expect(service.mark(10, "paused")).resolves.toEqual({
+        outcome: "updated",
+        appId: 10,
+        status: "paused",
+      });
+    } finally {
+      database.close();
+    }
+  });
+
   test("pauses the prior current game atomically and makes repeated marks unchanged", async () => {
     const database = openTrackerDatabase(":memory:");
     const service = createGamingTrackerService({
