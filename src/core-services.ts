@@ -85,9 +85,13 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
       resolvedDatabase = overrides.database;
       return resolvedDatabase;
     }
-    resolvedDatabase = openTrackerDatabase(config().trackerDatabasePath);
-    ownsDatabase = true;
-    return resolvedDatabase;
+    try {
+      resolvedDatabase = openTrackerDatabase(config().trackerDatabasePath);
+      ownsDatabase = true;
+      return resolvedDatabase;
+    } catch (error) {
+      throw new TrackerPersistenceError(error);
+    }
   };
   const clock = overrides.clock ?? { now: Date.now };
   const steamService =
