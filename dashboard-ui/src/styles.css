@@ -1208,3 +1208,19 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+.home-insight-summary {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #2b405b;
+  border-radius: 0.8rem;
+  background: #17263a;
+}
+.home-insight-summary h3,
+.home-insight-summary p {
+  margin: 0;
+}
+.home-compact-state {
+  color: #c4d1e2;
+}

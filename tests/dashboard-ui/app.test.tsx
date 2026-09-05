@@ -106,6 +106,29 @@ afterEach(() => {
 });
 
 describe("DashboardApp", () => {
+  test("renders compact Home summaries and routes actions to focused views", async () => {
+    const user = userEvent.setup();
+    const api = {
+      ...intelligenceApiFixture(),
+      getManualCollection: vi.fn(),
+      addManualCollection: vi.fn(),
+      updateManualCollection: vi.fn(),
+      removeManualCollection: vi.fn(),
+      getTasks: vi.fn(),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+    };
+    render(<DashboardApp api={api as never} />);
+
+    expect(await screen.findByText("Juegos totales")).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Buscar juegos" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("URL de Steam o AppID")).not.toBeInTheDocument();
+    expect(api.getManualCollection).not.toHaveBeenCalled();
+    expect(api.getTasks).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Calcular Play Now" }));
+    expect(screen.getByRole("heading", { name: "Play Now", level: 1 })).toBeInTheDocument();
+  });
   test("keeps filters in the Library card grid and opens the selected card", async () => {
     const user = userEvent.setup();
     render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
@@ -142,14 +165,8 @@ describe("DashboardApp", () => {
     await screen.findByRole("article", { name: "Celeste" });
     rerender(<DashboardApp />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
-    expect(fetch.mock.calls).toEqual(
-      expect.arrayContaining([
-        ["/api/library", { method: "GET" }],
-        ["/api/tasks", { method: "GET" }],
-        ["/api/manual-collection", { method: "GET" }],
-      ]),
-    );
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledWith("/api/library", { method: "GET" });
   });
 
   test("loads persisted manual collection entries with the default API", async () => {

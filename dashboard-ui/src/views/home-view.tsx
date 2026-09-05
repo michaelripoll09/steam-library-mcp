@@ -1,4 +1,5 @@
 import type { DashboardLibrary } from "../../../src/dashboard/contracts.js";
+import type { IntelligenceState } from "../intelligence-state.js";
 import type { DashboardView } from "../navigation/app-shell.js";
 
 export type HomeTaskSummary = Readonly<{
@@ -6,15 +7,22 @@ export type HomeTaskSummary = Readonly<{
   status: string;
 }>;
 
+type HomeDestination = Extract<DashboardView, "library" | "play-now" | "backlog" | "tasks">;
+
 export function HomeView({
   library,
+  intelligenceState,
   taskSummary,
   onNavigate,
 }: Readonly<{
   library: DashboardLibrary | undefined;
+  intelligenceState: IntelligenceState;
   taskSummary: HomeTaskSummary;
-  onNavigate: (view: DashboardView) => void;
+  onNavigate: (view: HomeDestination) => void;
 }>) {
+  const snapshot = intelligenceState.snapshot;
+  const recommendationCount = intelligenceState.recommendations?.recommendations.length;
+
   return (
     <section className="home-view" aria-labelledby="home-heading">
       <div>
@@ -23,14 +31,24 @@ export function HomeView({
         <p className="subtitle">Una lectura rápida de tu biblioteca y de lo que sigue.</p>
       </div>
       <div className="home-summary-grid" aria-label="Resumen de la biblioteca">
-        <SummaryCard label="Juegos" value={String(library?.totals.totalGames ?? 0)} />
-        <SummaryCard label="Jugando" value={String(library?.statusStats.playing ?? 0)} />
-        <SummaryCard label="Backlog" value={String(library?.statusStats.backlog ?? 0)} />
-        <SummaryCard
-          label="Tiempo invertido"
-          value={formatPlaytime(library?.totals.totalPlaytimeMinutes ?? 0)}
-        />
+        <StatCard label="Juegos totales" value={String(library?.totals.totalGames ?? 0)} />
+        <StatCard label="Jugando" value={String(library?.statusStats.playing ?? 0)} />
+        <StatCard label="Backlog" value={String(library?.statusStats.backlog ?? 0)} />
       </div>
+      <section className="home-insight-summary" aria-label="Resumen de Play Now">
+        <h3>Play Now</h3>
+        {snapshot === undefined ? (
+          <CompactState>Calcula Play Now para cargar sus recomendaciones y planes.</CompactState>
+        ) : (
+          <p>
+            {snapshot.activePlans.length} planes activos · {snapshot.preferences.highPriorityGames}{" "}
+            con prioridad alta
+          </p>
+        )}
+        {recommendationCount !== undefined && (
+          <p>{recommendationCount} recomendaciones cargadas.</p>
+        )}
+      </section>
       <section className="home-task-summary" aria-label="Estado de tareas">
         <span>{taskSummary.label}</span>
         <strong>{taskSummary.status}</strong>
@@ -40,13 +58,10 @@ export function HomeView({
           Ver biblioteca
         </button>
         <button type="button" onClick={() => onNavigate("play-now")}>
-          Elegir qué jugar
+          Calcular Play Now
         </button>
         <button type="button" onClick={() => onNavigate("backlog")}>
-          Planificar backlog
-        </button>
-        <button type="button" onClick={() => onNavigate("manual")}>
-          Gestionar colección manual
+          Ver backlog
         </button>
         <button type="button" onClick={() => onNavigate("tasks")}>
           Ver tareas
@@ -56,7 +71,7 @@ export function HomeView({
   );
 }
 
-function SummaryCard({ label, value }: Readonly<{ label: string; value: string }>) {
+function StatCard({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div className="summary-card">
       <span>{label}</span>
@@ -65,8 +80,6 @@ function SummaryCard({ label, value }: Readonly<{ label: string; value: string }
   );
 }
 
-function formatPlaytime(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours === 0 ? `${minutes}m` : `${hours}h ${minutes}m`;
+function CompactState({ children }: Readonly<{ children: string }>) {
+  return <p className="home-compact-state">{children}</p>;
 }

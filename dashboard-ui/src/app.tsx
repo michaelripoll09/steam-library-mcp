@@ -81,9 +81,9 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   }, [api]);
 
   useEffect(() => {
-    if (!manualCollectionApi) return;
+    if (activeView !== "manual" || !manualCollectionApi) return;
     void api.getManualCollection().then(setManualCollection, () => setManualCollection([]));
-  }, [api, manualCollectionApi]);
+  }, [activeView, api, manualCollectionApi]);
 
   useEffect(() => {
     if (activeView !== "backlog" || !intelligenceApi) return;
@@ -212,18 +212,19 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   return (
     <AppShell activeView={activeView} onViewChange={setActiveView}>
       <main className="dashboard-main" data-view={activeView}>
-        <div className="dashboard-view" hidden={activeView !== "home"}>
+        {activeView === "home" && (
           <HomeView
             library={library}
+            intelligenceState={intelligenceState}
             taskSummary={{
               label: "Tareas locales",
-              status: taskApi ? "Disponibles" : "No disponibles",
+              status: taskApi ? "Disponibles en Tareas" : "No disponibles",
             }}
             onNavigate={setActiveView}
           />
-        </div>
+        )}
 
-        <div className="dashboard-view" hidden={activeView !== "library"}>
+        {activeView === "library" && (
           <LibraryView
             library={library}
             games={games}
@@ -237,35 +238,29 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
             onSync={() => void syncLibrary()}
             onOpen={openGame}
           />
-        </div>
-        <div className="dashboard-view" hidden={activeView !== "play-now"}>
-          {library !== undefined && intelligenceApi && (
-            <PlayNowView games={library.games} state={intelligenceState} onOpenGame={openGame} />
-          )}
-        </div>
+        )}
+        {activeView === "play-now" && library !== undefined && intelligenceApi && (
+          <PlayNowView games={library.games} state={intelligenceState} onOpenGame={openGame} />
+        )}
 
-        <div className="dashboard-view" hidden={activeView !== "backlog"}>
-          {library !== undefined && intelligenceApi && <BacklogView state={intelligenceState} />}
-        </div>
+        {activeView === "backlog" && library !== undefined && intelligenceApi && (
+          <BacklogView state={intelligenceState} />
+        )}
 
-        <div className="dashboard-view" hidden={activeView !== "manual"}>
-          {manualCollectionApi && (
-            <ManualCollectionPanel
-              collection={manualCollection}
-              steam={manualSteam}
-              error={manualError}
-              saving={isSavingManual}
-              onSteamChange={setManualSteam}
-              onAdd={() => void addManual()}
-              onUpdate={(appId, patch) => void updateManual(appId, patch)}
-              onRemove={(appId) => void removeManual(appId)}
-            />
-          )}
-        </div>
+        {activeView === "manual" && manualCollectionApi && (
+          <ManualCollectionPanel
+            collection={manualCollection}
+            steam={manualSteam}
+            error={manualError}
+            saving={isSavingManual}
+            onSteamChange={setManualSteam}
+            onAdd={() => void addManual()}
+            onUpdate={(appId, patch) => void updateManual(appId, patch)}
+            onRemove={(appId) => void removeManual(appId)}
+          />
+        )}
 
-        <div className="dashboard-view" hidden={activeView !== "tasks"}>
-          {taskApi && <TaskPanel api={api} />}
-        </div>
+        {activeView === "tasks" && taskApi && <TaskPanel api={api} />}
 
         {selectedGame !== undefined && (
           <GameDetailsDrawer
