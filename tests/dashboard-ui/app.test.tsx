@@ -11,7 +11,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
 import type { LocalTask } from "../../src/tasks/task-runner.js";
 import { DashboardApp } from "../../dashboard-ui/src/app.js";
-import { GameCard } from "../../dashboard-ui/src/components/game-card.js";
+import { ProgressBar } from "../../dashboard-ui/src/components/progress-bar.js";
 import { CoverImage } from "../../dashboard-ui/src/library-panel.js";
 import { ManualCollectionPanel } from "../../dashboard-ui/src/manual-collection-panel.js";
 
@@ -169,7 +169,7 @@ describe("DashboardApp", () => {
     const user = userEvent.setup();
     const api = {
       ...intelligenceApiFixture(),
-      getManualCollection: vi.fn(),
+      getManualCollection: vi.fn().mockResolvedValue([]),
       addManualCollection: vi.fn(),
       updateManualCollection: vi.fn(),
       removeManualCollection: vi.fn(),
@@ -180,9 +180,12 @@ describe("DashboardApp", () => {
     render(<DashboardApp api={api as never} />);
 
     expect(await screen.findByText("Juegos totales")).toBeInTheDocument();
+    expect(screen.getByText("Tiempo jugado")).toBeInTheDocument();
+    expect(screen.getByText("2h 5m")).toBeInTheDocument();
     expect(screen.queryByRole("searchbox", { name: "Buscar juegos" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("URL de Steam o AppID")).not.toBeInTheDocument();
-    expect(api.getManualCollection).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.getManualCollection).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getPlans).toHaveBeenCalledTimes(1));
     expect(api.getTasks).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Calcular Play Now" }));
@@ -258,12 +261,103 @@ describe("DashboardApp", () => {
     expect(screen.getByRole("dialog", { name: "Detalles de Celeste" })).toBeInTheDocument();
   });
 
-  test("uses the established fallback for a missing card cover", () => {
-    render(<GameCard game={{ ...library.games[0], coverUrl: "" }} onOpen={vi.fn()} />);
+  test("tries the official Steam icon before falling back when a card cover is empty", () => {
+    render(<CoverImage game={{ ...library.games[0], coverUrl: "" }} />);
+
+    const officialIcon = screen.getByRole("img", { name: "Portada de Celeste" });
+    expect(officialIcon).toHaveAttribute(
+      "src",
+      "https://cdn.cloudflare.steamstatic.com/steam/apps/10/icon.jpg",
+    );
+
+    fireEvent.error(officialIcon);
 
     expect(
       screen.getByRole("img", { name: "Portada no disponible para Celeste" }),
     ).toBeInTheDocument();
+  });
+
+  test("shows an explicit Home loading state instead of zero library totals", () => {
+    const pendingLibrary = deferred<DashboardLibrary>();
+    render(
+      <DashboardApp
+        api={
+          {
+            getLibrary: vi.fn(() => pendingLibrary.promise),
+            syncLibrary: vi.fn(),
+            updateGameStatus: vi.fn(),
+          } as never
+        }
+      />,
+    );
+
+    expect(screen.getByText("Cargando biblioteca…")).toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
+  test("shows the initial library error on Home", async () => {
+    render(
+      <DashboardApp
+        api={
+          {
+            getLibrary: vi.fn().mockRejectedValue(new Error("Steam is unavailable.")),
+            syncLibrary: vi.fn(),
+            updateGameStatus: vi.fn(),
+          } as never
+        }
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
+  test("shows the unavailable Home state when the library response has no snapshot", async () => {
+    render(
+      <DashboardApp
+        api={
+          {
+            getLibrary: vi.fn().mockResolvedValue(undefined),
+            syncLibrary: vi.fn(),
+            updateGameStatus: vi.fn(),
+          } as never
+        }
+      />,
+    );
+
+    expect(await screen.findByText("La biblioteca no está disponible.")).toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
+  test("exposes ProgressBar values with native progressbar semantics", () => {
+    render(<ProgressBar value={2} max={3} label="Progreso del plan" />);
+
+    expect(screen.getByRole("progressbar", { name: "Progreso del plan" })).toHaveAttribute(
+      "aria-valuenow",
+      "2",
+    );
+    expect(screen.getByRole("progressbar", { name: "Progreso del plan" })).toHaveAttribute(
+      "aria-valuemax",
+      "3",
+    );
+  });
+
+  test("renders Manual collection guidance as an informational notice", () => {
+    render(
+      <ManualCollectionPanel
+        collection={[]}
+        steam=""
+        error={undefined}
+        saving={false}
+        onSteamChange={vi.fn()}
+        onAdd={vi.fn()}
+        onUpdate={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(/Esta lista no confirma/i);
+    expect(screen.getByRole("status")).toHaveClass("inline-notice-info");
   });
 
   test("uses one default API client for the initial library request across rerenders", async () => {
@@ -280,8 +374,12 @@ describe("DashboardApp", () => {
     await screen.findByRole("article", { name: "Celeste" });
     rerender(<DashboardApp />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(fetch.mock.calls.filter(([input]) => input === "/api/library")).toHaveLength(1),
+    );
     expect(fetch).toHaveBeenCalledWith("/api/library", { method: "GET" });
+    expect(fetch).toHaveBeenCalledWith("/api/manual-collection", { method: "GET" });
+    expect(fetch).toHaveBeenCalledWith("/api/backlog-plans", { method: "GET" });
   });
 
   test("loads persisted manual collection entries with the default API", async () => {

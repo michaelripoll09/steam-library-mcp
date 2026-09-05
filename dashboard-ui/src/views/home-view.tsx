@@ -1,5 +1,6 @@
 import type { DashboardLibrary } from "../../../src/dashboard/contracts.js";
 import type { IntelligenceState } from "../intelligence-state.js";
+import { formatPlaytime } from "../library-filters.js";
 import type { DashboardView } from "../navigation/app-shell.js";
 
 export type HomeTaskSummary = Readonly<{
@@ -12,11 +13,15 @@ type HomeDestination = Extract<DashboardView, "library" | "play-now" | "backlog"
 
 export function HomeView({
   library,
+  isLoading,
+  error,
   intelligenceState,
   taskSummary,
   onNavigate,
 }: Readonly<{
   library: DashboardLibrary | undefined;
+  isLoading: boolean;
+  error: string | undefined;
   intelligenceState: IntelligenceState;
   taskSummary: HomeTaskSummary | undefined;
   onNavigate: (view: HomeDestination) => void;
@@ -31,11 +36,19 @@ export function HomeView({
         <h2 id="home-heading">Resumen</h2>
         <p className="subtitle">Una lectura rápida de tu biblioteca y de lo que sigue.</p>
       </div>
-      <div className="home-summary-grid" aria-label="Resumen de la biblioteca">
-        <StatCard label="Juegos totales" value={String(library?.totals.totalGames ?? 0)} />
-        <StatCard label="Jugando" value={String(library?.statusStats.playing ?? 0)} />
-        <StatCard label="Backlog" value={String(library?.statusStats.backlog ?? 0)} />
-      </div>
+      {library === undefined ? (
+        <LibrarySummaryState isLoading={isLoading} error={error} />
+      ) : (
+        <div className="home-summary-grid" aria-label="Resumen de la biblioteca">
+          <StatCard label="Juegos totales" value={String(library.totals.totalGames)} />
+          <StatCard label="Jugando" value={String(library.statusStats.playing)} />
+          <StatCard label="Backlog" value={String(library.statusStats.backlog)} />
+          <StatCard
+            label="Tiempo jugado"
+            value={formatPlaytime(library.totals.totalPlaytimeMinutes)}
+          />
+        </div>
+      )}
       <section className="home-insight-summary" aria-label="Resumen de Play Now">
         <h3>Play Now</h3>
         {snapshot === undefined ? (
@@ -88,6 +101,18 @@ function StatCard({ label, value }: Readonly<{ label: string; value: string }>) 
       <strong>{value}</strong>
     </div>
   );
+}
+
+function LibrarySummaryState({
+  isLoading,
+  error,
+}: Readonly<{
+  isLoading: boolean;
+  error: string | undefined;
+}>) {
+  if (isLoading) return <CompactState>Cargando biblioteca…</CompactState>;
+  if (error !== undefined) return <p role="alert">{error}</p>;
+  return <CompactState>La biblioteca no está disponible.</CompactState>;
 }
 
 function CompactState({ children }: Readonly<{ children: string }>) {

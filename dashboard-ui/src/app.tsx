@@ -83,14 +83,14 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   }, [api]);
 
   useEffect(() => {
-    if (activeView !== "manual" || !manualCollectionApi) return;
+    if (!manualCollectionApi) return;
     void api.getManualCollection().then(setManualCollection, () => setManualCollection([]));
-  }, [activeView, api, manualCollectionApi]);
+  }, [api, manualCollectionApi]);
 
   useEffect(() => {
-    if (activeView !== "backlog" || !intelligenceApi) return;
+    if (!intelligenceApi) return;
     void intelligenceState.refreshPlans();
-  }, [activeView, intelligenceApi]);
+  }, [api, intelligenceApi]);
 
   const addManual = async () => {
     if (!manualCollectionApi) return;
@@ -217,6 +217,8 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         {activeView === "home" && (
           <HomeView
             library={library}
+            isLoading={isLoading}
+            error={initialError}
             intelligenceState={intelligenceState}
             taskSummary={taskState?.summary}
             onNavigate={setActiveView}

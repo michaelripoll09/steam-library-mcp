@@ -1,4 +1,5 @@
 import { ManualGameRow, type ManualCollectionViewProps } from "../manual-collection-panel.js";
+import { InlineNotice } from "../components/inline-notice.js";
 
 export function ManualCollectionView({
   collection,
@@ -35,14 +36,14 @@ export function ManualCollectionView({
           </div>
         </form>
         {error !== undefined && (
-          <p id="manual-collection-error" className="status-error" role="alert">
-            {error}
-          </p>
+          <InlineNotice tone="error">
+            <span id="manual-collection-error">{error}</span>
+          </InlineNotice>
         )}
-        <p className="inline-notice">
+        <InlineNotice tone="info">
           El acceso Familia es metadata local declarada por el usuario. Steam Library MCP no
           sincroniza Steam Families.
-        </p>
+        </InlineNotice>
       </div>
       {collection.length > 0 && (
         <ul className="manual-collection-list">

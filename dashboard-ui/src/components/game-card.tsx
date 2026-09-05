@@ -37,12 +37,9 @@ export function GameCard({
 export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
   const [failedSourceCount, setFailedSourceCount] = useState(0);
   const [isLandscape, setIsLandscape] = useState(false);
-  const coverUrls =
-    game.coverUrl.trim() === ""
-      ? []
-      : [game.coverUrl, officialSteamIconUrl(game.appId)].filter(
-          (url, index, urls) => urls.indexOf(url) === index,
-        );
+  const coverUrls = [game.coverUrl.trim(), officialSteamIconUrl(game.appId)].filter(
+    (url, index, urls) => url !== "" && urls.indexOf(url) === index,
+  );
   const coverUrl = coverUrls[failedSourceCount];
 
   if (coverUrl === undefined) {

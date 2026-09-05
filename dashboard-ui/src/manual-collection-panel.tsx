@@ -1,4 +1,5 @@
 import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
+import { InlineNotice } from "./components/inline-notice.js";
 
 export type ManualCollectionViewProps = Readonly<{
   collection: readonly ManualLibraryGame[];
@@ -29,7 +30,9 @@ export function ManualCollectionPanel({
       <div>
         <p className="eyebrow">Colección manual</p>
         <h2 id="manual-collection-heading">Juegos agregados manualmente</h2>
-        <p>Esta lista no confirma que Steam te dé acceso ni que el juego esté disponible ahora.</p>
+        <InlineNotice tone="info">
+          Esta lista no confirma que Steam te dé acceso ni que el juego esté disponible ahora.
+        </InlineNotice>
       </div>
       <form
         onSubmit={(event) => {
@@ -52,9 +55,9 @@ export function ManualCollectionPanel({
         </div>
       </form>
       {error !== undefined && (
-        <p id="manual-collection-error" className="status-error" role="alert">
-          {error}
-        </p>
+        <InlineNotice tone="error">
+          <span id="manual-collection-error">{error}</span>
+        </InlineNotice>
       )}
       {collection.length > 0 && (
         <ul className="manual-collection-list">
