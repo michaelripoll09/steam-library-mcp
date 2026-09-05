@@ -1,8 +1,6 @@
-import { useState } from "react";
-
 import type { DashboardPlan, DashboardPlanItemProgress } from "../../../src/dashboard/contracts.js";
 import { CustomSelect, type CustomSelectOption } from "../custom-select.js";
-import type { IntelligenceState } from "../intelligence-state.js";
+import { progressDraftKey, type IntelligenceState } from "../intelligence-state.js";
 import { ProgressBar } from "../components/progress-bar.js";
 
 const CADENCE_OPTIONS = [
@@ -64,7 +62,13 @@ export function BacklogView({ state }: Readonly<{ state: IntelligenceState }>) {
       </section>
       <div className="backlog-plan-list">
         {state.plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} onProgress={state.updateProgress} />
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            progressDrafts={state.progressDrafts}
+            onProgressDraft={state.setProgressDraft}
+            onProgress={state.updateProgress}
+          />
         ))}
       </div>
     </section>
@@ -73,9 +77,13 @@ export function BacklogView({ state }: Readonly<{ state: IntelligenceState }>) {
 
 function PlanCard({
   plan,
+  progressDrafts,
+  onProgressDraft,
   onProgress,
 }: Readonly<{
   plan: DashboardPlan;
+  progressDrafts: ReadonlyMap<string, DashboardPlanItemProgress>;
+  onProgressDraft: (planId: string, itemId: string, progress: DashboardPlanItemProgress) => void;
   onProgress: (
     planId: string,
     itemId: string,
@@ -97,6 +105,8 @@ function PlanCard({
           <PlanItem
             key={item.id}
             item={item}
+            progress={progressDrafts.get(progressDraftKey(plan.id, item.id)) ?? item.progress}
+            onProgressDraft={(progress) => onProgressDraft(plan.id, item.id, progress)}
             onProgress={(progress) => onProgress(plan.id, item.id, progress)}
           />
         ))}
@@ -107,12 +117,15 @@ function PlanCard({
 
 function PlanItem({
   item,
+  progress,
+  onProgressDraft,
   onProgress,
 }: Readonly<{
   item: DashboardPlan["items"][number];
+  progress: DashboardPlanItemProgress;
+  onProgressDraft: (progress: DashboardPlanItemProgress) => void;
   onProgress: (progress: DashboardPlanItemProgress) => Promise<void>;
 }>) {
-  const [progress, setProgress] = useState<DashboardPlanItemProgress>(item.progress);
   return (
     <li>
       <strong>{item.name}</strong>
@@ -121,7 +134,7 @@ function PlanItem({
         label="Progreso"
         value={progress}
         options={PROGRESS_OPTIONS}
-        onChange={setProgress}
+        onChange={onProgressDraft}
       />
       <button type="button" onClick={() => void onProgress(progress)}>
         Actualizar progreso

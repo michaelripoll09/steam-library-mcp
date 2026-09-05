@@ -13,31 +13,37 @@ export function TasksView({ state }: Readonly<{ state: TaskState }>) {
           Actualizar
         </button>
       </div>
-      {state.error !== undefined && <p role="alert">{state.error}</p>}
-      {state.tasks.length === 0 ? (
-        <p>No hay tareas locales.</p>
+      {!state.hasLoaded ? (
+        <p role="status">Cargando tareas locales…</p>
       ) : (
-        <ul className="task-list" aria-live="polite">
-          {state.tasks.map((task) => (
-            <li className="task-activity-row" key={task.id}>
-              <div>
-                <strong>{formatTaskType(task.type)}</strong>
-                <span>{formatTaskState(task.state)}</span>
-              </div>
-              <span>{formatTaskProgress(task)}</span>
-              {isActiveTask(task) && (
-                <button
-                  type="button"
-                  onClick={() => void state.cancel(task.id)}
-                  disabled={state.cancellingTaskId === task.id}
-                >
-                  {state.cancellingTaskId === task.id ? "Cancelando…" : "Cancelar tarea"}
-                </button>
-              )}
-              {task.error !== null && <span role="alert">{task.error.message}</span>}
-            </li>
-          ))}
-        </ul>
+        <>
+          {state.error !== undefined && <p role="alert">{state.error}</p>}
+          {state.tasks.length === 0 ? (
+            state.error === undefined && <p>No hay tareas locales.</p>
+          ) : (
+            <ul className="task-list" aria-live="polite">
+              {state.tasks.map((task) => (
+                <li className="task-activity-row" key={task.id}>
+                  <div>
+                    <strong>{formatTaskType(task.type)}</strong>
+                    <span>{formatTaskState(task.state)}</span>
+                  </div>
+                  <span>{formatTaskProgress(task)}</span>
+                  {isActiveTask(task) && (
+                    <button
+                      type="button"
+                      onClick={() => void state.cancel(task.id)}
+                      disabled={state.cancellingTaskId === task.id}
+                    >
+                      {state.cancellingTaskId === task.id ? "Cancelando…" : "Cancelar tarea"}
+                    </button>
+                  )}
+                  {task.error !== null && <span role="alert">{task.error.message}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );

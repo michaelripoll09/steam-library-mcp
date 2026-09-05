@@ -32,6 +32,7 @@ export type IntelligenceState = Readonly<{
   cadence: "weekly" | "monthly";
   targetGameCount: string;
   plans: readonly DashboardPlan[];
+  progressDrafts: ReadonlyMap<string, DashboardPlanItemProgress>;
   message: string | undefined;
   error: string | undefined;
   snapshot: DashboardInsightSnapshot | undefined;
@@ -43,6 +44,7 @@ export type IntelligenceState = Readonly<{
   setPlanAvailableMinutes: (value: string) => void;
   setCadence: (value: "weekly" | "monthly") => void;
   setTargetGameCount: (value: string) => void;
+  setProgressDraft: (planId: string, itemId: string, progress: DashboardPlanItemProgress) => void;
   selectGame: (appId: number) => void;
   loadIntelligence: () => Promise<void>;
   refreshPlans: () => Promise<void>;
@@ -75,6 +77,9 @@ export function useIntelligenceState({
   const [snapshot, setSnapshot] = useState<DashboardInsightSnapshot>();
   const [recommendations, setRecommendations] = useState<DashboardRecommendations>();
   const [plans, setPlans] = useState<readonly DashboardPlan[]>([]);
+  const [progressDrafts, setProgressDrafts] = useState<
+    ReadonlyMap<string, DashboardPlanItemProgress>
+  >(() => new Map());
   const [selectedAppId, setSelectedAppId] = useState<number | undefined>(games[0]?.appId);
   const [preference, setPreference] =
     useState<Omit<DashboardRecommendationPreference, "appId">>(DEFAULT_PREFERENCE);
@@ -215,11 +220,30 @@ export function useIntelligenceState({
     try {
       setError(undefined);
       await api.updatePlanItemProgress(planId, itemId, progress);
+      setProgressDrafts((current) => {
+        const key = progressDraftKey(planId, itemId);
+        if (!current.has(key)) return current;
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      });
       setPlans(await api.getPlans());
       setMessage("Progreso actualizado.");
     } catch (cause) {
       setError(errorMessage(cause));
     }
+  };
+
+  const setProgressDraft = (
+    planId: string,
+    itemId: string,
+    progress: DashboardPlanItemProgress,
+  ) => {
+    setProgressDrafts((current) => {
+      const key = progressDraftKey(planId, itemId);
+      if (current.get(key) === progress) return current;
+      return new Map(current).set(key, progress);
+    });
   };
 
   return {
@@ -232,6 +256,7 @@ export function useIntelligenceState({
     cadence,
     targetGameCount,
     plans,
+    progressDrafts,
     message,
     error,
     snapshot,
@@ -243,6 +268,7 @@ export function useIntelligenceState({
     setPlanAvailableMinutes,
     setCadence,
     setTargetGameCount,
+    setProgressDraft,
     selectGame,
     loadIntelligence,
     refreshPlans,
@@ -263,4 +289,8 @@ function positiveSafeInteger(value: string): number | undefined {
   if (value.trim() === "") return undefined;
   const parsedValue = Number(value);
   return Number.isSafeInteger(parsedValue) && parsedValue > 0 ? parsedValue : undefined;
+}
+
+export function progressDraftKey(planId: string, itemId: string): string {
+  return JSON.stringify([planId, itemId]);
 }

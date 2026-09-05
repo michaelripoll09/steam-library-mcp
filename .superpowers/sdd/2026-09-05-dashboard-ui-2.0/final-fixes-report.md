@@ -27,3 +27,21 @@ UI-only final-review corrections. No API, domain, or image changes.
 ## Risks
 
 - The additional initial requests are intentional and occur only when the supplied API exposes the matching manual/intelligence capabilities.
+
+## Terminal review fixes — 2026-09-05
+
+### Corrections
+
+- `TasksView` now uses `TaskState.hasLoaded` to distinguish pending loading, an initial-load failure, and a confirmed empty task list. It never renders the empty state while a request is pending or has failed.
+- Backlog progress selections now live in `useIntelligenceState` as keyed client-side drafts. The API PATCH remains unchanged and is called only when the user selects **Actualizar progreso**; a successful save clears that draft.
+
+### Regression evidence
+
+- RED: `npm test -- --run tests/dashboard-ui/task-controls.test.tsx tests/dashboard-ui/app.test.tsx` failed with the expected missing loading-state role and discarded Backlog draft.
+- GREEN: the same focused command passed 68 tests after the fixes.
+- `npm run typecheck` passed both server and dashboard TypeScript projects.
+
+### Scope and risks
+
+- No server contracts, request payloads, persistent storage, images, or worktrees changed.
+- Drafts are scoped to the mounted dashboard session and are intentionally cleared only after the corresponding save succeeds; failed saves retain the user's selected value.

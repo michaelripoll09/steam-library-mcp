@@ -8,6 +8,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
 import { TaskPanel } from "../../dashboard-ui/src/task-panel.js";
+import type { TaskState } from "../../dashboard-ui/src/task-state.js";
+import { TasksView } from "../../dashboard-ui/src/views/tasks-view.js";
 
 const library: DashboardLibrary = {
   games: [],
@@ -29,6 +31,23 @@ const task = {
 afterEach(cleanup);
 
 describe("dashboard task controls", () => {
+  test("renders loading, failed, and confirmed-empty task lists truthfully", () => {
+    const state = taskState();
+    const { rerender } = render(<TasksView state={state} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando tareas locales");
+    expect(screen.queryByText("No hay tareas locales.")).not.toBeInTheDocument();
+
+    rerender(<TasksView state={taskState({ hasLoaded: true, error: "offline" })} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("offline");
+    expect(screen.queryByText("No hay tareas locales.")).not.toBeInTheDocument();
+
+    rerender(<TasksView state={taskState({ hasLoaded: true })} />);
+
+    expect(screen.getByText("No hay tareas locales.")).toBeInTheDocument();
+  });
+
   test("lists active local tasks, polls them, and cancels a selected task", async () => {
     const user = userEvent.setup();
     const api = {
@@ -120,4 +139,17 @@ function deferred<T>(): Readonly<{
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function taskState(overrides: Partial<TaskState> = {}): TaskState {
+  return {
+    tasks: [],
+    error: undefined,
+    cancellingTaskId: undefined,
+    hasLoaded: false,
+    refresh: async () => undefined,
+    cancel: async () => undefined,
+    summary: { totalCount: 0, activeCount: 0, hasError: false, hasLoaded: false },
+    ...overrides,
+  };
 }

@@ -1668,3 +1668,25 @@ test("updates plan progress with the current API", async () => {
     expect(api.updatePlanItemProgress).toHaveBeenCalledWith("weekly-1", "item-1", "done"),
   );
 });
+
+test("preserves an unsaved backlog progress draft across navigation without saving it", async () => {
+  const user = userEvent.setup();
+  const api = intelligenceApiFixture();
+  render(<DashboardApp api={api as never} />);
+
+  await user.click(screen.getByRole("button", { name: "Backlog" }));
+  await screen.findByRole("heading", { name: "Plan semanal" });
+  await chooseCustomOption(user, "Progreso", "Hecho");
+
+  expect(api.updatePlanItemProgress).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Biblioteca" }));
+  await user.click(screen.getByRole("button", { name: "Backlog" }));
+
+  expect(screen.getByRole("combobox", { name: "Progreso" })).toHaveTextContent("Hecho");
+  expect(api.updatePlanItemProgress).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "Actualizar progreso" }));
+  await waitFor(() =>
+    expect(api.updatePlanItemProgress).toHaveBeenCalledWith("weekly-1", "item-1", "done"),
+  );
+});
