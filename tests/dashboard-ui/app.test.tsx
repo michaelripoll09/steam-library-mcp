@@ -1444,6 +1444,34 @@ test("gives dashboard navigation a visible cold-blue keyboard focus treatment", 
   );
 });
 
+test("ships responsive shell, grid, mobile drawer, and reduced-motion CSS", async () => {
+  const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+
+  expect(styles).toMatch(/--surface-0:\s*#11151c/);
+  expect(styles).toMatch(/--surface-1:\s*#181e28/);
+  expect(styles).toMatch(/--surface-2:\s*#222a36/);
+  expect(styles).toMatch(/--color-accent:\s*#66a9e8/);
+  expect(styles).toMatch(/--color-premium:\s*#c9a96a/);
+  expect(styles).toMatch(/@media \(max-width: 1199px\)/);
+  expect(styles).toMatch(/@media \(max-width: 767px\)/);
+  expect(styles).toMatch(/\.game-details-drawer[\s\S]*width:\s*100vw/);
+  expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*transition:\s*none/);
+});
+
+test("keeps Library error and retry visible instead of hiding it behind a skeleton", async () => {
+  const user = userEvent.setup();
+  render(
+    <DashboardApp api={{ getLibrary: vi.fn().mockRejectedValue(new Error("offline")) } as never} />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Biblioteca" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+  expect(
+    screen.getByRole("button", { name: "Reintentar carga de la biblioteca" }),
+  ).toBeInTheDocument();
+});
+
 test("preserves a friends Play Now result after visiting Backlog", async () => {
   const user = userEvent.setup();
   const api = intelligenceApiFixture();

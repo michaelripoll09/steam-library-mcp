@@ -1,7 +1,13 @@
 :root {
-  --color-accent: #d8b56c;
-  color: #f2efe7;
-  background: #0a0b10;
+  --surface-0: #11151c;
+  --surface-1: #181e28;
+  --surface-2: #222a36;
+  --color-accent: #66a9e8;
+  --color-premium: #c9a96a;
+  --color-text: #f2f4fa;
+  --color-muted: #a8b0c2;
+  color: var(--color-text);
+  background: var(--surface-0);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
 }
@@ -11,7 +17,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: radial-gradient(circle at 14% 2%, #25314b 0, transparent 29rem), #0a0b10;
+  background: radial-gradient(circle at 14% 2%, #263b56 0, transparent 29rem), var(--surface-0);
 }
 button,
 input,
@@ -30,7 +36,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid #d8b56c;
+  outline: 3px solid var(--color-accent);
   outline-offset: 3px;
 }
 .dashboard-shell {
@@ -47,7 +53,7 @@ select:focus-visible {
 }
 .eyebrow {
   margin: 0 0 0.45rem;
-  color: #d8b56c;
+  color: var(--color-accent);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -77,8 +83,8 @@ h2 {
 .sync-button,
 .notice button,
 .empty-state button {
-  border: 1px solid #d8b56c;
-  background: #d8b56c;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
   color: #131419;
   padding: 0.7rem 1rem;
   font-weight: 750;
@@ -114,9 +120,9 @@ h2 {
 }
 .manual-collection-form button,
 .manual-collection-list button {
-  border: 1px solid #d8b56c;
+  border: 1px solid var(--color-accent);
   background: transparent;
-  color: #f5d7a0;
+  color: var(--color-accent);
   padding: 0.55rem 0.8rem;
   font-weight: 700;
 }
@@ -261,11 +267,11 @@ select {
 }
 .filter-trigger:hover,
 .filter-trigger[aria-expanded="true"] {
-  border-color: #d8b56c;
+  border-color: var(--color-accent);
   background: linear-gradient(145deg, #202333, #14161f);
 }
 .filter-trigger[aria-expanded="true"] {
-  box-shadow: 0 0 0 3px rgba(216, 181, 108, 0.18);
+  box-shadow: 0 0 0 3px rgb(102 169 232 / 0.18);
 }
 .filter-trigger-chevron {
   width: 0.6rem;
@@ -316,7 +322,7 @@ select {
 }
 .filter-option[aria-selected="true"]::after {
   float: right;
-  color: #d8b56c;
+  color: var(--color-accent);
   content: "✓";
 }
 @keyframes filter-menu-enter {
@@ -333,7 +339,7 @@ select {
   min-height: 2.65rem;
   border: 1px solid #454856;
   background: transparent;
-  color: #d8b56c;
+  color: var(--color-accent);
   padding: 0 0.75rem;
 }
 .game-grid {
@@ -353,7 +359,7 @@ select {
 }
 .game-card:hover {
   transform: translateY(-4px);
-  border-color: #d8b56c;
+  border-color: var(--color-accent);
 }
 .game-card-button {
   position: relative;
@@ -478,7 +484,7 @@ select {
 }
 .notice button {
   background: transparent;
-  color: #f5d7a0;
+  color: var(--color-accent);
 }
 .drawer-backdrop {
   position: fixed;
@@ -761,12 +767,12 @@ select {
 
 .intelligence-select-trigger:hover,
 .intelligence-select-trigger[aria-expanded="true"] {
-  border-color: #d8b56c;
+  border-color: var(--color-accent);
   background: linear-gradient(145deg, #2a2d38, #1a1c25);
 }
 
 .intelligence-select-trigger[aria-expanded="true"] {
-  box-shadow: 0 0 0 3px rgba(216, 181, 108, 0.18);
+  box-shadow: 0 0 0 3px rgb(102 169 232 / 0.18);
 }
 
 .intelligence-select-chevron {
@@ -794,13 +800,13 @@ select {
   margin: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  border: 1px solid #6a6048;
+  border: 1px solid #35536d;
   border-radius: 0.7rem;
   background: rgba(19, 21, 30, 0.99);
   box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.5);
   list-style: none;
   padding: 0.35rem;
-  scrollbar-color: #6a6048 rgba(19, 21, 30, 0.99);
+  scrollbar-color: #35536d rgba(19, 21, 30, 0.99);
   scrollbar-width: thin;
 }
 
@@ -815,11 +821,11 @@ select {
 .intelligence-select-menu::-webkit-scrollbar-thumb {
   border: 1px solid #13151e;
   border-radius: 999px;
-  background: #6a6048;
+  background: #35536d;
 }
 
 .intelligence-select-menu::-webkit-scrollbar-thumb:hover {
-  background: #d8b56c;
+  background: var(--color-accent);
 }
 
 .intelligence-select-option {
@@ -835,13 +841,13 @@ select {
 
 .intelligence-select-option:hover,
 .intelligence-select-option-active {
-  background: #5c4925;
+  background: #244c75;
   color: #fff;
 }
 
 .intelligence-select-option[aria-selected="true"]::after {
   float: right;
-  color: #f1cb77;
+  color: var(--color-accent);
   content: "✓";
 }
 
@@ -866,18 +872,18 @@ select {
 }
 
 .intelligence-button:hover:not(:disabled) {
-  border-color: #d8b56c;
+  border-color: var(--color-accent);
   background: #292d3a;
 }
 
 .intelligence-button-primary {
-  border-color: #d8b56c;
-  background: #d8b56c;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
   color: #131419;
 }
 
 .intelligence-button-primary:hover:not(:disabled) {
-  background: #ebc77b;
+  background: #8fc9ff;
 }
 
 .intelligence-button:disabled {
@@ -896,7 +902,7 @@ select {
   width: 1.1rem;
   min-height: 1.1rem;
   margin: 0;
-  accent-color: #d8b56c;
+  accent-color: var(--color-accent);
 }
 
 .recommendation-list,
@@ -1284,4 +1290,96 @@ select {
 }
 .home-compact-state {
   color: #c4d1e2;
+}
+
+/* Final dashboard surface pass: structure stays stable while states remain textual. */
+.dashboard-workspace {
+  background: var(--surface-0);
+}
+
+.dashboard-sidebar,
+.library-panel,
+.notice,
+.home-view,
+.dashboard-placeholder,
+.tasks-view,
+.intelligence-panel {
+  background: var(--surface-1);
+}
+
+.summary-card,
+.home-summary-grid .summary-card,
+.home-task-summary,
+.task-activity-row,
+.play-now-card,
+.backlog-plan,
+.home-insight-summary {
+  background: var(--surface-2);
+}
+
+.loading-state {
+  min-height: 13rem;
+  border: 1px solid #2d3b4f;
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(110deg, transparent 25%, rgb(102 169 232 / 0.08) 45%, transparent 65%),
+    var(--surface-2);
+  color: var(--color-muted);
+}
+
+.empty-state {
+  padding: 1.5rem;
+  border: 1px solid #2d3b4f;
+  border-radius: 0.75rem;
+  background: var(--surface-2);
+}
+
+.status-pill {
+  border: 1px solid currentColor;
+}
+
+.status-playing {
+  color: #c4eee7;
+}
+
+.status-completed {
+  color: #d6efca;
+}
+
+.status-dropped {
+  color: #ffd3d8;
+}
+
+.status-paused {
+  color: #e2ddff;
+}
+
+.play-now-hero {
+  border-color: var(--color-premium);
+  background: linear-gradient(135deg, rgb(201 169 106 / 0.18), var(--surface-2) 48%);
+}
+
+.play-now-hero h4,
+.achievement-count,
+.achievement-progress .progress-bar-value {
+  color: var(--color-premium);
+}
+
+.achievement-progress .progress-bar-value {
+  background: var(--color-premium);
+}
+
+@media (max-width: 767px) {
+  button,
+  input,
+  select,
+  .filter-trigger,
+  .intelligence-select-trigger {
+    min-height: 2.75rem;
+  }
+
+  .dialog-close {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
