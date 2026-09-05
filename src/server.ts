@@ -8,6 +8,7 @@ import {
   type CoreServices,
 } from "./core-services.js";
 import { registerGamingTools } from "./tools/register-gaming-tools.js";
+import { registerAchievementTools } from "./tools/register-achievement-tools.js";
 import { registerIntelligenceTools } from "./tools/register-intelligence-tools.js";
 import { registerMetadataTools } from "./tools/register-metadata-tools.js";
 import { registerSteamTools, type ToolRegistrar } from "./tools/register-steam-tools.js";
@@ -40,6 +41,7 @@ export function createServer(overrides: ServerOverrides = {}): McpServer {
 function createMcpServerFromServices(services: CoreServices): McpServer {
   const {
     steamService,
+    achievementService,
     gamingTrackerService,
     metadataService,
     recommendationPreferencesService,
@@ -50,6 +52,7 @@ function createMcpServerFromServices(services: CoreServices): McpServer {
   const server = new McpServer({ name: "steam-library-mcp", version: "0.1.0" });
 
   registerSteamTools(server as unknown as ToolRegistrar, steamService);
+  registerAchievementTools(server as unknown as ToolRegistrar, achievementService);
   registerGamingTools(server as unknown as ToolRegistrar, gamingTrackerService);
   registerMetadataTools(server as unknown as ToolRegistrar, metadataService);
   registerIntelligenceTools(server as unknown as ToolRegistrar, {

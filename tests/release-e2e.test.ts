@@ -247,6 +247,48 @@ describe("released stdio entrypoint", () => {
     });
   });
 
+  test("publishes the read-only achievement tool from the compiled entrypoint", async () => {
+    const result = await runServer(
+      { STEAM_API_KEY: apiKey, STEAM_ID: "76561198000000000" },
+      [
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: { name: "release-e2e", version: "1.0.0" },
+          },
+        },
+        { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+      ]
+        .map((frame) => JSON.stringify(frame))
+        .join("\n") + "\n",
+    );
+
+    expect(result).toMatchObject({ code: 0 });
+    const responses = result.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(responses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 2,
+          result: {
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                name: "steam_get_game_achievements",
+                annotations: expect.objectContaining({ readOnlyHint: true }),
+              }),
+            ]),
+          },
+        }),
+      ]),
+    );
+  });
+
   test("keeps malformed frames and configured secrets out of stdout and stderr", async () => {
     const result = await runServer(
       { STEAM_API_KEY: apiKey, STEAM_ID: "76561198000000000" },
