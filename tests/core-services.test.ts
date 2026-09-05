@@ -15,6 +15,7 @@ import type { PlayNowRecommendationService } from "../src/recommendations/play-n
 import type { RecommendationPreferencesService } from "../src/recommendations/recommendation-preferences-service.js";
 import type { MetadataService } from "../src/services/metadata-service.js";
 import type { SteamService } from "../src/services/steam-service.js";
+import type { AchievementService } from "../src/services/achievement-service.js";
 import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
 import type { SteamApiClient } from "../src/steam/client.js";
 import { openTrackerDatabase } from "../src/tracker/sqlite/database.js";
@@ -211,6 +212,7 @@ describe("core services", () => {
 
   test("reuses injected services without reading environment or opening tracker storage", () => {
     const steamService = {} as SteamService;
+    const achievementService = {} as AchievementService;
     const gamingTrackerService = {} as GamingTrackerService;
     const recommendationPreferencesService = {} as RecommendationPreferencesService;
     const metadataService = {} as MetadataService;
@@ -221,6 +223,7 @@ describe("core services", () => {
 
     const services = createCoreServices({
       steamService,
+      achievementService,
       gamingTrackerService,
       recommendationPreferencesService,
       metadataService,
@@ -232,6 +235,7 @@ describe("core services", () => {
 
     expect(services).toMatchObject({
       steamService,
+      achievementService,
       gamingTrackerService,
       recommendationPreferencesService,
       metadataService,

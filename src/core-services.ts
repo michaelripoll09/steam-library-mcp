@@ -13,6 +13,11 @@ import {
 } from "./durations/game-duration-service.js";
 import { SqliteGameDurationRepository } from "./durations/sqlite/game-duration-repository.js";
 import { createMetadataService, type MetadataService } from "./services/metadata-service.js";
+import {
+  createAchievementService,
+  type AchievementService,
+  type AchievementResult,
+} from "./services/achievement-service.js";
 import { createSteamService, type SteamService } from "./services/steam-service.js";
 import { createSteamApiClient, type FetchLike, type SteamApiClient } from "./steam/client.js";
 import {
@@ -53,6 +58,7 @@ export type CoreServiceOverrides = Readonly<{
   cache?: Cache<ReturnType<SteamService["getLibrary"]> extends Promise<infer T> ? T : never>;
   steamClient?: SteamApiClient;
   steamService?: SteamService;
+  achievementService?: AchievementService;
   gamingTrackerService?: GamingTrackerService;
   recommendationPreferencesService?: RecommendationPreferencesService;
   metadataService?: MetadataService;
@@ -65,6 +71,7 @@ export type CoreServiceOverrides = Readonly<{
 
 export type CoreServices = Readonly<{
   steamService: SteamService;
+  achievementService: AchievementService;
   gamingTrackerService: GamingTrackerService;
   recommendationPreferencesService: RecommendationPreferencesService;
   metadataService: MetadataService;
@@ -81,6 +88,12 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
   const config = (): AppConfig => {
     resolvedConfig ??= overrides.config ?? loadConfig();
     return resolvedConfig;
+  };
+  let resolvedSteamClient: SteamApiClient | undefined;
+  const steamClient = (): SteamApiClient => {
+    resolvedSteamClient ??=
+      overrides.steamClient ?? createSteamApiClient({ config: config(), fetch: overrides.fetch });
+    return resolvedSteamClient;
   };
   let resolvedDatabase: TrackerDatabase | undefined;
   let ownsDatabase = false;
@@ -104,12 +117,19 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     overrides.steamService ??
     createSteamService({
       config: config(),
-      steamClient:
-        overrides.steamClient ?? createSteamApiClient({ config: config(), fetch: overrides.fetch }),
+      steamClient: steamClient(),
       cache: overrides.cache ?? new TtlCache({ now: clock.now }),
       clock,
       manualRepository: createDefaultManualLibraryRepository(database()),
       publicGameLookup: createPublicSteamGameLookup(overrides.fetch),
+    });
+  const achievementService =
+    overrides.achievementService ??
+    createAchievementService({
+      config: config(),
+      steamService,
+      steamClient: steamClient(),
+      cache: new TtlCache<AchievementResult>({ now: clock.now }),
     });
   const gamingTrackerService =
     overrides.gamingTrackerService ??
@@ -145,6 +165,7 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
 
   return Object.freeze({
     steamService,
+    achievementService,
     gamingTrackerService,
     recommendationPreferencesService,
     metadataService,
@@ -170,6 +191,7 @@ function createDefaultManualLibraryRepository(
 function allCoreServicesAreOverridden(overrides: CoreServiceOverrides): boolean {
   return (
     overrides.steamService !== undefined &&
+    overrides.achievementService !== undefined &&
     overrides.gamingTrackerService !== undefined &&
     overrides.recommendationPreferencesService !== undefined &&
     overrides.metadataService !== undefined &&
