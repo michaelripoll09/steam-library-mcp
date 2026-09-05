@@ -73,8 +73,6 @@ describe("DashboardApp", () => {
   test("uses the established fallback for a missing card cover", () => {
     render(<GameCard game={{ ...library.games[0], coverUrl: "" }} onOpen={vi.fn()} />);
 
-    fireEvent.error(screen.getByRole("img", { name: "Portada de Celeste" }));
-
     expect(
       screen.getByRole("img", { name: "Portada no disponible para Celeste" }),
     ).toBeInTheDocument();

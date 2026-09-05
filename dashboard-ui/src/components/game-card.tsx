@@ -39,7 +39,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
   const [isLandscape, setIsLandscape] = useState(false);
   const coverUrls =
     game.coverUrl.trim() === ""
-      ? [""]
+      ? []
       : [game.coverUrl, officialSteamIconUrl(game.appId)].filter(
           (url, index, urls) => urls.indexOf(url) === index,
         );
@@ -64,7 +64,7 @@ export function CoverImage({ game }: Readonly<{ game: DashboardGame }>) {
     <span className="cover-frame">
       <img
         className={`cover-image${isLandscape ? " cover-landscape" : ""}`}
-        src={coverUrl === "" ? undefined : coverUrl}
+        src={coverUrl}
         alt={`Portada de ${game.name}`}
         onError={() => setFailedSourceCount((count) => count + 1)}
         onLoad={(event) =>
