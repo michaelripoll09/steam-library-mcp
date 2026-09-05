@@ -442,33 +442,34 @@ select {
   background: transparent;
   color: #f5d7a0;
 }
-.dialog-backdrop {
+.drawer-backdrop {
   position: fixed;
   inset: 0;
   z-index: 4;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
+  display: flex;
+  justify-content: end;
   background: rgba(3, 4, 7, 0.78);
   backdrop-filter: blur(8px);
+  transition: opacity 180ms ease-out;
 }
-.game-details {
+.game-details-drawer {
   position: relative;
   display: grid;
   grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr);
   column-gap: 1.25rem;
-  width: min(100%, 45rem);
-  overflow: hidden;
+  width: min(42rem, 46vw);
+  max-height: 100dvh;
+  overflow-y: auto;
   border: 1px solid #3a3d48;
-  border-radius: 1rem;
   background: #151720;
   box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.55);
-  animation: dialog-enter 180ms ease-out;
+  animation: drawer-enter 180ms ease-out;
+  transition: transform 180ms ease-out;
 }
-.game-details .cover-frame {
+.game-details-drawer .cover-frame {
   height: 100%;
 }
-.game-details .cover-image {
+.game-details-drawer .cover-image {
   height: 100%;
 }
 .details-copy {
@@ -546,17 +547,22 @@ select {
 .achievement-error {
   color: #ffc2c7;
 }
-@keyframes dialog-enter {
+@keyframes drawer-enter {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.98);
+    transform: translateX(1rem);
   }
   to {
     opacity: 1;
     transform: none;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 1199px) {
+  .game-details-drawer {
+    width: min(75vw, 42rem);
+  }
+}
+@media (max-width: 767px) {
   .dashboard-shell {
     width: min(100% - 1.25rem, 1440px);
     padding-top: 2rem;
@@ -574,17 +580,24 @@ select {
   .search-field {
     grid-column: 1 / -1;
   }
-  .game-details {
+  .game-details-drawer {
     grid-template-columns: 1fr;
     column-gap: 0;
-    max-height: calc(100vh - 2rem);
-    overflow-y: auto;
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
   }
-  .game-details .cover-frame {
+  .game-details-drawer .cover-frame {
     max-height: 18rem;
   }
   .details-copy {
     padding: 1.5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-details-drawer,
+  .drawer-backdrop {
+    transition: none;
   }
 }
 @media (max-width: 430px) {

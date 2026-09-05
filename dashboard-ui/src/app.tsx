@@ -8,7 +8,7 @@ import type {
 } from "../../src/dashboard/contracts.js";
 import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
 import { createDashboardApi, type DashboardApi } from "./api.js";
-import { GameDetails } from "./game-details.js";
+import { GameDetailsDrawer } from "./game-details/game-details-drawer.js";
 import { AppShell, type DashboardView } from "./navigation/app-shell.js";
 import { HomeView } from "./views/home-view.js";
 import { IntelligencePanel } from "./intelligence-panel.js";
@@ -263,7 +263,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         </div>
 
         {selectedGame !== undefined && (
-          <GameDetails
+          <GameDetailsDrawer
             game={selectedGame}
             closeButtonRef={closeButtonRef}
             isUpdatingStatus={isUpdatingStatus}

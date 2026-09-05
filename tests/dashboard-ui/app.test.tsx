@@ -430,7 +430,7 @@ describe("DashboardApp", () => {
     expect(api.getAchievements).toHaveBeenCalledTimes(1);
   });
 
-  test("keeps an active achievement request pending when another dialog request fails", async () => {
+  test("keeps achievement loading and errors scoped to the selected app", async () => {
     const user = userEvent.setup();
     const rejectAchievements = new Map<number, (reason?: unknown) => void>();
     const api = {
@@ -517,6 +517,27 @@ describe("DashboardApp", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(gameButton).toHaveFocus();
+  });
+
+  test("traps focus in the drawer and restores the card opener on Escape", async () => {
+    const user = userEvent.setup();
+    render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
+
+    await user.click(screen.getByRole("button", { name: "Biblioteca" }));
+    const opener = await screen.findByRole("button", { name: "Ver detalles de Celeste" });
+    await user.click(opener);
+
+    const drawer = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    expect(drawer).toHaveClass("game-details-drawer");
+    expect(drawer.parentElement).toHaveClass("drawer-backdrop");
+    expect(screen.getByRole("button", { name: "Cerrar detalles" })).toHaveFocus();
+
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(drawer).toContainElement(document.activeElement);
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
   });
 
   test("keeps the current library visible after sync failure and offers a retryable live error", async () => {
@@ -734,11 +755,11 @@ describe("DashboardApp", () => {
 
   test("gives desktop game details a resilient cover gutter and title wrapping", async () => {
     const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
-    const desktopDetails = styles.match(/\.game-details\s*\{[^}]*\}/s)?.[0];
+    const desktopDetails = styles.match(/\.game-details-drawer\s*\{[^}]*\}/s)?.[0];
     const detailsCopy = styles.match(/\.details-copy\s*\{[^}]*\}/s)?.[0];
     const detailsHeading = styles.match(/\.details-copy h2\s*\{[^}]*\}/s)?.[0];
     const mobileDetails = styles.match(
-      /@media \(max-width: 760px\)\s*\{[\s\S]*?\.game-details\s*\{[^}]*\}/s,
+      /@media \(max-width: 767px\)\s*\{[\s\S]*?\.game-details-drawer\s*\{[^}]*\}/s,
     )?.[0];
 
     expect(desktopDetails).toMatch(/column-gap:\s*1\.25rem/);
