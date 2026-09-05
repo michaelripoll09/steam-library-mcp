@@ -32,12 +32,13 @@ function setup() {
 }
 
 describe("gaming MCP tools", () => {
-  test("registers the six strict tracker tools with canonical empty results", async () => {
+  test("registers the seven strict tracker tools with canonical empty results", async () => {
     const { configurations, tools } = setup();
     expect([...tools.keys()]).toEqual([
       "gaming_get_backlog",
       "gaming_get_current_game",
       "gaming_mark_playing",
+      "gaming_mark_paused",
       "gaming_mark_completed",
       "gaming_mark_dropped",
       "gaming_get_completed",
@@ -69,6 +70,9 @@ describe("gaming MCP tools", () => {
     await expect(tools.get("gaming_mark_playing")?.({ appId: 620 })).resolves.toMatchObject({
       content: [{ text: '{"outcome":"updated","appId":620,"status":"playing"}' }],
     });
+    await expect(tools.get("gaming_mark_paused")?.({ appId: 620 })).resolves.toMatchObject({
+      content: [{ text: '{"outcome":"updated","appId":620,"status":"paused"}' }],
+    });
     await expect(tools.get("gaming_mark_completed")?.({ appId: 0 })).resolves.toMatchObject({
       isError: true,
       content: [
@@ -77,11 +81,17 @@ describe("gaming MCP tools", () => {
         },
       ],
     });
-    expect(service.mark).toHaveBeenCalledTimes(1);
+    expect(service.mark).toHaveBeenCalledTimes(2);
     expect(service.mark).toHaveBeenCalledWith(620, "playing");
+    expect(service.mark).toHaveBeenCalledWith(620, "paused");
   });
 
-  test.each(["gaming_mark_playing", "gaming_mark_completed", "gaming_mark_dropped"])(
+  test.each([
+    "gaming_mark_playing",
+    "gaming_mark_paused",
+    "gaming_mark_completed",
+    "gaming_mark_dropped",
+  ])(
     "rejects unknown keys for strict mark schema %s",
     async (name) => {
       const { service, tools } = setup();
