@@ -18,6 +18,12 @@ function createServerForRegistration(preferencesUnavailable = false) {
   const steamClient: SteamApiClient = {
     getOwnedGames: vi.fn(async () => ({ response: { games: [] } })),
     getRecentGames: vi.fn(async () => ({ response: { games: [] } })),
+    getPlayerAchievements: vi.fn(async () => ({
+      playerstats: { success: false, achievements: [] },
+    })),
+    getAchievementSchema: vi.fn(async () => ({
+      game: { gameName: "Test Game", availableGameStats: { achievements: [] } },
+    })),
   };
   const preferences: RecommendationPreferencesService = {
     get: vi.fn((appId) => ({

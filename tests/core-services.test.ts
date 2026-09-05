@@ -70,6 +70,10 @@ describe("core services", () => {
           response: { games: [{ appid: 10, name: "Shared Game", playtime_forever: 0 }] },
         }),
         getRecentGames: async () => ({ response: { games: [] } }),
+        getPlayerAchievements: async () => ({ playerstats: { success: false, achievements: [] } }),
+        getAchievementSchema: async () => ({
+          game: { gameName: "Shared Game", availableGameStats: { achievements: [] } },
+        }),
       },
       cache: new TtlCache(),
       fetch: async () =>
@@ -127,6 +131,12 @@ describe("core services", () => {
         response: { games: [{ appid: 620, name: "Portal 2", playtime_forever: 135 }] },
       })),
       getRecentGames: vi.fn(async () => ({ response: { games: [] } })),
+      getPlayerAchievements: vi.fn(async () => ({
+        playerstats: { success: false, achievements: [] },
+      })),
+      getAchievementSchema: vi.fn(async () => ({
+        game: { gameName: "Portal 2", availableGameStats: { achievements: [] } },
+      })),
     });
     const fetch = vi.fn(
       async () =>

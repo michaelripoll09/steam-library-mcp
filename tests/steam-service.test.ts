@@ -46,6 +46,12 @@ function createClient(overrides: Partial<SteamApiClient> = {}): SteamApiClient {
         ],
       },
     })),
+    getPlayerAchievements: vi.fn(async () => ({
+      playerstats: { success: false, achievements: [] },
+    })),
+    getAchievementSchema: vi.fn(async () => ({
+      game: { gameName: "Portal 2", availableGameStats: { achievements: [] } },
+    })),
     ...overrides,
   };
 }

@@ -51,6 +51,12 @@ function createSteamClient(): SteamApiClient {
         games: [{ appid: 620, name: "Portal 2", playtime_forever: 135 }],
       },
     })),
+    getPlayerAchievements: vi.fn(async () => ({
+      playerstats: { success: false, achievements: [] },
+    })),
+    getAchievementSchema: vi.fn(async () => ({
+      game: { gameName: "Portal 2", availableGameStats: { achievements: [] } },
+    })),
   };
 }
 
