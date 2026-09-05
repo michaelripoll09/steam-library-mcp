@@ -13,7 +13,7 @@ import { AppShell, type DashboardView } from "./navigation/app-shell.js";
 import { HomeView } from "./views/home-view.js";
 import { useIntelligenceState, type IntelligenceApi } from "./intelligence-state.js";
 import { LibraryView } from "./views/library-view.js";
-import { ManualCollectionPanel } from "./manual-collection-panel.js";
+import { ManualCollectionView } from "./views/manual-collection-view.js";
 import { TaskPanel } from "./task-panel.js";
 import { BacklogView } from "./views/backlog-view.js";
 import { PlayNowView } from "./views/play-now-view.js";
@@ -248,7 +248,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         )}
 
         {activeView === "manual" && manualCollectionApi && (
-          <ManualCollectionPanel
+          <ManualCollectionView
             collection={manualCollection}
             steam={manualSteam}
             error={manualError}

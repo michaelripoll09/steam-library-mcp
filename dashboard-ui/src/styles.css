@@ -138,6 +138,44 @@ h2 {
 .manual-collection-list small {
   color: #a7a6aa;
 }
+.manual-collection-view {
+  display: grid;
+  gap: 1.25rem;
+  margin: 1.4rem 0;
+}
+.manual-collection-workspace {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 58rem;
+  border: 1px solid #292c35;
+  border-radius: 1rem;
+  background: rgba(18, 20, 28, 0.9);
+  padding: clamp(1rem, 2.5vw, 1.4rem);
+}
+.manual-collection-workspace form {
+  display: grid;
+  gap: 0.35rem;
+  color: #c9c7c3;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+.manual-collection-view .manual-collection-list {
+  max-width: 58rem;
+}
+.manual-collection-view .manual-game-row {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1fr) minmax(9rem, 0.8fr) minmax(12rem, 1fr) auto auto;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid #292c35;
+  border-radius: 0.75rem;
+  background: rgba(18, 20, 28, 0.68);
+}
+.inline-notice {
+  margin: 0;
+  color: #c9c7c3;
+  font-size: 0.9rem;
+}
 
 .summary-grid {
   display: grid;

@@ -100,6 +100,30 @@ function intelligenceApiFixture() {
   };
 }
 
+function manualApiFixture() {
+  const entry = {
+    appId: 413150,
+    name: "Stardew Valley",
+    accessType: "manual" as const,
+    isPlayable: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  return {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getManualCollection: vi.fn().mockResolvedValue([entry]),
+    addManualCollection: vi.fn(),
+    removeManualCollection: vi.fn(),
+    updateManualCollection: vi.fn(async (_appId: number, patch: object) => ({
+      ...entry,
+      ...patch,
+    })),
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -238,6 +262,23 @@ describe("DashboardApp", () => {
     await waitFor(() => expect(screen.getByText("Listo para jugar")).toBeInTheDocument());
     expect(api.addManualCollection).not.toHaveBeenCalled();
     expect(api.removeManualCollection).not.toHaveBeenCalled();
+  });
+
+  test("keeps manual Family access and playability editing reachable in its own view", async () => {
+    const user = userEvent.setup();
+    const api = manualApiFixture();
+    render(<DashboardApp api={api as never} />);
+
+    await user.click(screen.getByRole("button", { name: "Colección manual" }));
+    await user.selectOptions(await screen.findByLabelText("Acceso de Stardew Valley"), "family");
+    await waitFor(() =>
+      expect(api.updateManualCollection).toHaveBeenCalledWith(413150, { accessType: "family" }),
+    );
+    await user.click(screen.getByLabelText("Disponible para jugar: Stardew Valley"));
+    await waitFor(() =>
+      expect(api.updateManualCollection).toHaveBeenLastCalledWith(413150, { isPlayable: true }),
+    );
+    expect(screen.getByText(/metadata local declarada por el usuario/i)).toBeInTheDocument();
   });
 
   test("forwards controlled manual add and remove actions", async () => {
