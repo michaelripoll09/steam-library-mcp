@@ -39,6 +39,16 @@ const library: DashboardLibrary = {
   statusStats: { backlog: 1, playing: 1, completed: 0, dropped: 0, paused: 0 },
 };
 
+async function openDashboardView(name: string): Promise<void> {
+  const label =
+    {
+      library: "Biblioteca",
+      manual: "Colección manual",
+      "play-now": "Play Now",
+    }[name] ?? name;
+  await userEvent.setup().click(screen.getByRole("button", { name: label }));
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -55,6 +65,7 @@ describe("DashboardApp", () => {
     );
 
     const { rerender } = render(<DashboardApp />);
+    await openDashboardView("library");
     await screen.findByRole("article", { name: "Celeste" });
     rerender(<DashboardApp />);
 
@@ -89,6 +100,7 @@ describe("DashboardApp", () => {
       ),
     );
     render(<DashboardApp />);
+    await openDashboardView("manual");
     expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith("/api/manual-collection", { method: "GET" });
   });
@@ -117,6 +129,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
 
     expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
     expect(screen.getByText("No disponible para jugar")).toBeInTheDocument();
@@ -177,6 +190,7 @@ describe("DashboardApp", () => {
 
   test("labels manual catalog games without legacy access language", async () => {
     render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
+    await openDashboardView("library");
 
     const manualCard = await screen.findByRole("article", { name: "Hades" });
     expect(manualCard).toHaveTextContent(/Manual/);
@@ -238,6 +252,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
 
     const card = await screen.findByRole("article", { name: longTitleLibrary.games[0].name });
     expect(within(card).getByText("Pendiente").parentElement).toHaveClass("cover-status");
@@ -290,8 +305,8 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
 
-    expect(screen.getByRole("status", { name: "Cargando biblioteca" })).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "Tu biblioteca de Steam" }),
     ).toBeInTheDocument();
@@ -317,6 +332,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
 
     const dialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
@@ -344,6 +360,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
     const dialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
     expect(api.getAchievements).not.toHaveBeenCalled();
@@ -406,6 +423,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
     const celesteDialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
     await user.click(within(celesteDialog).getByRole("button", { name: "Cargar logros" }));
@@ -436,6 +454,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
     const dialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
     await user.click(within(dialog).getByRole("button", { name: "Cargar logros" }));
@@ -460,6 +479,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     const gameButton = await screen.findByRole("button", { name: "Ver detalles de Hades" });
     await user.click(gameButton);
 
@@ -485,6 +505,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await screen.findByRole("article", { name: "Celeste" });
     await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
 
@@ -505,6 +526,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
     await user.click(screen.getByRole("button", { name: "Reintentar carga de la biblioteca" }));
@@ -522,6 +544,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await screen.findByRole("article", { name: "Celeste" });
     await user.type(screen.getByRole("searchbox", { name: "Buscar juegos" }), "missing game");
 
@@ -556,6 +579,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
     const dialog = screen.getByRole("dialog");
     const status = within(dialog).getByLabelText("Estado");
@@ -576,6 +600,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
     const dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
@@ -600,6 +625,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await screen.findByRole("article", { name: "Celeste" });
     await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
 
@@ -624,6 +650,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
     const dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
@@ -643,6 +670,7 @@ describe("DashboardApp", () => {
     };
 
     render(<DashboardApp api={api} />);
+    await openDashboardView("library");
     const opener = await screen.findByRole("button", { name: "Ver detalles de Hades" });
     await user.click(opener);
     const dialog = screen.getByRole("dialog");
@@ -706,6 +734,7 @@ test("uses an accessible custom filter menu that applies selections through the 
     updateGameStatus: vi.fn(),
   };
   render(<DashboardApp api={api} />);
+  await openDashboardView("library");
   await screen.findByRole("article", { name: "Celeste" });
 
   const statusFilter = screen.getByRole("combobox", { name: "Estado" });
@@ -742,6 +771,7 @@ test("closes a custom filter menu with Escape and an outside click", async () =>
     updateGameStatus: vi.fn(),
   };
   render(<DashboardApp api={api} />);
+  await openDashboardView("library");
   const accessFilter = await screen.findByRole("combobox", { name: "Acceso" });
 
   await user.click(accessFilter);
@@ -761,6 +791,7 @@ test("closes an open custom filter menu when tabbing to the next filter", async 
     updateGameStatus: vi.fn(),
   };
   render(<DashboardApp api={api} />);
+  await openDashboardView("library");
   const statusFilter = await screen.findByRole("combobox", { name: "Estado" });
   const accessFilter = screen.getByRole("combobox", { name: "Acceso" });
 
@@ -820,6 +851,7 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
 
   expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
@@ -875,6 +907,7 @@ test("loads the initial game's persisted preference before allowing a save", asy
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
 
   expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
@@ -912,6 +945,7 @@ test("groups play-now controls into a primary recommendation card and compact si
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
 
   const recommendations = await screen.findByRole("heading", { name: "Recomendaciones" });
   const preferences = screen.getByRole("heading", { name: "Preferencias" });
@@ -966,6 +1000,7 @@ test("uses accessible custom menus for every intelligence choice and closes them
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
   await user.click(await screen.findByRole("button", { name: "Cargar inteligencia" }));
 
   const panel = screen
@@ -1047,6 +1082,7 @@ test("allows replacing recommendation minutes after clearing the field and rejec
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
 
   const availableMinutes = await screen.findByLabelText("Tiempo de esta sesión");
   await user.clear(availableMinutes);
@@ -1087,6 +1123,7 @@ test("loads recommendations using the selected session mode", async () => {
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
   const sessionMode = await screen.findByRole("combobox", { name: "Modo de sesión" });
   await user.click(sessionMode);
   await user.click(screen.getByRole("option", { name: "Con amigos" }));
@@ -1111,6 +1148,7 @@ test("allows replacing backlog target games after clearing the field and rejects
   };
 
   render(<DashboardApp api={api as never} />);
+  await openDashboardView("play-now");
 
   const targetGameCount = await screen.findByLabelText("Juegos objetivo");
   await user.clear(targetGameCount);
@@ -1128,4 +1166,30 @@ test("allows replacing backlog target games after clearing the field and rejects
     availableMinutes: 45,
     targetGameCount: 2,
   });
+});
+
+test("changes all six destinations without changing the URL or refetching the library", async () => {
+  const user = userEvent.setup();
+  const api = { getLibrary: vi.fn().mockResolvedValue(library) };
+  render(<DashboardApp api={api as never} />);
+
+  await screen.findByRole("heading", { name: "Inicio" });
+  for (const name of ["Biblioteca", "Play Now", "Backlog", "Colección manual", "Tareas"]) {
+    await user.click(screen.getByRole("button", { name }));
+  }
+
+  expect(api.getLibrary).toHaveBeenCalledTimes(1);
+  expect(window.location.pathname).toBe("/");
+});
+
+test("preserves a library search after navigating away and back", async () => {
+  const user = userEvent.setup();
+  render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
+
+  await user.click(screen.getByRole("button", { name: "Biblioteca" }));
+  await user.type(await screen.findByRole("searchbox", { name: "Buscar juegos" }), "hades");
+  await user.click(screen.getByRole("button", { name: "Inicio" }));
+  await user.click(screen.getByRole("button", { name: "Biblioteca" }));
+
+  expect(screen.getByRole("searchbox", { name: "Buscar juegos" })).toHaveValue("hades");
 });

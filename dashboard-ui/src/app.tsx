@@ -9,8 +9,10 @@ import type {
 import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
 import { createDashboardApi, type DashboardApi } from "./api.js";
 import { GameDetails } from "./game-details.js";
+import { AppShell, type DashboardView } from "./navigation/app-shell.js";
+import { HomeView } from "./views/home-view.js";
 import { IntelligencePanel } from "./intelligence-panel.js";
-import { LibraryPanel, LibrarySummary } from "./library-panel.js";
+import { LibraryPanel } from "./library-panel.js";
 import { ManualCollectionPanel } from "./manual-collection-panel.js";
 import { TaskPanel } from "./task-panel.js";
 import {
@@ -30,6 +32,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const manualCollectionApi = isManualCollectionApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
+  const [activeView, setActiveView] = useState<DashboardView>("home");
   const [initialError, setInitialError] = useState<string | undefined>();
   const [syncError, setSyncError] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
@@ -195,78 +198,110 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const games = library === undefined ? [] : filterLibraryGames(library.games, filters);
 
   return (
-    <main className="dashboard-shell">
-      <header className="dashboard-header">
-        <div>
-          <p className="eyebrow">Archivo personal de juegos</p>
-          <h1>Tu biblioteca de Steam</h1>
-          <p className="subtitle">Una vista enfocada de qué jugar después y qué ya importa.</p>
+    <AppShell activeView={activeView} onViewChange={setActiveView}>
+      <main className="dashboard-main" data-view={activeView}>
+        <div className="dashboard-view" hidden={activeView !== "home"}>
+          <HomeView
+            library={library}
+            taskSummary={{
+              label: "Tareas locales",
+              status: taskApi ? "Disponibles" : "No disponibles",
+            }}
+            onNavigate={setActiveView}
+          />
         </div>
-        <button
-          className="sync-button"
-          type="button"
-          onClick={() => void syncLibrary()}
-          disabled={isSyncing}
-        >
-          {isSyncing ? "Sincronizando biblioteca…" : "Sincronizar biblioteca"}
-        </button>
-      </header>
 
-      {manualCollectionApi && (
-        <ManualCollectionPanel
-          collection={manualCollection}
-          steam={manualSteam}
-          error={manualError}
-          saving={isSavingManual}
-          onSteamChange={setManualSteam}
-          onAdd={() => void addManual()}
-          onUpdate={(appId, patch) => void updateManual(appId, patch)}
-          onRemove={(appId) => void removeManual(appId)}
-        />
-      )}
+        <div className="dashboard-view" hidden={activeView !== "library"}>
+          <div className="dashboard-view-heading">
+            <div>
+              <p className="eyebrow">Archivo personal de juegos</p>
+              <h2>Tu biblioteca de Steam</h2>
+              <p className="subtitle">
+                Explora, filtra y actualiza tu colección sin perder el contexto.
+              </p>
+            </div>
+            <button
+              className="sync-button"
+              type="button"
+              onClick={() => void syncLibrary()}
+              disabled={isSyncing}
+            >
+              {isSyncing ? "Sincronizando biblioteca…" : "Sincronizar biblioteca"}
+            </button>
+          </div>
+          {syncError !== undefined && (
+            <section className="notice notice-error" role="alert">
+              <p>{syncError}</p>
+              <button type="button" onClick={() => void syncLibrary()} disabled={isSyncing}>
+                Reintentar sincronización
+              </button>
+            </section>
+          )}
+          <LibraryPanel
+            library={library}
+            games={games}
+            filters={filters}
+            isLoading={isLoading}
+            error={initialError}
+            onFiltersChange={setFilters}
+            onRetryLoad={() => void loadLibrary()}
+            onOpen={openGame}
+          />
+        </div>
 
-      {syncError !== undefined && (
-        <section className="notice notice-error" role="alert">
-          <p>{syncError}</p>
-          <button type="button" onClick={() => void syncLibrary()} disabled={isSyncing}>
-            Reintentar sincronización
-          </button>
-        </section>
-      )}
+        <div className="dashboard-view" hidden={activeView !== "play-now"}>
+          {library !== undefined && intelligenceApi && (
+            <IntelligencePanel api={api} games={library.games} />
+          )}
+        </div>
 
-      {library !== undefined && <LibrarySummary library={library} />}
-      {taskApi && <TaskPanel api={api} />}
-      {library !== undefined && intelligenceApi && (
-        <IntelligencePanel api={api} games={library.games} />
-      )}
+        <div className="dashboard-view" hidden={activeView !== "backlog"}>
+          <section className="dashboard-placeholder" aria-labelledby="backlog-view-heading">
+            <p className="eyebrow">Planificación</p>
+            <h2 id="backlog-view-heading">Backlog</h2>
+            <p>La planificación de tu backlog sigue disponible dentro de Play Now.</p>
+            <button type="button" onClick={() => setActiveView("play-now")}>
+              Abrir Play Now
+            </button>
+          </section>
+        </div>
 
-      <LibraryPanel
-        library={library}
-        games={games}
-        filters={filters}
-        isLoading={isLoading}
-        error={initialError}
-        onFiltersChange={setFilters}
-        onRetryLoad={() => void loadLibrary()}
-        onOpen={openGame}
-      />
+        <div className="dashboard-view" hidden={activeView !== "manual"}>
+          {manualCollectionApi && (
+            <ManualCollectionPanel
+              collection={manualCollection}
+              steam={manualSteam}
+              error={manualError}
+              saving={isSavingManual}
+              onSteamChange={setManualSteam}
+              onAdd={() => void addManual()}
+              onUpdate={(appId, patch) => void updateManual(appId, patch)}
+              onRemove={(appId) => void removeManual(appId)}
+            />
+          )}
+        </div>
 
-      {selectedGame !== undefined && (
-        <GameDetails
-          game={selectedGame}
-          closeButtonRef={closeButtonRef}
-          isUpdatingStatus={isUpdatingStatus}
-          statusError={statusError}
-          statusMessage={statusMessage}
-          achievementResult={achievementCache.get(selectedGame.appId)}
-          isLoadingAchievements={loadingAchievementAppIds.has(selectedGame.appId)}
-          achievementError={achievementErrors.get(selectedGame.appId)}
-          onLoadAchievements={isAchievementsApi(api) ? loadAchievements : undefined}
-          onClose={closeGame}
-          onStatusChange={updateStatus}
-        />
-      )}
-    </main>
+        <div className="dashboard-view" hidden={activeView !== "tasks"}>
+          {taskApi && <TaskPanel api={api} />}
+        </div>
+
+        {selectedGame !== undefined && (
+          <GameDetails
+            game={selectedGame}
+            closeButtonRef={closeButtonRef}
+            isUpdatingStatus={isUpdatingStatus}
+            statusError={statusError}
+            statusMessage={statusMessage}
+            achievementResult={achievementCache.get(selectedGame.appId)}
+            isLoadingAchievements={loadingAchievementAppIds.has(selectedGame.appId)}
+            achievementError={achievementErrors.get(selectedGame.appId)}
+            onLoadAchievements={isAchievementsApi(api) ? loadAchievements : undefined}
+            onClose={closeGame}
+            onStatusChange={updateStatus}
+          />
+        )}
+      </main>
+    </AppShell>
   );
 }
 
