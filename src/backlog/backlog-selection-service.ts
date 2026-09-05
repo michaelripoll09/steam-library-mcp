@@ -111,13 +111,15 @@ export function createBacklogSelectionService({
             incrementExclusion(exclusionCounts, "duration_unknown");
             return undefined;
           }
+          const estimatedRemainingMinutes = Math.max(
+            durationEstimateMinutes - candidate.game.playtimeMinutes,
+            0,
+          );
+          if (estimatedRemainingMinutes === 0) return undefined;
           return {
             ...candidate,
             durationEstimateMinutes,
-            estimatedRemainingMinutes: Math.max(
-              durationEstimateMinutes - candidate.game.playtimeMinutes,
-              0,
-            ),
+            estimatedRemainingMinutes,
           };
         }),
       );

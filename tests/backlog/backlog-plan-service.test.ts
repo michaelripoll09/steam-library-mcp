@@ -1,7 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { Clock } from "../../src/cache/ttl-cache.js";
-import type { BacklogSelectionService } from "../../src/backlog/backlog-selection-service.js";
+import {
+  createBacklogSelectionService,
+  type BacklogSelectionService,
+} from "../../src/backlog/backlog-selection-service.js";
 import { InputError } from "../../src/errors.js";
 import {
   createBacklogPlanService,
@@ -107,6 +110,54 @@ describe("BacklogPlanService", () => {
     expect(repository.replaceActive).toHaveBeenCalledWith(result.plan);
   });
 
+  test("excludes fully played games before persisting a SQLite plan", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const repository = new SqliteBacklogPlanRepository(database);
+    const selectionService = createBacklogSelectionService({
+      library: {
+        getLibrary: async () => ({
+          steamId: "test-steam-id",
+          games: [
+            {
+              appId: 620,
+              name: "Portal 2",
+              playtimeMinutes: 480,
+              isPlayable: true,
+            },
+          ],
+          fetchedAt: now,
+        }),
+      },
+      trackerRepository: { list: () => [] },
+      preferenceRepository: { get: () => undefined },
+      gameDurationService: {
+        getEstimate: async () => ({
+          appId: 620,
+          igdbGameId: 620,
+          source: "igdb" as const,
+          refreshedAt: now,
+          normally: { minutes: 480, hours: 8 },
+        }),
+      },
+    });
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "weekly-fully-played",
+      selectionService,
+      repository,
+    });
+
+    try {
+      await expect(
+        service.create({ cadence: "weekly", availableMinutes: 60, targetGameCount: 1 }),
+      ).resolves.toMatchObject({ plan: { items: [] } });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM backlog_plan_items").get()).toEqual({
+        count: 0,
+      });
+    } finally {
+      database.close();
+    }
+  });
   test("reports an eligibility shortfall with selected count and budget", async () => {
     const repository = createRepository();
     const service = createBacklogPlanService({
