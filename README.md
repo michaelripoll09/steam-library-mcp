@@ -82,11 +82,11 @@ All tools are available through the stdio MCP server.
 | Backlog plans     | **backlog_create_plan**, **backlog_list_active_plans**, **backlog_update_plan_item_progress**                                                                                      |
 | Background tasks  | **task_list**, **task_get**, **task_cancel**                                                                                                                                       |
 
-Manual collection accepts a positive Steam AppID or an HTTPS store.steampowered.com/app/<AppID> URL. The server looks up the public Steam app name, stores the entry locally, and merges it into library reads. It does not verify ownership or current access. Family access is user-declared local metadata, not verified Steam Families synchronization: it never queries or proves a Steam Families entitlement.
+Manual collection supports add, update, and remove using a positive Steam AppID or an HTTPS store.steampowered.com/app/<AppID> URL. Local entries include user-declared access type (`manual` or `family`) and `isPlayable` state (`true` or `false`); the server looks up the public Steam app name and merges the entry into library reads. It does not verify ownership or current access. Family access is user-declared local metadata, not verified Steam Families synchronization: Steam Library MCP does not query, verify, or synchronize Steam Families entitlements.
 
 `steam_get_game_achievements` fetches achievement progress on demand for one playable game. Achievements may be unavailable depending on Steam, user, or game data.
 
-**Play Now** (`recommendation_get_play_now`) ranks games for the next session, while the **Backlog Planner** creates and tracks a weekly or monthly plan. Its `sessionMode` is `solo` by default; use `with_friends` to prioritize games marked for friends or `any` to consider both play modes.
+**Play Now** (`recommendation_get_play_now`) answers “what should I play in this session?” from tracker state, preferences, and `sessionMode`; duration is only a secondary finishability signal. The **Backlog Planner** answers “what fits in my weekly or monthly total time budget?” using estimated remaining duration and a target game count. Play Now `sessionMode` is `solo` by default; use `with_friends` to prioritize games marked for friends or `any` to consider both play modes.
 
 The server also exposes read-only task resources (steam-library://tasks and steam-library://tasks/{taskId}), intelligence resources, and prompts for play-now recommendations, weekly/monthly plans, and backlog review. Background task types include library sync, duration enrichment, and plan recalculation.
 
@@ -96,8 +96,9 @@ The dashboard is a local view over the configured library and tracker. It suppor
 
 - Library search and filters, summary totals, playtime, recent-play information, game details, and artwork.
 - Explicit library refresh.
-- Local status changes (playing, completed, or dropped).
-- Manual collection add/remove using a Steam URL or AppID.
+- Local status changes (playing, paused, completed, or dropped).
+- Manual collection add/update/remove using a Steam URL or AppID, including user-declared access type (`manual` or `family`) and local `isPlayable` state.
+- On-demand dashboard achievement progress from the game details view.
 - Local “play now” recommendations based on available minutes, tracker status, preferences, and duration estimates.
 - Per-game recommendation preferences (priority, excluded, solo/with-friends).
 - Weekly or monthly backlog plans, shortfall reporting, and item progress updates.
@@ -108,7 +109,7 @@ The API and UI bind to loopback (127.0.0.1); this is intended for local use, not
 ## Limitations and data ownership
 
 - The tracker, preferences, backlog plans, duration cache, and manual collection are local SQLite state. They never write game status back to Steam. Back up the database before upgrades or manual recovery. If a migration or storage failure occurs, stop the server and restore a known-good backup instead of deleting the database.
-- Manual entries are catalog entries only: they have no Steam ownership confirmation, start with zero playtime, and are treated as not playable by recommendation logic.
+- Manual entries have no Steam ownership confirmation and start with zero playtime because Steam does not confirm their history through `GetOwnedGames`. They default to `manual` and non-playable unless explicitly configured otherwise. Entries marked playable — including user-declared `family` access — can participate in tracker, Play Now recommendations, and backlog planning.
 - Fresh duration estimates require both IGDB credentials and successful upstream responses. Each duration request first attempts a verified Steam-to-IGDB match and time-to-beat lookup; a successful result is saved to SQLite and replaces the previous estimate. If IGDB is disabled or unavailable, an existing cached estimate is returned unchanged; if no cached estimate exists, the result is unavailable. A valid response with no verified match or time-to-beat record also produces no estimate.
 - Artwork uses local cache plus public Steam artwork, with optional SteamGridDB/IGDB fallbacks. Artwork availability varies by game and provider.
 - This project does not automatically import or synchronize Steam Families libraries.
