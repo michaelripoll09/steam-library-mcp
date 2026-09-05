@@ -72,17 +72,21 @@ Shell-provided environment variables take precedence over values loaded from .en
 
 All tools are available through the stdio MCP server.
 
-| Area              | Tools                                                                                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Steam library     | **steam_get_library**, **steam_search_library**, **steam_get_game**, **steam_get_recent_games**, **steam_get_library_stats**                               |
-| Manual collection | **steam_get_manual_collection**, **steam_add_manual_collection**, **steam_remove_manual_collection**                                                       |
-| Local tracker     | **gaming_get_backlog**, **gaming_get_current_game**, **gaming_mark_playing**, **gaming_mark_completed**, **gaming_mark_dropped**, **gaming_get_completed** |
-| Metadata          | **steam_get_game_metadata**, **steam_query_library_metadata**                                                                                              |
-| Recommendations   | **recommendation_get_game_preference**, **recommendation_set_game_preference**, **recommendation_get_play_now**                                            |
-| Backlog plans     | **backlog_create_plan**, **backlog_list_active_plans**, **backlog_update_plan_item_progress**                                                              |
-| Background tasks  | **task_list**, **task_get**, **task_cancel**                                                                                                               |
+| Area              | Tools                                                                                                                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Steam library     | **steam_get_library**, **steam_search_library**, **steam_get_game**, **steam_get_recent_games**, **steam_get_library_stats**, **steam_get_game_achievements**                      |
+| Manual collection | **steam_get_manual_collection**, **steam_add_manual_collection**, **steam_update_manual_collection**, **steam_remove_manual_collection**                                           |
+| Tracker           | **gaming_get_backlog**, **gaming_get_current_game**, **gaming_mark_playing**, **gaming_mark_paused**, **gaming_mark_completed**, **gaming_mark_dropped**, **gaming_get_completed** |
+| Metadata          | **steam_get_game_metadata**, **steam_query_library_metadata**                                                                                                                      |
+| Recommendations   | **recommendation_get_game_preference**, **recommendation_set_game_preference**, **recommendation_get_play_now**                                                                    |
+| Backlog plans     | **backlog_create_plan**, **backlog_list_active_plans**, **backlog_update_plan_item_progress**                                                                                      |
+| Background tasks  | **task_list**, **task_get**, **task_cancel**                                                                                                                                       |
 
-Manual collection accepts a positive Steam AppID or an HTTPS store.steampowered.com/app/<AppID> URL. The server looks up the public Steam app name, stores the entry locally, and merges it into library reads. It does not verify ownership or current access.
+Manual collection accepts a positive Steam AppID or an HTTPS store.steampowered.com/app/<AppID> URL. The server looks up the public Steam app name, stores the entry locally, and merges it into library reads. It does not verify ownership or current access. Family access is user-declared local metadata, not verified Steam Families synchronization: it never queries or proves a Steam Families entitlement.
+
+`steam_get_game_achievements` fetches achievement progress on demand for one playable game. Achievements may be unavailable depending on Steam, user, or game data.
+
+**Play Now** (`recommendation_get_play_now`) ranks games for the next session, while the **Backlog Planner** creates and tracks a weekly or monthly plan. Its `sessionMode` is `solo` by default; use `with_friends` to prioritize games marked for friends or `any` to consider both play modes.
 
 The server also exposes read-only task resources (steam-library://tasks and steam-library://tasks/{taskId}), intelligence resources, and prompts for play-now recommendations, weekly/monthly plans, and backlog review. Background task types include library sync, duration enrichment, and plan recalculation.
 
@@ -116,4 +120,15 @@ npm test -- --run
 npm run typecheck
 npm run lint
 npm run format:check
+```
+
+CI verifies the same release checks. Before submitting changes, run:
+
+```sh
+npm test -- --run tests/readme.test.ts
+npm test -- --run
+npm run typecheck
+npm run lint
+npm run format:check
+npm run build
 ```
