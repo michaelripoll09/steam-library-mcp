@@ -954,6 +954,10 @@ select {
   background: #193a60;
   color: #f3f8ff;
 }
+.dashboard-navigation-button:focus-visible {
+  outline: 3px solid #8fc9ff;
+  outline-offset: 3px;
+}
 .dashboard-content {
   min-width: 0;
   padding: clamp(1rem, 3vw, 3rem);

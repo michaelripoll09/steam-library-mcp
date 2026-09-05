@@ -1193,3 +1193,11 @@ test("preserves a library search after navigating away and back", async () => {
 
   expect(screen.getByRole("searchbox", { name: "Buscar juegos" })).toHaveValue("hades");
 });
+
+test("gives dashboard navigation a visible cold-blue keyboard focus treatment", async () => {
+  const styles = await readFile(resolve(process.cwd(), "dashboard-ui/src/styles.css"), "utf8");
+
+  expect(styles).toMatch(
+    /\.dashboard-navigation-button:focus-visible\s*\{[^}]*outline:\s*3px solid #8fc9ff;[^}]*outline-offset:\s*3px;/s,
+  );
+});
