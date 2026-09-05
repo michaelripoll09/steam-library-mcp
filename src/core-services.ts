@@ -35,6 +35,10 @@ import {
   type BacklogPlanService,
 } from "./backlog/backlog-plan-service.js";
 import { SqliteBacklogPlanRepository } from "./backlog/sqlite/backlog-plan-repository.js";
+import {
+  createBacklogSelectionService,
+  type BacklogSelectionService,
+} from "./backlog/backlog-selection-service.js";
 import { createTaskRunner, type TaskRunner } from "./tasks/task-runner.js";
 import {
   createPublicSteamGameLookup,
@@ -54,6 +58,7 @@ export type CoreServiceOverrides = Readonly<{
   metadataService?: MetadataService;
   gameDurationService?: GameDurationService;
   playNowRecommendationService?: PlayNowRecommendationService;
+  backlogSelectionService?: BacklogSelectionService;
   backlogPlanService?: BacklogPlanService;
   taskRunner?: TaskRunner;
 }>;
@@ -65,6 +70,7 @@ export type CoreServices = Readonly<{
   metadataService: MetadataService;
   gameDurationService: GameDurationService;
   playNowRecommendationService: PlayNowRecommendationService;
+  backlogSelectionService: BacklogSelectionService;
   backlogPlanService: BacklogPlanService;
   taskRunner: TaskRunner;
   close(): void;
@@ -119,6 +125,9 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
   const playNowRecommendationService =
     overrides.playNowRecommendationService ??
     createDefaultPlayNowRecommendationService(database(), steamService, gameDurationService);
+  const backlogSelectionService =
+    overrides.backlogSelectionService ??
+    createDefaultBacklogSelectionService(database(), steamService, gameDurationService);
   const backlogPlanService =
     overrides.backlogPlanService ??
     createDefaultBacklogPlanService(database(), clock, playNowRecommendationService);
@@ -141,6 +150,7 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     metadataService,
     gameDurationService,
     playNowRecommendationService,
+    backlogSelectionService,
     backlogPlanService,
     taskRunner,
     close,
@@ -165,6 +175,7 @@ function allCoreServicesAreOverridden(overrides: CoreServiceOverrides): boolean 
     overrides.metadataService !== undefined &&
     overrides.gameDurationService !== undefined &&
     overrides.playNowRecommendationService !== undefined &&
+    overrides.backlogSelectionService !== undefined &&
     overrides.backlogPlanService !== undefined
   );
 }
@@ -330,6 +341,23 @@ function createDefaultBacklogPlanService(
       clock,
       recommendationService,
       repository: new SqliteBacklogPlanRepository(database),
+    });
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
+}
+
+function createDefaultBacklogSelectionService(
+  database: TrackerDatabase,
+  steamService: SteamService,
+  gameDurationService: GameDurationService,
+): BacklogSelectionService {
+  try {
+    return createBacklogSelectionService({
+      library: steamService,
+      trackerRepository: new SqliteTrackerRepository(database),
+      preferenceRepository: new SqliteRecommendationPreferenceRepository(database),
+      gameDurationService,
     });
   } catch (error) {
     throw new TrackerPersistenceError(error);

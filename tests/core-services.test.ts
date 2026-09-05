@@ -10,6 +10,7 @@ import { createCoreServices } from "../src/core-services.js";
 import { registerSteamTools, type ToolRegistrar } from "../src/tools/register-steam-tools.js";
 import type { GameDurationService } from "../src/durations/game-duration-service.js";
 import type { BacklogPlanService } from "../src/backlog/backlog-plan-service.js";
+import type { BacklogSelectionService } from "../src/backlog/backlog-selection-service.js";
 import type { PlayNowRecommendationService } from "../src/recommendations/play-now-recommendation-service.js";
 import type { RecommendationPreferencesService } from "../src/recommendations/recommendation-preferences-service.js";
 import type { MetadataService } from "../src/services/metadata-service.js";
@@ -189,6 +190,7 @@ describe("core services", () => {
     const gameDurationService = {} as GameDurationService;
     const playNowRecommendationService = {} as PlayNowRecommendationService;
     const backlogPlanService = {} as BacklogPlanService;
+    const backlogSelectionService = {} as BacklogSelectionService;
 
     const services = createCoreServices({
       steamService,
@@ -198,6 +200,7 @@ describe("core services", () => {
       gameDurationService,
       playNowRecommendationService,
       backlogPlanService,
+      backlogSelectionService,
     });
 
     expect(services).toMatchObject({
@@ -208,6 +211,7 @@ describe("core services", () => {
       gameDurationService,
       playNowRecommendationService,
       backlogPlanService,
+      backlogSelectionService,
     });
     expect(services.taskRunner.list()).toEqual([]);
   });
