@@ -34,6 +34,17 @@ describe("README release guidance", () => {
     expect(content).toContain("gaming_mark_playing");
   });
 
+  test("documents final 1.0 dashboard, manual collection, and achievement behavior", () => {
+    const content = readme();
+
+    expect(content).toMatch(/playing.*paused.*completed.*dropped/i);
+    expect(content).toMatch(/manual.*family/i);
+    expect(content).toMatch(/isPlayable|playable/i);
+    expect(content).toMatch(/achievement.*dashboard|dashboard.*achievement/i);
+    expect(content).not.toContain("Local status changes (playing, completed, or dropped).");
+    expect(content).not.toContain("are treated as not playable by recommendation logic.");
+  });
+
   test("documents the 1.0 library, collection, tracker, and planning surface", () => {
     const content = readme();
 

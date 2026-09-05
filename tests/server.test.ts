@@ -110,6 +110,11 @@ describe("MCP server composition", () => {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
 
+    expect(client.getServerVersion()).toMatchObject({
+      name: "steam-library-mcp",
+      version: "1.0.0",
+    });
+
     const listedTools = await client.listTools();
     expect(listedTools.tools).toHaveLength(28);
     expect(listedTools).toMatchObject({

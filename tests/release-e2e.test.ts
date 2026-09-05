@@ -243,7 +243,7 @@ describe("released stdio entrypoint", () => {
     expect(JSON.parse(result.stdout)).toMatchObject({
       jsonrpc: "2.0",
       id: 1,
-      result: { serverInfo: { name: "steam-library-mcp" } },
+      result: { serverInfo: { name: "steam-library-mcp", version: "1.0.0" } },
     });
   });
 

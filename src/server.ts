@@ -49,7 +49,7 @@ function createMcpServerFromServices(services: CoreServices): McpServer {
     backlogPlanService,
     taskRunner,
   } = services;
-  const server = new McpServer({ name: "steam-library-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "steam-library-mcp", version: "1.0.0" });
 
   registerSteamTools(server as unknown as ToolRegistrar, steamService);
   registerAchievementTools(server as unknown as ToolRegistrar, achievementService);
