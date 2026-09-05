@@ -26,6 +26,9 @@ jobs:
         run: npm ci
 
       - name: Test
+        env:
+          STEAM_API_KEY: test-api-key
+          STEAM_ID: "76561198000000000"
         run: npm test -- --run
 
       - name: Typecheck
