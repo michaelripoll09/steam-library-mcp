@@ -11,6 +11,7 @@ export type TaskState = Readonly<{
   tasks: readonly LocalTask[];
   error: string | undefined;
   cancellingTaskId: string | undefined;
+  hasLoaded: boolean;
   refresh: () => Promise<void>;
   cancel: (id: string) => Promise<void>;
   summary: HomeTaskSummary;
@@ -22,6 +23,7 @@ export function useTaskState(api: TaskApi | undefined): TaskState | undefined {
   const [tasks, setTasks] = useState<readonly LocalTask[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [cancellingTaskId, setCancellingTaskId] = useState<string | undefined>();
+  const [hasLoaded, setHasLoaded] = useState(false);
   const tasksRef = useRef(tasks);
   const taskRequestVersions = useRef(new Map<string, number>());
   const taskListRequestGeneration = useRef(0);
@@ -57,8 +59,12 @@ export function useTaskState(api: TaskApi | undefined): TaskState | undefined {
         );
       }
       setError(undefined);
+      setHasLoaded(true);
     } catch (loadError) {
-      if (taskListRequestGeneration.current === generation) setError(errorMessage(loadError));
+      if (taskListRequestGeneration.current === generation) {
+        setError(errorMessage(loadError));
+        setHasLoaded(true);
+      }
     }
   }, [api, nextTaskRequestVersion]);
 
@@ -112,13 +118,15 @@ export function useTaskState(api: TaskApi | undefined): TaskState | undefined {
 
   const summary = useMemo<HomeTaskSummary>(() => {
     const activeCount = tasks.filter(isActiveTask).length;
-    return { totalCount: tasks.length, activeCount, hasError: error !== undefined };
-  }, [error, tasks]);
+    return { totalCount: tasks.length, activeCount, hasError: error !== undefined, hasLoaded };
+  }, [error, hasLoaded, tasks]);
 
   return useMemo(
     () =>
-      api === undefined ? undefined : { tasks, error, cancellingTaskId, refresh, cancel, summary },
-    [api, cancel, cancellingTaskId, error, refresh, summary, tasks],
+      api === undefined
+        ? undefined
+        : { tasks, error, cancellingTaskId, hasLoaded, refresh, cancel, summary },
+    [api, cancel, cancellingTaskId, error, hasLoaded, refresh, summary, tasks],
   );
 }
 

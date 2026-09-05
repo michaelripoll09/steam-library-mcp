@@ -192,6 +192,40 @@ describe("DashboardApp", () => {
     expect(screen.getByRole("heading", { name: "Play Now", level: 1 })).toBeInTheDocument();
   });
 
+  test("shows task loading and empty summaries without a premature zero count", async () => {
+    const pendingTasks = deferred<readonly LocalTask[]>();
+    const api = {
+      ...intelligenceApiFixture(),
+      getTasks: vi.fn(() => pendingTasks.promise),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+    };
+    render(<DashboardApp api={api as never} />);
+
+    expect(await screen.findByText("Cargando tareas…")).toBeInTheDocument();
+    expect(screen.queryByText("0 tareas")).not.toBeInTheDocument();
+
+    await act(async () => {
+      pendingTasks.resolve([]);
+      await pendingTasks.promise;
+    });
+
+    expect(await screen.findByText("No hay tareas")).toBeInTheDocument();
+  });
+
+  test("shows a task error summary after the initial task load fails", async () => {
+    const api = {
+      ...intelligenceApiFixture(),
+      getTasks: vi.fn().mockRejectedValue(new Error("offline")),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+    };
+    render(<DashboardApp api={api as never} />);
+
+    expect(await screen.findByText("No se pudieron cargar las tareas")).toBeInTheDocument();
+    expect(screen.queryByText("0 tareas")).not.toBeInTheDocument();
+  });
+
   test("does not create a second task poller while switching Home and Tasks", async () => {
     vi.useFakeTimers();
     const api = taskApiFixtureWithRunningTask();

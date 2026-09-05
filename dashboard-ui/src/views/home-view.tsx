@@ -7,6 +7,7 @@ export type HomeTaskSummary = Readonly<{
   totalCount: number;
   activeCount: number;
   hasError: boolean;
+  hasLoaded: boolean;
 }>;
 
 type HomeDestination = Extract<DashboardView, "library" | "play-now" | "backlog" | "tasks">;
@@ -87,7 +88,9 @@ export function HomeView({
 
 function formatTaskSummary(summary: HomeTaskSummary | undefined): string {
   if (summary === undefined) return "No disponibles";
-  if (summary.hasError) return "Revisar tareas";
+  if (!summary.hasLoaded) return "Cargando tareas…";
+  if (summary.hasError) return "No se pudieron cargar las tareas";
+  if (summary.totalCount === 0) return "No hay tareas";
   if (summary.activeCount > 0) {
     return summary.activeCount === 1 ? "1 activa" : `${summary.activeCount} activas`;
   }

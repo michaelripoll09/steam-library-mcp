@@ -231,7 +231,10 @@ test("traps focus in the drawer and restores the card opener on Escape", async (
 });
 
 test("keeps achievement loading and errors scoped to the selected app", async () => {
-  const requests = new Map<number, ReturnType<typeof deferred<DashboardAchievementResult>>>();`n  const api = { ...libraryApiFixture(), getAchievements: vi.fn((appId: number) => { const request = deferred<DashboardAchievementResult>(); requests.set(appId, request); return request.promise; }) };`n  render(<DashboardApp api={api as never} />);`n  // Open Celeste and load, close it, open Hades and load, reject requests.get(10), then assert Hades still shows "Cargando logros…" and no Celeste error.
+  const requests = new Map<number, ReturnType<typeof deferred<DashboardAchievementResult>>>();
+  const api = { ...libraryApiFixture(), getAchievements: vi.fn((appId: number) => { const request = deferred<DashboardAchievementResult>(); requests.set(appId, request); return request.promise; }) };
+  render(<DashboardApp api={api as never} />);
+  // Open Celeste and load, close it, open Hades and load, reject requests.get(10), then assert Hades still shows "Cargando logros…" and no Celeste error.
 });
 ```
 
@@ -333,7 +336,15 @@ export type IntelligenceState = Readonly<{
   refreshRecommendations: () => Promise<void>;
   createPlan: () => Promise<void>;
   updateProgress: (planId: string, itemId: string, progress: DashboardPlanItemProgress) => Promise<void>;
-  selectedAppId: number | undefined;`n  preference: Omit<DashboardRecommendationPreference, "appId">;`n  planAvailableMinutes: string;`n  cadence: "weekly" | "monthly";`n  targetGameCount: string;`n  message: string | undefined;`n  error: string | undefined;`n  selectGame: (appId: number) => void;`n  savePreference: () => Promise<void>;
+  selectedAppId: number | undefined;
+  preference: Omit<DashboardRecommendationPreference, "appId">;
+  planAvailableMinutes: string;
+  cadence: "weekly" | "monthly";
+  targetGameCount: string;
+  message: string | undefined;
+  error: string | undefined;
+  selectGame: (appId: number) => void;
+  savePreference: () => Promise<void>;
 }>;
 ```
 
@@ -521,7 +532,10 @@ test("does not create a second task poller while switching Home and Tasks", asyn
 });
 
 test("keeps cancellation when a stale shared poll resolves", async () => {
-  const pendingPoll = deferred<LocalTask>();`n  const api = { ...taskApiFixtureWithRunningTask(), getTask: vi.fn(() => pendingPoll.promise), cancelTask: vi.fn(async () => ({ ...runningTask, state: "cancelled" as const })) };`n  render(<DashboardApp api={api as never} />);`n  // Advance 2,000ms, cancel runningTask.id, resolve pendingPoll with runningTask, and assert "Cancelada" remains while "En ejecución" is absent.
+  const pendingPoll = deferred<LocalTask>();
+  const api = { ...taskApiFixtureWithRunningTask(), getTask: vi.fn(() => pendingPoll.promise), cancelTask: vi.fn(async () => ({ ...runningTask, state: "cancelled" as const })) };
+  render(<DashboardApp api={api as never} />);
+  // Advance 2,000ms, cancel runningTask.id, resolve pendingPoll with runningTask, and assert "Cancelada" remains while "En ejecución" is absent.
 });
 ```
 
