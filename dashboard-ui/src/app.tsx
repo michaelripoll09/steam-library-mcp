@@ -41,8 +41,12 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const [achievementCache, setAchievementCache] = useState<
     ReadonlyMap<number, DashboardAchievementResult>
   >(() => new Map());
-  const [loadingAchievementsAppId, setLoadingAchievementsAppId] = useState<number | undefined>();
-  const [achievementError, setAchievementError] = useState<string | undefined>();
+  const [loadingAchievementAppIds, setLoadingAchievementAppIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  const [achievementErrors, setAchievementErrors] = useState<ReadonlyMap<number, string>>(
+    () => new Map(),
+  );
   const [manualCollection, setManualCollection] = useState<readonly ManualLibraryGame[]>([]);
   const [manualSteam, setManualSteam] = useState("");
   const [manualError, setManualError] = useState<string | undefined>();
@@ -122,7 +126,11 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     openerRef.current = opener;
     setStatusError(undefined);
     setStatusMessage(undefined);
-    setAchievementError(undefined);
+    setAchievementErrors((errors) => {
+      const nextErrors = new Map(errors);
+      nextErrors.delete(game.appId);
+      return nextErrors;
+    });
     setSelectedGame(game);
   };
 
@@ -164,15 +172,23 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     if (selectedGame === undefined || !isAchievementsApi(api)) return;
     const appId = selectedGame.appId;
     if (achievementCache.has(appId)) return;
-    setLoadingAchievementsAppId(appId);
-    setAchievementError(undefined);
+    setLoadingAchievementAppIds((appIds) => new Set(appIds).add(appId));
+    setAchievementErrors((errors) => {
+      const nextErrors = new Map(errors);
+      nextErrors.delete(appId);
+      return nextErrors;
+    });
     try {
       const result = await api.getAchievements(appId);
       setAchievementCache((cache) => new Map(cache).set(appId, result));
     } catch (error) {
-      setAchievementError(errorMessage(error));
+      setAchievementErrors((errors) => new Map(errors).set(appId, errorMessage(error)));
     } finally {
-      setLoadingAchievementsAppId(undefined);
+      setLoadingAchievementAppIds((appIds) => {
+        const nextAppIds = new Set(appIds);
+        nextAppIds.delete(appId);
+        return nextAppIds;
+      });
     }
   };
 
@@ -243,8 +259,8 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           statusError={statusError}
           statusMessage={statusMessage}
           achievementResult={achievementCache.get(selectedGame.appId)}
-          isLoadingAchievements={loadingAchievementsAppId === selectedGame.appId}
-          achievementError={achievementError}
+          isLoadingAchievements={loadingAchievementAppIds.has(selectedGame.appId)}
+          achievementError={achievementErrors.get(selectedGame.appId)}
           onLoadAchievements={isAchievementsApi(api) ? loadAchievements : undefined}
           onClose={closeGame}
           onStatusChange={updateStatus}

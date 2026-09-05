@@ -390,6 +390,37 @@ describe("DashboardApp", () => {
     expect(api.getAchievements).toHaveBeenCalledTimes(1);
   });
 
+  test("keeps an active achievement request pending when another dialog request fails", async () => {
+    const user = userEvent.setup();
+    const rejectAchievements = new Map<number, (reason?: unknown) => void>();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn(
+        (appId: number) =>
+          new Promise((_, reject) => {
+            rejectAchievements.set(appId, reject);
+          }),
+      ),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const celesteDialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    await user.click(within(celesteDialog).getByRole("button", { name: "Cargar logros" }));
+
+    await user.click(within(celesteDialog).getByRole("button", { name: "Cerrar detalles" }));
+    await user.click(screen.getByRole("button", { name: "Ver detalles de Hades" }));
+    const hadesDialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
+    await user.click(within(hadesDialog).getByRole("button", { name: "Cargar logros" }));
+
+    rejectAchievements.get(10)?.(new Error("Celeste failed"));
+
+    expect(await within(hadesDialog).findByText("Cargando logros…")).toBeInTheDocument();
+    expect(within(hadesDialog).queryByText(/Celeste failed/)).not.toBeInTheDocument();
+  });
+
   test("shows a safe unavailable achievement state", async () => {
     const user = userEvent.setup();
     const api = {
