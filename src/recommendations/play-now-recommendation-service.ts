@@ -35,7 +35,8 @@ export type PlayNowRecommendation = Readonly<{
 }>;
 
 export type PlayNowExclusion = Readonly<{
-  reason: "not_playable" | "preference_excluded" | "with_friends_only" | "completed" | "dropped";
+  reason:
+    "not_playable" | "preference_excluded" | "play_mode_incompatible" | "completed" | "dropped";
   count: number;
 }>;
 
@@ -73,7 +74,7 @@ type Candidate = Readonly<{
 const exclusionReasonOrder: readonly ExclusionReason[] = [
   "not_playable",
   "preference_excluded",
-  "with_friends_only",
+  "play_mode_incompatible",
   "completed",
   "dropped",
 ];
@@ -178,7 +179,7 @@ function getExclusionReason(
 ): ExclusionReason | undefined {
   if (game.isPlayable === false) return "not_playable";
   if (preference.excludedFromRecommendations) return "preference_excluded";
-  if (!isPlayModeCompatible(preference, sessionMode)) return "with_friends_only";
+  if (!isPlayModeCompatible(preference, sessionMode)) return "play_mode_incompatible";
   if (status === "completed") return "completed";
   if (status === "dropped") return "dropped";
   return undefined;

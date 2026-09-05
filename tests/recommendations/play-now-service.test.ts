@@ -210,7 +210,7 @@ describe("PlayNowRecommendationService", () => {
     ).resolves.toMatchObject({ recommendations: [{ appId: 1 }] });
   });
 
-  test("excludes with-friends-only games in solo mode", async () => {
+  test("reports play mode incompatibility when a with-friends game is requested solo", async () => {
     const { service } = createService({
       games: [
         { appId: 1, name: "Co-op", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
@@ -232,7 +232,87 @@ describe("PlayNowRecommendationService", () => {
       service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "solo" }),
     ).resolves.toMatchObject({
       recommendations: [],
-      exclusions: [{ reason: "with_friends_only", count: 1 }],
+      exclusions: [{ reason: "play_mode_incompatible", count: 1 }],
+    });
+  });
+
+  test("reports play mode incompatibility when a solo game is requested with friends", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Solo", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+      preferences: new Map([
+        [
+          1,
+          {
+            appId: 1,
+            priority: "normal",
+            excludedFromRecommendations: false,
+            playMode: "solo",
+          },
+        ],
+      ]),
+    });
+
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "with_friends" }),
+    ).resolves.toMatchObject({
+      recommendations: [],
+      exclusions: [{ reason: "play_mode_incompatible", count: 1 }],
+    });
+  });
+
+  test("accepts games with any play mode in every session mode", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Flexible", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+      preferences: new Map([
+        [
+          1,
+          {
+            appId: 1,
+            priority: "normal",
+            excludedFromRecommendations: false,
+            playMode: "any",
+          },
+        ],
+      ]),
+    });
+
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "solo" }),
+    ).resolves.toMatchObject({ recommendations: [{ appId: 1 }], exclusions: [] });
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "with_friends" }),
+    ).resolves.toMatchObject({ recommendations: [{ appId: 1 }], exclusions: [] });
+  });
+
+  test("accepts solo and with-friends games when the session mode is any", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Solo", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+        { appId: 2, name: "Co-op", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+      preferences: new Map([
+        [1, { appId: 1, priority: "normal", excludedFromRecommendations: false, playMode: "solo" }],
+        [
+          2,
+          {
+            appId: 2,
+            priority: "normal",
+            excludedFromRecommendations: false,
+            playMode: "with_friends",
+          },
+        ],
+      ]),
+    });
+
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 2, sessionMode: "any" }),
+    ).resolves.toMatchObject({
+      recommendations: [{ appId: 1 }, { appId: 2 }],
+      exclusions: [],
     });
   });
 
@@ -300,7 +380,7 @@ describe("PlayNowRecommendationService", () => {
       exclusions: [
         { reason: "not_playable", count: 1 },
         { reason: "preference_excluded", count: 1 },
-        { reason: "with_friends_only", count: 1 },
+        { reason: "play_mode_incompatible", count: 1 },
         { reason: "completed", count: 1 },
         { reason: "dropped", count: 1 },
       ],
