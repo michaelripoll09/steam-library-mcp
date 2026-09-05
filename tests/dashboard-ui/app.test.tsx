@@ -10,6 +10,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
 import { DashboardApp } from "../../dashboard-ui/src/app.js";
+import { GameCard } from "../../dashboard-ui/src/components/game-card.js";
 import { CoverImage } from "../../dashboard-ui/src/library-panel.js";
 import { ManualCollectionPanel } from "../../dashboard-ui/src/manual-collection-panel.js";
 
@@ -55,6 +56,30 @@ afterEach(() => {
 });
 
 describe("DashboardApp", () => {
+  test("keeps filters in the Library card grid and opens the selected card", async () => {
+    const user = userEvent.setup();
+    render(<DashboardApp api={{ getLibrary: vi.fn().mockResolvedValue(library) } as never} />);
+
+    await user.click(screen.getByRole("button", { name: "Biblioteca" }));
+    await user.type(await screen.findByRole("searchbox", { name: "Buscar juegos" }), "celeste");
+
+    expect(screen.getByRole("article", { name: "Celeste" })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: "Hades" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ver detalles de Celeste" }));
+    expect(screen.getByRole("dialog", { name: "Detalles de Celeste" })).toBeInTheDocument();
+  });
+
+  test("uses the established fallback for a missing card cover", () => {
+    render(<GameCard game={{ ...library.games[0], coverUrl: "" }} onOpen={vi.fn()} />);
+
+    fireEvent.error(screen.getByRole("img", { name: "Portada de Celeste" }));
+
+    expect(
+      screen.getByRole("img", { name: "Portada no disponible para Celeste" }),
+    ).toBeInTheDocument();
+  });
+
   test("uses one default API client for the initial library request across rerenders", async () => {
     const fetch = vi.spyOn(window, "fetch").mockImplementation(() =>
       Promise.resolve(

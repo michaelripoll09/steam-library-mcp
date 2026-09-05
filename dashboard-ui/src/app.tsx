@@ -12,7 +12,7 @@ import { GameDetails } from "./game-details.js";
 import { AppShell, type DashboardView } from "./navigation/app-shell.js";
 import { HomeView } from "./views/home-view.js";
 import { IntelligencePanel } from "./intelligence-panel.js";
-import { LibraryPanel } from "./library-panel.js";
+import { LibraryView } from "./views/library-view.js";
 import { ManualCollectionPanel } from "./manual-collection-panel.js";
 import { TaskPanel } from "./task-panel.js";
 import {
@@ -212,43 +212,20 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         </div>
 
         <div className="dashboard-view" hidden={activeView !== "library"}>
-          <div className="dashboard-view-heading">
-            <div>
-              <p className="eyebrow">Archivo personal de juegos</p>
-              <h2>Tu biblioteca de Steam</h2>
-              <p className="subtitle">
-                Explora, filtra y actualiza tu colección sin perder el contexto.
-              </p>
-            </div>
-            <button
-              className="sync-button"
-              type="button"
-              onClick={() => void syncLibrary()}
-              disabled={isSyncing}
-            >
-              {isSyncing ? "Sincronizando biblioteca…" : "Sincronizar biblioteca"}
-            </button>
-          </div>
-          {syncError !== undefined && (
-            <section className="notice notice-error" role="alert">
-              <p>{syncError}</p>
-              <button type="button" onClick={() => void syncLibrary()} disabled={isSyncing}>
-                Reintentar sincronización
-              </button>
-            </section>
-          )}
-          <LibraryPanel
+          <LibraryView
             library={library}
             games={games}
             filters={filters}
             isLoading={isLoading}
             error={initialError}
+            isSyncing={isSyncing}
+            syncError={syncError}
             onFiltersChange={setFilters}
             onRetryLoad={() => void loadLibrary()}
+            onSync={() => void syncLibrary()}
             onOpen={openGame}
           />
         </div>
-
         <div className="dashboard-view" hidden={activeView !== "play-now"}>
           {library !== undefined && intelligenceApi && (
             <IntelligencePanel api={api} games={library.games} />
