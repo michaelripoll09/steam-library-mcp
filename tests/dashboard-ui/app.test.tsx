@@ -2,13 +2,14 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
+import type { LocalTask } from "../../src/tasks/task-runner.js";
 import { DashboardApp } from "../../dashboard-ui/src/app.js";
 import { GameCard } from "../../dashboard-ui/src/components/game-card.js";
 import { CoverImage } from "../../dashboard-ui/src/library-panel.js";
@@ -124,9 +125,43 @@ function manualApiFixture() {
   };
 }
 
+const runningTask = {
+  id: "task-1",
+  type: "sync_library" as const,
+  state: "running" as const,
+  progress: { completed: 1, total: 3 },
+  createdAt: "2026-08-29T00:00:00.000Z",
+  startedAt: "2026-08-29T00:00:01.000Z",
+  completedAt: null,
+  error: null,
+};
+
+function taskApiFixtureWithRunningTask() {
+  return {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getTasks: vi.fn().mockResolvedValue([runningTask]),
+    getTask: vi.fn().mockResolvedValue(runningTask),
+    cancelTask: vi.fn().mockResolvedValue({ ...runningTask, state: "cancelled" as const }),
+  };
+}
+
+function deferred<T>(): Readonly<{
+  promise: Promise<T>;
+  resolve(value: T): void;
+}> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("DashboardApp", () => {
@@ -148,10 +183,66 @@ describe("DashboardApp", () => {
     expect(screen.queryByRole("searchbox", { name: "Buscar juegos" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("URL de Steam o AppID")).not.toBeInTheDocument();
     expect(api.getManualCollection).not.toHaveBeenCalled();
-    expect(api.getTasks).not.toHaveBeenCalled();
+    expect(api.getTasks).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Calcular Play Now" }));
     expect(screen.getByRole("heading", { name: "Play Now", level: 1 })).toBeInTheDocument();
+  });
+
+  test("does not create a second task poller while switching Home and Tasks", async () => {
+    vi.useFakeTimers();
+    const api = taskApiFixtureWithRunningTask();
+    render(<DashboardApp api={api as never} />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(api.getTasks).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Tareas" }));
+    expect(screen.getByText("Sincronizando biblioteca")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Inicio" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(api.getTask).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps cancellation when a stale shared poll resolves", async () => {
+    vi.useFakeTimers();
+    const pendingPoll = deferred<LocalTask>();
+    const api = {
+      ...taskApiFixtureWithRunningTask(),
+      getTask: vi.fn(() => pendingPoll.promise),
+      cancelTask: vi.fn(async () => ({ ...runningTask, state: "cancelled" as const })),
+    };
+    render(<DashboardApp api={api as never} />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(api.getTasks).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Tareas" }));
+    expect(screen.getByRole("button", { name: "Cancelar tarea" })).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar tarea" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Cancelada")).toBeInTheDocument();
+
+    pendingPoll.resolve(runningTask);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Cancelada")).toBeInTheDocument();
+    expect(screen.queryByText("En ejecución")).not.toBeInTheDocument();
   });
   test("keeps filters in the Library card grid and opens the selected card", async () => {
     const user = userEvent.setup();
@@ -189,7 +280,7 @@ describe("DashboardApp", () => {
     await screen.findByRole("article", { name: "Celeste" });
     rerender(<DashboardApp />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(fetch).toHaveBeenCalledWith("/api/library", { method: "GET" });
   });
 

@@ -3,8 +3,9 @@ import type { IntelligenceState } from "../intelligence-state.js";
 import type { DashboardView } from "../navigation/app-shell.js";
 
 export type HomeTaskSummary = Readonly<{
-  label: string;
-  status: string;
+  totalCount: number;
+  activeCount: number;
+  hasError: boolean;
 }>;
 
 type HomeDestination = Extract<DashboardView, "library" | "play-now" | "backlog" | "tasks">;
@@ -17,7 +18,7 @@ export function HomeView({
 }: Readonly<{
   library: DashboardLibrary | undefined;
   intelligenceState: IntelligenceState;
-  taskSummary: HomeTaskSummary;
+  taskSummary: HomeTaskSummary | undefined;
   onNavigate: (view: HomeDestination) => void;
 }>) {
   const snapshot = intelligenceState.snapshot;
@@ -50,8 +51,8 @@ export function HomeView({
         )}
       </section>
       <section className="home-task-summary" aria-label="Estado de tareas">
-        <span>{taskSummary.label}</span>
-        <strong>{taskSummary.status}</strong>
+        <span>Tareas locales</span>
+        <strong>{formatTaskSummary(taskSummary)}</strong>
       </section>
       <div className="home-navigation-actions" aria-label="Accesos rápidos">
         <button type="button" onClick={() => onNavigate("library")}>
@@ -69,6 +70,15 @@ export function HomeView({
       </div>
     </section>
   );
+}
+
+function formatTaskSummary(summary: HomeTaskSummary | undefined): string {
+  if (summary === undefined) return "No disponibles";
+  if (summary.hasError) return "Revisar tareas";
+  if (summary.activeCount > 0) {
+    return summary.activeCount === 1 ? "1 activa" : `${summary.activeCount} activas`;
+  }
+  return summary.totalCount === 1 ? "1 tarea" : `${summary.totalCount} tareas`;
 }
 
 function StatCard({ label, value }: Readonly<{ label: string; value: string }>) {

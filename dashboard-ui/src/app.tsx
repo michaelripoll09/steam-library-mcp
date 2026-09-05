@@ -14,7 +14,8 @@ import { HomeView } from "./views/home-view.js";
 import { useIntelligenceState, type IntelligenceApi } from "./intelligence-state.js";
 import { LibraryView } from "./views/library-view.js";
 import { ManualCollectionView } from "./views/manual-collection-view.js";
-import { TaskPanel } from "./task-panel.js";
+import { useTaskState, type TaskApi } from "./task-state.js";
+import { TasksView } from "./views/tasks-view.js";
 import { BacklogView } from "./views/backlog-view.js";
 import { PlayNowView } from "./views/play-now-view.js";
 import {
@@ -32,6 +33,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     suppliedApi ?? (defaultApiRef.current ??= createDashboardApi(window.fetch.bind(window)));
   const intelligenceApi = isIntelligenceApi(api);
   const taskApi = isTaskApi(api);
+  const taskState = useTaskState(taskApi ? api : undefined);
   const manualCollectionApi = isManualCollectionApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
   const intelligenceState = useIntelligenceState({
@@ -216,10 +218,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           <HomeView
             library={library}
             intelligenceState={intelligenceState}
-            taskSummary={{
-              label: "Tareas locales",
-              status: taskApi ? "Disponibles en Tareas" : "No disponibles",
-            }}
+            taskSummary={taskState?.summary}
             onNavigate={setActiveView}
           />
         )}
@@ -260,7 +259,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           />
         )}
 
-        {activeView === "tasks" && taskApi && <TaskPanel api={api} />}
+        {activeView === "tasks" && taskState !== undefined && <TasksView state={taskState} />}
 
         {selectedGame !== undefined && (
           <GameDetailsDrawer
@@ -310,9 +309,7 @@ function isAchievementsApi(
   return typeof api.getAchievements === "function";
 }
 
-function isTaskApi(
-  api: DashboardApi,
-): api is DashboardApi & Required<Pick<DashboardApi, "getTasks" | "getTask" | "cancelTask">> {
+function isTaskApi(api: DashboardApi): api is TaskApi {
   return (
     typeof api.getTasks === "function" &&
     typeof api.getTask === "function" &&

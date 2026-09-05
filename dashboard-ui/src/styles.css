@@ -929,6 +929,29 @@ select {
   color: var(--muted, #a8b0c2);
 }
 
+.tasks-view {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  border: 1px solid #27364c;
+  border-radius: 1rem;
+  background: #121d2d;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.18);
+}
+
+.task-activity-row {
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border: 1px solid #2b405b;
+  border-radius: 0.8rem;
+  background: #17263a;
+}
+
+.task-activity-row > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
 .task-list strong {
   color: var(--text, #f2f4fa);
 }
