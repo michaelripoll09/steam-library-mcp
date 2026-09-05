@@ -666,7 +666,7 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
 
   render(<DashboardApp api={api as never} />);
 
-  expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   expect(await screen.findByText("Duración desconocida")).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Juego para preferencias" }));
@@ -721,7 +721,7 @@ test("loads the initial game's persisted preference before allowing a save", asy
 
   render(<DashboardApp api={api as never} />);
 
-  expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   await waitFor(() => {
     expect(api.getPreference).toHaveBeenCalledWith(10);
@@ -760,12 +760,13 @@ test("groups play-now controls into a primary recommendation card and compact si
 
   const recommendations = await screen.findByRole("heading", { name: "Recomendaciones" });
   const preferences = screen.getByRole("heading", { name: "Preferencias" });
-  const plans = screen.getByRole("heading", { name: "Planes de backlog" });
+  const plans = screen.getByRole("heading", { name: "Plan de backlog" });
 
   expect(recommendations.closest("section")).toHaveClass("intelligence-recommendations-card");
   expect(
-    screen.getByLabelText("Minutos disponibles").closest(".recommendations-controls"),
+    screen.getByLabelText("Tiempo de esta sesión").closest(".recommendations-controls"),
   ).toHaveClass("recommendations-controls");
+  expect(screen.getByLabelText("Tiempo total disponible en la semana/mes")).toBeInTheDocument();
   expect(preferences.closest("section")).toHaveClass("intelligence-side-card");
   expect(plans.closest("section")).toHaveClass("intelligence-side-card");
   expect(preferences.closest(".intelligence-sidebar")).toContainElement(plans);
@@ -812,10 +813,12 @@ test("uses accessible custom menus for every intelligence choice and closes them
   render(<DashboardApp api={api as never} />);
   await user.click(await screen.findByRole("button", { name: "Cargar inteligencia" }));
 
-  const panel = screen.getByRole("heading", { name: "Jugar ahora" }).closest(".intelligence-panel");
+  const panel = screen
+    .getByRole("heading", { name: "Qué jugar ahora" })
+    .closest(".intelligence-panel");
   expect(panel).not.toBeNull();
   expect(panel?.querySelectorAll("select")).toHaveLength(0);
-  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(2);
+  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(3);
 
   const game = screen.getByRole("combobox", { name: "Juego para preferencias" });
   expect(game).toHaveAttribute("aria-expanded", "false");
@@ -844,7 +847,7 @@ test("uses accessible custom menus for every intelligence choice and closes them
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
   await user.click(cadence);
-  await user.click(screen.getByRole("heading", { name: "Planes de backlog" }));
+  await user.click(screen.getByRole("heading", { name: "Plan de backlog" }));
   expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
 
   expect(screen.getByRole("combobox", { name: "Modo de juego" })).toBeInTheDocument();
@@ -890,7 +893,7 @@ test("allows replacing recommendation minutes after clearing the field and rejec
 
   render(<DashboardApp api={api as never} />);
 
-  const availableMinutes = await screen.findByLabelText("Minutos disponibles");
+  const availableMinutes = await screen.findByLabelText("Tiempo de esta sesión");
   await user.clear(availableMinutes);
   expect(availableMinutes).toHaveValue(null);
 

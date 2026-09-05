@@ -52,6 +52,7 @@ export function IntelligencePanel({
   games,
 }: Readonly<{ api: DashboardApi; games: readonly DashboardGame[] }>) {
   const [availableMinutes, setAvailableMinutes] = useState("45");
+  const [planAvailableMinutes, setPlanAvailableMinutes] = useState("45");
   const [sessionMode, setSessionMode] = useState<DashboardSessionMode>("solo");
   const [snapshot, setSnapshot] = useState<DashboardInsightSnapshot>();
   const [recommendations, setRecommendations] = useState<DashboardRecommendations>();
@@ -149,8 +150,8 @@ export function IntelligencePanel({
   };
 
   const createPlan = async () => {
-    const validAvailableMinutes = positiveSafeInteger(availableMinutes);
-    if (validAvailableMinutes === undefined) {
+    const validPlanAvailableMinutes = positiveSafeInteger(planAvailableMinutes);
+    if (validPlanAvailableMinutes === undefined) {
       setError("Ingresa minutos disponibles válidos.");
       return;
     }
@@ -164,7 +165,7 @@ export function IntelligencePanel({
       setError(undefined);
       const result = await api.createPlan({
         cadence,
-        availableMinutes: validAvailableMinutes,
+        availableMinutes: validPlanAvailableMinutes,
         targetGameCount: validTargetGameCount,
       });
       setPlans(await api.getPlans());
@@ -194,7 +195,7 @@ export function IntelligencePanel({
       <div className="library-panel-heading">
         <div>
           <p className="eyebrow">Inteligencia local</p>
-          <h2 id="intelligence-heading">Jugar ahora</h2>
+          <h2 id="intelligence-heading">Qué jugar ahora</h2>
         </div>
         <button className="intelligence-button" type="button" onClick={() => void load()}>
           Cargar inteligencia
@@ -217,7 +218,7 @@ export function IntelligencePanel({
           <h3 id="recommendations-heading">Recomendaciones</h3>
           <div className="recommendations-controls">
             <label>
-              Minutos disponibles
+              Tiempo de esta sesión
               <input
                 type="number"
                 min="1"
@@ -305,13 +306,22 @@ export function IntelligencePanel({
           </section>
 
           <section className="intelligence-side-card" aria-labelledby="plans-heading">
-            <h3 id="plans-heading">Planes de backlog</h3>
+            <h3 id="plans-heading">Plan de backlog</h3>
             <CustomSelect
               label="Cadencia"
               value={cadence}
               options={CADENCE_OPTIONS}
               onChange={setCadence}
             />
+            <label>
+              Tiempo total disponible en la semana/mes
+              <input
+                type="number"
+                min="1"
+                value={planAvailableMinutes}
+                onChange={(event) => setPlanAvailableMinutes(event.target.value)}
+              />
+            </label>
             <label>
               Juegos objetivo
               <input

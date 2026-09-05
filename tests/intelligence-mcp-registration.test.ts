@@ -102,6 +102,64 @@ describe("intelligence MCP prompts and resources", () => {
     await server.close();
   });
 
+  test("clarifies session finishability and total planning budgets", async () => {
+    const server = createServerForRegistration();
+    const client = new Client({ name: "test", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const tools = await client.listTools();
+    expect(tools.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "recommendation_get_play_now",
+          description:
+            "Recommend games for the current play session using tracker state, preferences, session mode, and duration as a secondary finishability signal.",
+        }),
+        expect.objectContaining({
+          name: "backlog_create_plan",
+          description:
+            "Create a weekly or monthly local backlog plan whose selected games fit within the requested total time budget when duration estimates are available.",
+        }),
+      ]),
+    );
+
+    const playNowPrompt = await client.getPrompt({
+      name: "play-now",
+      arguments: { availableMinutes: "60" },
+    });
+    const playNowText = playNowPrompt.messages[0]?.content;
+    expect(playNowText).toMatchObject({ type: "text" });
+    if (playNowText?.type === "text") {
+      expect(playNowText.text).toContain("secondary finishability signal");
+      expect(playNowText.text).not.toMatch(/entire game must fit/i);
+    }
+
+    const weeklyPrompt = await client.getPrompt({
+      name: "weekly-plan",
+      arguments: { availableMinutes: "300", targetGameCount: "3" },
+    });
+    const weeklyText = weeklyPrompt.messages[0]?.content;
+    expect(weeklyText).toMatchObject({ type: "text" });
+    if (weeklyText?.type === "text") {
+      expect(weeklyText.text).toContain("total weekly time budget");
+    }
+
+    const monthlyPrompt = await client.getPrompt({
+      name: "monthly-plan",
+      arguments: { availableMinutes: "1200", targetGameCount: "5" },
+    });
+    const monthlyText = monthlyPrompt.messages[0]?.content;
+    expect(monthlyText).toMatchObject({ type: "text" });
+    if (monthlyText?.type === "text") {
+      expect(monthlyText.text).toContain("total monthly time budget");
+    }
+
+    await client.close();
+    await server.close();
+  });
+
   test("registers local, read-only resources with sanitized snapshots", async () => {
     const server = createServerForRegistration();
     const client = new Client({ name: "test", version: "1.0.0" });
