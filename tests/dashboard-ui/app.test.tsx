@@ -46,8 +46,58 @@ async function openDashboardView(name: string): Promise<void> {
       library: "Biblioteca",
       manual: "Colección manual",
       "play-now": "Play Now",
+      backlog: "Backlog",
     }[name] ?? name;
   await userEvent.setup().click(screen.getByRole("button", { name: label }));
+}
+
+async function chooseCustomOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  option: string,
+): Promise<void> {
+  await user.click(screen.getByRole("combobox", { name: label }));
+  await user.click(screen.getByRole("option", { name: option }));
+}
+
+function intelligenceApiFixture() {
+  return {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn().mockResolvedValue(undefined),
+    getRecommendations: vi.fn().mockResolvedValue({
+      availableMinutes: 45,
+      recommendations: [
+        {
+          appId: 10,
+          name: "Recomendación de prueba",
+          durationEstimateMinutes: null,
+          estimatedRemainingMinutes: null,
+          reasons: ["duration_unknown"],
+          explanation: "Duration is unknown.",
+        },
+      ],
+    }),
+    getPreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "normal",
+      excludedFromRecommendations: false,
+      playMode: "any",
+    }),
+    savePreference: vi.fn(),
+    getPlans: vi.fn().mockResolvedValue([
+      {
+        id: "weekly-1",
+        cadence: "weekly",
+        availableMinutes: 45,
+        targetGameCount: 3,
+        items: [{ id: "item-1", appId: 10, name: "Celeste", progress: "not_started" }],
+      },
+    ]),
+    createPlan: vi.fn().mockResolvedValue({}),
+    updatePlanItemProgress: vi.fn(),
+  };
 }
 
 afterEach(() => {
@@ -897,7 +947,7 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
   render(<DashboardApp api={api as never} />);
   await openDashboardView("play-now");
 
-  expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Play Now", level: 2 })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   expect(await screen.findByText("Duración desconocida")).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Juego para preferencias" }));
@@ -953,7 +1003,7 @@ test("loads the initial game's persisted preference before allowing a save", asy
   render(<DashboardApp api={api as never} />);
   await openDashboardView("play-now");
 
-  expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Play Now", level: 2 })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   await waitFor(() => {
     expect(api.getPreference).toHaveBeenCalledWith(10);
@@ -974,7 +1024,7 @@ test("loads the initial game's persisted preference before allowing a save", asy
   });
 });
 
-test("groups play-now controls into a primary recommendation card and compact sidebar cards", async () => {
+test("keeps recommendation controls and preferences in Play Now while Backlog owns plans", async () => {
   const api = {
     getLibrary: vi.fn().mockResolvedValue(library),
     syncLibrary: vi.fn(),
@@ -993,16 +1043,15 @@ test("groups play-now controls into a primary recommendation card and compact si
 
   const recommendations = await screen.findByRole("heading", { name: "Recomendaciones" });
   const preferences = screen.getByRole("heading", { name: "Preferencias" });
-  const plans = screen.getByRole("heading", { name: "Plan de backlog" });
-
-  expect(recommendations.closest("section")).toHaveClass("intelligence-recommendations-card");
+  expect(recommendations.closest("section")).toHaveClass("play-now-recommendations");
   expect(
     screen.getByLabelText("Tiempo de esta sesión").closest(".recommendations-controls"),
   ).toHaveClass("recommendations-controls");
-  expect(screen.getByLabelText("Tiempo total disponible en la semana/mes")).toBeInTheDocument();
   expect(preferences.closest("section")).toHaveClass("intelligence-side-card");
-  expect(plans.closest("section")).toHaveClass("intelligence-side-card");
-  expect(preferences.closest(".intelligence-sidebar")).toContainElement(plans);
+  expect(screen.queryByRole("heading", { name: "Plan de backlog" })).not.toBeInTheDocument();
+  await openDashboardView("backlog");
+  expect(screen.getByRole("heading", { name: "Plan de backlog" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Tiempo total disponible en la semana/mes")).toBeInTheDocument();
 });
 
 test("uses accessible custom menus for every intelligence choice and closes them predictably", async () => {
@@ -1048,11 +1097,11 @@ test("uses accessible custom menus for every intelligence choice and closes them
   await user.click(await screen.findByRole("button", { name: "Cargar inteligencia" }));
 
   const panel = screen
-    .getByRole("heading", { name: "Qué jugar ahora" })
+    .getByRole("heading", { name: "Play Now", level: 2 })
     .closest(".intelligence-panel");
   expect(panel).not.toBeNull();
   expect(panel?.querySelectorAll("select")).toHaveLength(0);
-  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(3);
+  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(1);
 
   const game = screen.getByRole("combobox", { name: "Juego para preferencias" });
   expect(game).toHaveAttribute("aria-expanded", "false");
@@ -1075,6 +1124,7 @@ test("uses accessible custom menus for every intelligence choice and closes them
   await user.keyboard("{Home}{Enter}");
   expect(playMode).toHaveTextContent("Cualquiera");
 
+  await openDashboardView("backlog");
   const cadence = screen.getByRole("combobox", { name: "Cadencia" });
   await user.click(cadence);
   expect(screen.getByRole("listbox", { name: "Cadencia" })).toBeInTheDocument();
@@ -1084,7 +1134,6 @@ test("uses accessible custom menus for every intelligence choice and closes them
   await user.click(screen.getByRole("heading", { name: "Plan de backlog" }));
   expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
 
-  expect(screen.getByRole("combobox", { name: "Modo de juego" })).toBeInTheDocument();
   expect(screen.getByRole("combobox", { name: "Progreso" })).toBeInTheDocument();
 });
 
@@ -1132,13 +1181,13 @@ test("allows replacing recommendation minutes after clearing the field and rejec
   await user.clear(availableMinutes);
   expect(availableMinutes).toHaveValue(null);
 
-  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+  await user.click(screen.getByRole("button", { name: "Encontrar qué jugar" }));
   expect(api.getRecommendations).not.toHaveBeenCalled();
   expect(screen.getByRole("alert")).toHaveTextContent("Ingresa minutos disponibles válidos.");
 
   await user.type(availableMinutes, "30");
   expect(availableMinutes).toHaveValue(30);
-  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+  await user.click(screen.getByRole("button", { name: "Encontrar qué jugar" }));
   expect(api.getRecommendations).toHaveBeenCalledWith(30, "solo");
 });
 
@@ -1171,7 +1220,7 @@ test("loads recommendations using the selected session mode", async () => {
   const sessionMode = await screen.findByRole("combobox", { name: "Modo de sesión" });
   await user.click(sessionMode);
   await user.click(screen.getByRole("option", { name: "Con amigos" }));
-  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+  await user.click(screen.getByRole("button", { name: "Encontrar qué jugar" }));
 
   expect(api.getRecommendations).toHaveBeenCalledWith(45, "with_friends");
 });
@@ -1192,7 +1241,7 @@ test("allows replacing backlog target games after clearing the field and rejects
   };
 
   render(<DashboardApp api={api as never} />);
-  await openDashboardView("play-now");
+  await openDashboardView("backlog");
 
   const targetGameCount = await screen.findByLabelText("Juegos objetivo");
   await user.clear(targetGameCount);
@@ -1243,5 +1292,70 @@ test("gives dashboard navigation a visible cold-blue keyboard focus treatment", 
 
   expect(styles).toMatch(
     /\.dashboard-navigation-button:focus-visible\s*\{[^}]*outline:\s*3px solid #8fc9ff;[^}]*outline-offset:\s*3px;/s,
+  );
+});
+
+test("preserves a friends Play Now result after visiting Backlog", async () => {
+  const user = userEvent.setup();
+  const api = intelligenceApiFixture();
+  render(<DashboardApp api={api as never} />);
+
+  await user.click(screen.getByRole("button", { name: "Play Now" }));
+  await chooseCustomOption(user, "Modo de sesión", "Con amigos");
+  await user.click(screen.getByRole("button", { name: "Encontrar qué jugar" }));
+  await waitFor(() => expect(api.getRecommendations).toHaveBeenCalledWith(45, "with_friends"));
+  await user.click(screen.getByRole("button", { name: "Backlog" }));
+  await user.click(screen.getByRole("button", { name: "Play Now" }));
+
+  expect(screen.getByText("Recomendación de prueba")).toBeInTheDocument();
+});
+
+test("uses the existing backlog payload and does not invent remaining duration", async () => {
+  const user = userEvent.setup();
+  const api = intelligenceApiFixture();
+  render(<DashboardApp api={api as never} />);
+
+  await user.click(screen.getByRole("button", { name: "Backlog" }));
+  await user.click(screen.getByRole("button", { name: "Crear plan" }));
+
+  expect(api.createPlan).toHaveBeenCalledWith({
+    cadence: "weekly",
+    availableMinutes: 45,
+    targetGameCount: 3,
+  });
+  expect(screen.queryByText(/min restantes estimados/i)).not.toBeInTheDocument();
+});
+
+test("keeps Preferences inside Play Now and preserves selected game across navigation", async () => {
+  const user = userEvent.setup();
+  const api = intelligenceApiFixture();
+  render(<DashboardApp api={api as never} />);
+
+  await user.click(screen.getByRole("button", { name: "Play Now" }));
+  await chooseCustomOption(user, "Juego para preferencias", "Hades");
+  await waitFor(() => expect(api.getPreference).toHaveBeenCalledWith(20));
+  const preferenceRequestCount = api.getPreference.mock.calls.length;
+  await user.click(screen.getByRole("button", { name: "Backlog" }));
+  expect(screen.queryByRole("heading", { name: "Preferencias" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Play Now" }));
+
+  expect(screen.getByRole("combobox", { name: "Juego para preferencias" })).toHaveTextContent(
+    "Hades",
+  );
+  expect(api.getPreference).toHaveBeenCalledTimes(preferenceRequestCount);
+});
+
+test("updates plan progress with the current API", async () => {
+  const user = userEvent.setup();
+  const api = intelligenceApiFixture();
+  render(<DashboardApp api={api as never} />);
+
+  await user.click(screen.getByRole("button", { name: "Backlog" }));
+  await screen.findByRole("heading", { name: "Plan semanal" });
+  await chooseCustomOption(user, "Progreso", "Hecho");
+  await user.click(screen.getByRole("button", { name: "Actualizar progreso" }));
+
+  await waitFor(() =>
+    expect(api.updatePlanItemProgress).toHaveBeenCalledWith("weekly-1", "item-1", "done"),
   );
 });

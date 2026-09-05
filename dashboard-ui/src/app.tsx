@@ -11,10 +11,12 @@ import { createDashboardApi, type DashboardApi } from "./api.js";
 import { GameDetailsDrawer } from "./game-details/game-details-drawer.js";
 import { AppShell, type DashboardView } from "./navigation/app-shell.js";
 import { HomeView } from "./views/home-view.js";
-import { IntelligencePanel } from "./intelligence-panel.js";
+import { useIntelligenceState, type IntelligenceApi } from "./intelligence-state.js";
 import { LibraryView } from "./views/library-view.js";
 import { ManualCollectionPanel } from "./manual-collection-panel.js";
 import { TaskPanel } from "./task-panel.js";
+import { BacklogView } from "./views/backlog-view.js";
+import { PlayNowView } from "./views/play-now-view.js";
 import {
   createLibraryFilters,
   filterLibraryGames,
@@ -22,6 +24,7 @@ import {
 } from "./library-filters.js";
 
 type DashboardAppProps = Readonly<{ api?: DashboardApi }>;
+const EMPTY_GAMES: readonly DashboardGame[] = [];
 
 export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const defaultApiRef = useRef<DashboardApi | undefined>(undefined);
@@ -31,6 +34,10 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const taskApi = isTaskApi(api);
   const manualCollectionApi = isManualCollectionApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
+  const intelligenceState = useIntelligenceState({
+    api: api as IntelligenceApi,
+    games: libraryGames(library),
+  });
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
   const [activeView, setActiveView] = useState<DashboardView>("home");
   const [initialError, setInitialError] = useState<string | undefined>();
@@ -77,6 +84,11 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     if (!manualCollectionApi) return;
     void api.getManualCollection().then(setManualCollection, () => setManualCollection([]));
   }, [api, manualCollectionApi]);
+
+  useEffect(() => {
+    if (activeView !== "backlog" || !intelligenceApi) return;
+    void intelligenceState.refreshPlans();
+  }, [activeView, intelligenceApi]);
 
   const addManual = async () => {
     if (!manualCollectionApi) return;
@@ -228,19 +240,12 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         </div>
         <div className="dashboard-view" hidden={activeView !== "play-now"}>
           {library !== undefined && intelligenceApi && (
-            <IntelligencePanel api={api} games={library.games} />
+            <PlayNowView games={library.games} state={intelligenceState} onOpenGame={openGame} />
           )}
         </div>
 
         <div className="dashboard-view" hidden={activeView !== "backlog"}>
-          <section className="dashboard-placeholder" aria-labelledby="backlog-view-heading">
-            <p className="eyebrow">Planificación</p>
-            <h2 id="backlog-view-heading">Backlog</h2>
-            <p>La planificación de tu backlog sigue disponible dentro de Play Now.</p>
-            <button type="button" onClick={() => setActiveView("play-now")}>
-              Abrir Play Now
-            </button>
-          </section>
+          {library !== undefined && intelligenceApi && <BacklogView state={intelligenceState} />}
         </div>
 
         <div className="dashboard-view" hidden={activeView !== "manual"}>
@@ -280,6 +285,10 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
       </main>
     </AppShell>
   );
+}
+
+function libraryGames(library: DashboardLibrary | undefined): readonly DashboardGame[] {
+  return library?.games ?? EMPTY_GAMES;
 }
 
 function errorMessage(error: unknown): string {

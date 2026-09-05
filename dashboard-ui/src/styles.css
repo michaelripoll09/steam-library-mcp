@@ -1111,3 +1111,100 @@ select {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.play-now-view,
+.backlog-view {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.play-now-recommendations,
+.backlog-plan-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.play-now-hero,
+.play-now-card {
+  display: grid;
+  grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #2b405b;
+  border-radius: 0.8rem;
+  background: #17263a;
+}
+
+.play-now-hero .cover-frame,
+.play-now-card .cover-frame {
+  min-height: 9rem;
+}
+
+.play-now-hero h4,
+.play-now-card p,
+.play-now-card small,
+.play-now-hero p,
+.play-now-hero small {
+  margin: 0;
+}
+
+.preferences-section,
+.backlog-planner {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.backlog-plan {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #2b405b;
+  border-radius: 0.8rem;
+  background: #17263a;
+}
+
+.backlog-plan h3,
+.backlog-plan p {
+  margin: 0;
+}
+
+.backlog-plan ul {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backlog-plan li {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.progress-bar {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted, #a8b0c2);
+}
+
+.progress-bar-track {
+  display: block;
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #0a0f19;
+}
+
+.progress-bar-value {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #8fc9ff;
+}
+
+@media (max-width: 600px) {
+  .play-now-hero,
+  .play-now-card {
+    grid-template-columns: 1fr;
+  }
+}
