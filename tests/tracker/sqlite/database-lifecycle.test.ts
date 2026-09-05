@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { loadConfig } from "../../../src/config.js";
 import { createCoreServices } from "../../../src/core-services.js";
+import type { AchievementService } from "../../../src/services/achievement-service.js";
 import type { BacklogPlanService } from "../../../src/backlog/backlog-plan-service.js";
 import type { GameDurationService } from "../../../src/durations/game-duration-service.js";
 import type { MetadataService } from "../../../src/services/metadata-service.js";
@@ -20,6 +21,7 @@ describe("core service database lifecycle", () => {
     const services = createCoreServices({
       database,
       steamService: { getLibrary: async () => ({ games: [] }) } as unknown as SteamService,
+      achievementService: {} as AchievementService,
       taskRunner: {} as TaskRunner,
       recommendationPreferencesService: {} as RecommendationPreferencesService,
       metadataService: {} as MetadataService,
