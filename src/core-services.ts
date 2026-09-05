@@ -130,7 +130,7 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     createDefaultBacklogSelectionService(database(), steamService, gameDurationService);
   const backlogPlanService =
     overrides.backlogPlanService ??
-    createDefaultBacklogPlanService(database(), clock, playNowRecommendationService);
+    createDefaultBacklogPlanService(database(), clock, backlogSelectionService);
   const taskRunner =
     overrides.taskRunner ??
     (overrides.config === undefined && allCoreServicesAreOverridden(overrides)
@@ -334,12 +334,12 @@ function createDefaultPlayNowRecommendationService(
 function createDefaultBacklogPlanService(
   database: TrackerDatabase,
   clock: Clock,
-  recommendationService: PlayNowRecommendationService,
+  selectionService: BacklogSelectionService,
 ): BacklogPlanService {
   try {
     return createBacklogPlanService({
       clock,
-      recommendationService,
+      selectionService,
       repository: new SqliteBacklogPlanRepository(database),
     });
   } catch (error) {

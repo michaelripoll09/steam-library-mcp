@@ -10,7 +10,7 @@ import {
   type BacklogPlanItemProgress,
 } from "../domain/backlog-plan.js";
 import { InputError } from "../errors.js";
-import type { PlayNowRecommendationService } from "../recommendations/play-now-recommendation-service.js";
+import type { BacklogSelectionService } from "./backlog-selection-service.js";
 
 export type BacklogPlanRepository = Readonly<{
   replaceActive(plan: BacklogPlan): void;
@@ -42,7 +42,7 @@ export type CreateBacklogPlanResult = Readonly<{
 }>;
 
 type BacklogPlanServiceDependencies = Readonly<{
-  recommendationService: Pick<PlayNowRecommendationService, "recommend">;
+  selectionService: Pick<BacklogSelectionService, "select">;
   repository: BacklogPlanRepository;
   clock: Clock;
   createId?: () => string;
@@ -65,7 +65,7 @@ const allowedTransitions: Readonly<
 });
 
 export function createBacklogPlanService({
-  recommendationService,
+  selectionService,
   repository,
   clock,
   createId = randomUUID,
@@ -74,10 +74,9 @@ export function createBacklogPlanService({
     async create(request: unknown): Promise<CreateBacklogPlanResult> {
       assertCreateRequest(request);
 
-      const recommendationResult = await recommendationService.recommend({
+      const selectionResult = await selectionService.select({
         availableMinutes: request.availableMinutes,
-        maxResults: request.targetGameCount,
-        sessionMode: "solo",
+        targetGameCount: request.targetGameCount,
       });
       const createdAt = toTimestamp(clock);
       const id = createId();
@@ -86,7 +85,7 @@ export function createBacklogPlanService({
         id,
         request,
         createdAt,
-        recommendations: recommendationResult.recommendations.slice(0, request.targetGameCount),
+        selections: selectionResult.selections.slice(0, request.targetGameCount),
       });
 
       repository.replaceActive(plan);
@@ -96,7 +95,11 @@ export function createBacklogPlanService({
         shortfall:
           selectedGameCount === request.targetGameCount
             ? null
-            : createShortfall(request.targetGameCount, selectedGameCount),
+            : createShortfall({
+                request,
+                selectedGameCount,
+                exclusions: selectionResult.exclusions,
+              }),
       });
     },
 
@@ -143,14 +146,12 @@ function createPlan({
   id,
   request,
   createdAt,
-  recommendations,
+  selections,
 }: Readonly<{
   id: string;
   request: CreateBacklogPlanRequest;
   createdAt: string;
-  recommendations: Awaited<
-    ReturnType<PlayNowRecommendationService["recommend"]>
-  >["recommendations"];
+  selections: Awaited<ReturnType<BacklogSelectionService["select"]>>["selections"];
 }>): BacklogPlan {
   return Object.freeze({
     id,
@@ -162,14 +163,14 @@ function createPlan({
     updatedAt: createdAt,
     archivedAt: null,
     items: Object.freeze(
-      recommendations.map((recommendation, index) =>
+      selections.map((selection, index) =>
         Object.freeze({
           id: `${id}:${index + 1}`,
           rank: index + 1,
-          appId: recommendation.appId,
-          name: recommendation.name,
-          durationEstimateMinutes: recommendation.durationEstimateMinutes,
-          explanation: recommendation.explanation,
+          appId: selection.appId,
+          name: selection.name,
+          durationEstimateMinutes: selection.estimatedRemainingMinutes,
+          explanation: selection.explanation,
           progress: "not_started" as const,
           createdAt,
           updatedAt: createdAt,
@@ -179,17 +180,22 @@ function createPlan({
   });
 }
 
-function createShortfall(
-  requestedGameCount: number,
-  selectedGameCount: number,
-): BacklogPlanShortfall {
-  const missingGameCount = requestedGameCount - selectedGameCount;
-  const selectedNoun = selectedGameCount === 1 ? "game was" : "games were";
-  const missingNoun = missingGameCount === 1 ? "more was" : "more were";
+function createShortfall({
+  request,
+  selectedGameCount,
+  exclusions,
+}: Readonly<{
+  request: CreateBacklogPlanRequest;
+  selectedGameCount: number;
+  exclusions: Awaited<ReturnType<BacklogSelectionService["select"]>>["exclusions"];
+}>): BacklogPlanShortfall {
+  const capacityConstrained = exclusions.some((exclusion) => exclusion.reason === "over_budget");
   return Object.freeze({
-    requestedGameCount,
+    requestedGameCount: request.targetGameCount,
     selectedGameCount,
-    message: `Only ${selectedGameCount} eligible ${selectedNoun} available for this plan; ${missingGameCount} ${missingNoun} requested.`,
+    message: capacityConstrained
+      ? `Selected ${selectedGameCount} of ${request.targetGameCount} games within the ${request.availableMinutes}-minute budget; additional eligible games exceeded the remaining budget.`
+      : `Selected ${selectedGameCount} of ${request.targetGameCount} games within the ${request.availableMinutes}-minute budget; no additional eligible games were available.`,
   });
 }
 

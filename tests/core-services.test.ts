@@ -46,6 +46,22 @@ describe("core services", () => {
         exclusions: [],
       }),
     };
+    const backlogSelectionService: BacklogSelectionService = {
+      select: async () => ({
+        selections: [
+          {
+            appId: 10,
+            name: "Shared Game",
+            durationEstimateMinutes: 90,
+            estimatedRemainingMinutes: 90,
+            explanation: "Shared database test selection.",
+          },
+        ],
+        allocatedMinutes: 90,
+        unallocatedMinutes: 30,
+        exclusions: [],
+      }),
+    };
     const services = createCoreServices({
       database,
       config,
@@ -64,6 +80,7 @@ describe("core services", () => {
       metadataService: {} as MetadataService,
       gameDurationService: {} as GameDurationService,
       playNowRecommendationService,
+      backlogSelectionService,
     });
 
     try {
