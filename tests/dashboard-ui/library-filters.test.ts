@@ -2,6 +2,8 @@
 
 import { describe, expect, test } from "vitest";
 
+import { formatLabel } from "../../dashboard-ui/src/library-panel.js";
+
 type FiltersModule = Readonly<{
   createLibraryFilters: (overrides?: Record<string, unknown>) => Record<string, unknown>;
   clearLibraryFilters: () => Record<string, unknown>;
@@ -44,6 +46,11 @@ async function loadFilters(): Promise<FiltersModule | undefined> {
 }
 
 describe("dashboard library filters", () => {
+  test("keeps shared library display labels stable after extraction", () => {
+    expect(formatLabel("playing")).toBe("Jugando");
+    expect(formatLabel("manual")).toBe("Manual");
+  });
+
   test("trims and normalizes a game name query while preserving upstream order", async () => {
     const module = await loadFilters();
     expect(module).toBeDefined();

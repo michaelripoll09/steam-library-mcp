@@ -9,7 +9,9 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
-import { CoverImage, DashboardApp } from "../../dashboard-ui/src/app.js";
+import { DashboardApp } from "../../dashboard-ui/src/app.js";
+import { CoverImage } from "../../dashboard-ui/src/library-panel.js";
+import { ManualCollectionPanel } from "../../dashboard-ui/src/manual-collection-panel.js";
 
 const library: DashboardLibrary = {
   games: [
@@ -133,6 +135,44 @@ describe("DashboardApp", () => {
     await waitFor(() => expect(screen.getByText("Listo para jugar")).toBeInTheDocument());
     expect(api.addManualCollection).not.toHaveBeenCalled();
     expect(api.removeManualCollection).not.toHaveBeenCalled();
+  });
+
+  test("forwards controlled manual add and remove actions", async () => {
+    const user = userEvent.setup();
+    const onSteamChange = vi.fn();
+    const onAdd = vi.fn();
+    const onRemove = vi.fn();
+
+    render(
+      <ManualCollectionPanel
+        collection={[
+          {
+            appId: 413150,
+            name: "Stardew Valley",
+            accessType: "manual",
+            isPlayable: true,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ]}
+        steam=""
+        error={undefined}
+        saving={false}
+        onSteamChange={onSteamChange}
+        onAdd={onAdd}
+        onUpdate={vi.fn()}
+        onRemove={onRemove}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("URL de Steam o AppID"), {
+      target: { value: "413150" },
+    });
+    expect(onSteamChange).toHaveBeenCalledWith("413150");
+    await user.click(screen.getByRole("button", { name: "Agregar" }));
+    expect(onAdd).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Quitar Stardew Valley" }));
+    expect(onRemove).toHaveBeenCalledWith(413150);
   });
 
   test("labels manual catalog games without legacy access language", async () => {
