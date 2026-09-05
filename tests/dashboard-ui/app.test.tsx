@@ -9,7 +9,9 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
-import { CoverImage, DashboardApp } from "../../dashboard-ui/src/app.js";
+import { DashboardApp } from "../../dashboard-ui/src/app.js";
+import { CoverImage } from "../../dashboard-ui/src/library-panel.js";
+import { ManualCollectionPanel } from "../../dashboard-ui/src/manual-collection-panel.js";
 
 const library: DashboardLibrary = {
   games: [
@@ -89,6 +91,88 @@ describe("DashboardApp", () => {
     render(<DashboardApp />);
     expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith("/api/manual-collection", { method: "GET" });
+  });
+
+  test("updates a manual row to Familia and playable without removing or re-adding it", async () => {
+    const user = userEvent.setup();
+    const entry = {
+      appId: 413150,
+      name: "Stardew Valley",
+      accessType: "manual" as const,
+      isPlayable: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi.fn().mockResolvedValue([entry]),
+      addManualCollection: vi.fn(),
+      removeManualCollection: vi.fn(),
+      updateManualCollection: vi.fn(async (_appId: number, patch: object) => ({
+        ...entry,
+        ...patch,
+      })),
+    };
+
+    render(<DashboardApp api={api as never} />);
+
+    expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
+    expect(screen.getByText("No disponible para jugar")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Acceso de Stardew Valley"), "family");
+    await waitFor(() =>
+      expect(api.updateManualCollection).toHaveBeenCalledWith(413150, { accessType: "family" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Acceso de Stardew Valley")).toHaveValue("family"),
+    );
+
+    await user.click(screen.getByLabelText("Disponible para jugar: Stardew Valley"));
+    await waitFor(() =>
+      expect(api.updateManualCollection).toHaveBeenLastCalledWith(413150, { isPlayable: true }),
+    );
+    await waitFor(() => expect(screen.getByText("Listo para jugar")).toBeInTheDocument());
+    expect(api.addManualCollection).not.toHaveBeenCalled();
+    expect(api.removeManualCollection).not.toHaveBeenCalled();
+  });
+
+  test("forwards controlled manual add and remove actions", async () => {
+    const user = userEvent.setup();
+    const onSteamChange = vi.fn();
+    const onAdd = vi.fn();
+    const onRemove = vi.fn();
+
+    render(
+      <ManualCollectionPanel
+        collection={[
+          {
+            appId: 413150,
+            name: "Stardew Valley",
+            accessType: "manual",
+            isPlayable: true,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ]}
+        steam=""
+        error={undefined}
+        saving={false}
+        onSteamChange={onSteamChange}
+        onAdd={onAdd}
+        onUpdate={vi.fn()}
+        onRemove={onRemove}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("URL de Steam o AppID"), {
+      target: { value: "413150" },
+    });
+    expect(onSteamChange).toHaveBeenCalledWith("413150");
+    await user.click(screen.getByRole("button", { name: "Agregar" }));
+    expect(onAdd).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Quitar Stardew Valley" }));
+    expect(onRemove).toHaveBeenCalledWith(413150);
   });
 
   test("labels manual catalog games without legacy access language", async () => {
@@ -239,20 +323,138 @@ describe("DashboardApp", () => {
     expect(within(dialog).getByText("Última vez jugado: 26/08/2026")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Estado")).toHaveValue("playing");
     expect(within(dialog).getByRole("option", { name: "Jugando" })).toHaveValue("playing");
+    expect(within(dialog).getByRole("option", { name: "Pausado" })).toHaveValue("paused");
+    expect(within(dialog).getByRole("option", { name: "Completado" })).toHaveValue("completed");
+    expect(within(dialog).getByRole("option", { name: "Abandonado" })).toHaveValue("dropped");
+  });
+
+  test("loads achievement progress only after intent and retains it when detail is reopened", async () => {
+    const user = userEvent.setup();
+    let resolveAchievements: ((value: unknown) => void) | undefined;
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveAchievements = resolve;
+          }),
+      ),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    expect(api.getAchievements).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cargar logros" }));
+    expect(api.getAchievements).toHaveBeenCalledWith(10);
+    expect(within(dialog).getByText("Cargando logros…")).toBeInTheDocument();
+    resolveAchievements?.({
+      status: "available",
+      progress: {
+        appId: 10,
+        name: "Celeste",
+        unlockedCount: 1,
+        totalCount: 2,
+        completionPercent: 50,
+        achievements: [
+          {
+            apiName: "SUMMIT",
+            displayName: "Summit",
+            description: "Reach the summit.",
+            achieved: true,
+            unlockTime: "2026-09-05T00:00:00.000Z",
+            iconUrl: null,
+            iconGrayUrl: null,
+          },
+          {
+            apiName: "BERRIES",
+            displayName: "Berries",
+            description: null,
+            achieved: false,
+            unlockTime: null,
+            iconUrl: null,
+            iconGrayUrl: null,
+          },
+        ],
+      },
+    });
+    expect(await within(dialog).findByText("1 / 2 · 50%")).toBeInTheDocument();
+    expect(within(dialog).getByText("Summit")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cerrar detalles" }));
+    await user.click(screen.getByRole("button", { name: "Ver detalles de Celeste" }));
+    expect(screen.getByText("1 / 2 · 50%")).toBeInTheDocument();
+    expect(api.getAchievements).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps an active achievement request pending when another dialog request fails", async () => {
+    const user = userEvent.setup();
+    const rejectAchievements = new Map<number, (reason?: unknown) => void>();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn(
+        (appId: number) =>
+          new Promise((_, reject) => {
+            rejectAchievements.set(appId, reject);
+          }),
+      ),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const celesteDialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    await user.click(within(celesteDialog).getByRole("button", { name: "Cargar logros" }));
+
+    await user.click(within(celesteDialog).getByRole("button", { name: "Cerrar detalles" }));
+    await user.click(screen.getByRole("button", { name: "Ver detalles de Hades" }));
+    const hadesDialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
+    await user.click(within(hadesDialog).getByRole("button", { name: "Cargar logros" }));
+
+    rejectAchievements.get(10)?.(new Error("Celeste failed"));
+
+    expect(await within(hadesDialog).findByText("Cargando logros…")).toBeInTheDocument();
+    expect(within(hadesDialog).queryByText(/Celeste failed/)).not.toBeInTheDocument();
+  });
+
+  test("shows a safe unavailable achievement state", async () => {
+    const user = userEvent.setup();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn().mockResolvedValue({
+        status: "unavailable",
+        appId: 10,
+        name: "Celeste",
+        reason: "not_available",
+      }),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    await user.click(within(dialog).getByRole("button", { name: "Cargar logros" }));
+
+    expect(await within(dialog).findByText("Los logros no están disponibles.")).toBeInTheDocument();
   });
 
   test("opens a keyboard-accessible detail dialog, updates status, and restores focus on Escape", async () => {
     const user = userEvent.setup();
     const updatedLibrary: DashboardLibrary = {
       ...library,
-      games: [library.games[0], { ...library.games[1], status: "completed" }],
-      statusStats: { ...library.statusStats, playing: 0, completed: 1 },
+      games: [library.games[0], { ...library.games[1], status: "paused" }],
+      statusStats: { ...library.statusStats, playing: 0, paused: 1 },
     };
     const api = {
       getLibrary: vi.fn().mockResolvedValue(library),
       syncLibrary: vi.fn(),
       updateGameStatus: vi.fn().mockResolvedValue({
-        mark: { outcome: "updated", appId: 20, status: "completed" },
+        mark: { outcome: "updated", appId: 20, status: "paused" },
         library: updatedLibrary,
       }),
     };
@@ -264,9 +466,9 @@ describe("DashboardApp", () => {
     const dialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
     expect(within(dialog).getByText("2h 5m jugado")).toBeInTheDocument();
     expect(within(dialog).getByText("Última vez jugado: 26/08/2026")).toBeInTheDocument();
-    await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
+    await user.selectOptions(within(dialog).getByLabelText("Estado"), "paused");
 
-    expect(api.updateGameStatus).toHaveBeenCalledWith(20, "completed");
+    expect(api.updateGameStatus).toHaveBeenCalledWith(20, "paused");
     expect(await within(dialog).findByText("Estado guardado.")).toBeInTheDocument();
     await user.keyboard("{Escape}");
 
@@ -426,9 +628,9 @@ describe("DashboardApp", () => {
     const dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
 
-    expect(await within(dialog).findByDisplayValue("En pausa")).toBeInTheDocument();
+    expect(await within(dialog).findByDisplayValue("Pausado")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("article", { name: "Hades" })).getByText("En pausa"),
+      within(screen.getByRole("article", { name: "Hades" })).getByText("Pausado"),
     ).toBeInTheDocument();
   });
 
@@ -594,6 +796,7 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
           appId: 10,
           name: "Celeste",
           durationEstimateMinutes: null,
+          estimatedRemainingMinutes: null,
           reasons: ["duration_unknown"],
           explanation: "Duration is unknown.",
         },
@@ -618,7 +821,7 @@ test("shows local play-now reasons and saves a selected game's recommendation pr
 
   render(<DashboardApp api={api as never} />);
 
-  expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   expect(await screen.findByText("Duración desconocida")).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Juego para preferencias" }));
@@ -673,7 +876,7 @@ test("loads the initial game's persisted preference before allowing a save", asy
 
   render(<DashboardApp api={api as never} />);
 
-  expect(await screen.findByRole("heading", { name: "Jugar ahora" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cargar inteligencia" }));
   await waitFor(() => {
     expect(api.getPreference).toHaveBeenCalledWith(10);
@@ -712,12 +915,13 @@ test("groups play-now controls into a primary recommendation card and compact si
 
   const recommendations = await screen.findByRole("heading", { name: "Recomendaciones" });
   const preferences = screen.getByRole("heading", { name: "Preferencias" });
-  const plans = screen.getByRole("heading", { name: "Planes de backlog" });
+  const plans = screen.getByRole("heading", { name: "Plan de backlog" });
 
   expect(recommendations.closest("section")).toHaveClass("intelligence-recommendations-card");
   expect(
-    screen.getByLabelText("Minutos disponibles").closest(".recommendations-controls"),
+    screen.getByLabelText("Tiempo de esta sesión").closest(".recommendations-controls"),
   ).toHaveClass("recommendations-controls");
+  expect(screen.getByLabelText("Tiempo total disponible en la semana/mes")).toBeInTheDocument();
   expect(preferences.closest("section")).toHaveClass("intelligence-side-card");
   expect(plans.closest("section")).toHaveClass("intelligence-side-card");
   expect(preferences.closest(".intelligence-sidebar")).toContainElement(plans);
@@ -764,10 +968,12 @@ test("uses accessible custom menus for every intelligence choice and closes them
   render(<DashboardApp api={api as never} />);
   await user.click(await screen.findByRole("button", { name: "Cargar inteligencia" }));
 
-  const panel = screen.getByRole("heading", { name: "Jugar ahora" }).closest(".intelligence-panel");
+  const panel = screen
+    .getByRole("heading", { name: "Qué jugar ahora" })
+    .closest(".intelligence-panel");
   expect(panel).not.toBeNull();
   expect(panel?.querySelectorAll("select")).toHaveLength(0);
-  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(2);
+  expect(panel?.querySelectorAll('input[type="number"]')).toHaveLength(3);
 
   const game = screen.getByRole("combobox", { name: "Juego para preferencias" });
   expect(game).toHaveAttribute("aria-expanded", "false");
@@ -796,7 +1002,7 @@ test("uses accessible custom menus for every intelligence choice and closes them
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
   await user.click(cadence);
-  await user.click(screen.getByRole("heading", { name: "Planes de backlog" }));
+  await user.click(screen.getByRole("heading", { name: "Plan de backlog" }));
   expect(screen.queryByRole("listbox", { name: "Cadencia" })).not.toBeInTheDocument();
 
   expect(screen.getByRole("combobox", { name: "Modo de juego" })).toBeInTheDocument();
@@ -842,7 +1048,7 @@ test("allows replacing recommendation minutes after clearing the field and rejec
 
   render(<DashboardApp api={api as never} />);
 
-  const availableMinutes = await screen.findByLabelText("Minutos disponibles");
+  const availableMinutes = await screen.findByLabelText("Tiempo de esta sesión");
   await user.clear(availableMinutes);
   expect(availableMinutes).toHaveValue(null);
 
@@ -853,7 +1059,40 @@ test("allows replacing recommendation minutes after clearing the field and rejec
   await user.type(availableMinutes, "30");
   expect(availableMinutes).toHaveValue(30);
   await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
-  expect(api.getRecommendations).toHaveBeenCalledWith(30);
+  expect(api.getRecommendations).toHaveBeenCalledWith(30, "solo");
+});
+
+test("loads recommendations using the selected session mode", async () => {
+  const user = userEvent.setup();
+  const api = {
+    getLibrary: vi.fn().mockResolvedValue(library),
+    syncLibrary: vi.fn(),
+    updateGameStatus: vi.fn(),
+    getInsights: vi.fn().mockResolvedValue(undefined),
+    getRecommendations: vi.fn().mockResolvedValue({
+      availableMinutes: 45,
+      sessionMode: "with_friends",
+      recommendations: [],
+    }),
+    getPreference: vi.fn().mockResolvedValue({
+      appId: 10,
+      priority: "normal",
+      excludedFromRecommendations: false,
+      playMode: "any",
+    }),
+    savePreference: vi.fn(),
+    getPlans: vi.fn().mockResolvedValue([]),
+    createPlan: vi.fn(),
+    updatePlanItemProgress: vi.fn(),
+  };
+
+  render(<DashboardApp api={api as never} />);
+  const sessionMode = await screen.findByRole("combobox", { name: "Modo de sesión" });
+  await user.click(sessionMode);
+  await user.click(screen.getByRole("option", { name: "Con amigos" }));
+  await user.click(screen.getByRole("button", { name: "Actualizar recomendaciones" }));
+
+  expect(api.getRecommendations).toHaveBeenCalledWith(45, "with_friends");
 });
 
 test("allows replacing backlog target games after clearing the field and rejects a blank submission", async () => {

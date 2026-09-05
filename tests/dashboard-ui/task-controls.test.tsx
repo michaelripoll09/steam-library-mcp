@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { DashboardLibrary } from "../../src/dashboard/contracts.js";
-import { DashboardApp } from "../../dashboard-ui/src/app.js";
+import { TaskPanel } from "../../dashboard-ui/src/task-panel.js";
 
 const library: DashboardLibrary = {
   games: [],
@@ -40,7 +40,7 @@ describe("dashboard task controls", () => {
       cancelTask: vi.fn(async () => ({ ...task, state: "cancelled" as const })),
     };
 
-    render(<DashboardApp api={api as never} />);
+    render(<TaskPanel api={api as never} />);
 
     expect(await screen.findByRole("heading", { name: "Tareas locales" })).toBeInTheDocument();
     expect(screen.getByText("Sincronizando biblioteca")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("dashboard task controls", () => {
       cancelTask: vi.fn(async () => ({ ...task, state: "cancelled" as const })),
     };
 
-    render(<DashboardApp api={api as never} />);
+    render(<TaskPanel api={api as never} />);
     await screen.findByRole("button", { name: "Cancelar tarea" });
 
     await act(async () => {
@@ -93,7 +93,7 @@ describe("dashboard task controls", () => {
       cancelTask: vi.fn(async () => ({ ...task, state: "cancelled" as const })),
     };
 
-    render(<DashboardApp api={api as never} />);
+    render(<TaskPanel api={api as never} />);
     await screen.findByRole("button", { name: "Cancelar tarea" });
 
     fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));

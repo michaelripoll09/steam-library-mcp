@@ -155,6 +155,18 @@ export const MIGRATIONS = Object.freeze([
       )`,
     ],
   }),
+  createMigration({
+    version: 8,
+    name: "add-manual-library-access-state",
+    statements: [
+      `ALTER TABLE manual_library_games
+        ADD COLUMN access_type TEXT NOT NULL DEFAULT 'manual'
+        CHECK (access_type IN ('manual', 'family'))`,
+      `ALTER TABLE manual_library_games
+        ADD COLUMN is_playable INTEGER NOT NULL DEFAULT 0
+        CHECK (is_playable IN (0, 1))`,
+    ],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (

@@ -8,9 +8,13 @@ import {
   SteamUnavailableError,
 } from "../errors.js";
 import {
+  gameSchemaResponseSchema,
   ownedGamesResponseSchema,
+  playerAchievementsResponseSchema,
   recentGamesResponseSchema,
+  type SteamGameSchemaResponse,
   type SteamOwnedGamesResponse,
+  type SteamPlayerAchievementsResponse,
   type SteamRecentGamesResponse,
 } from "./schemas.js";
 
@@ -19,6 +23,8 @@ export type FetchLike = typeof fetch;
 export interface SteamApiClient {
   getOwnedGames(steamId: string): Promise<SteamOwnedGamesResponse>;
   getRecentGames(steamId: string, count?: number): Promise<SteamRecentGamesResponse>;
+  getPlayerAchievements(steamId: string, appId: number): Promise<SteamPlayerAchievementsResponse>;
+  getAchievementSchema(appId: number): Promise<SteamGameSchemaResponse>;
 }
 
 type SteamApiClientDependencies = Readonly<{
@@ -48,6 +54,22 @@ export function createSteamApiClient({
         "/IPlayerService/GetRecentlyPlayedGames/v0001/",
         { steamid: steamId, ...(count === undefined ? {} : { count: String(count) }) },
         recentGamesResponseSchema,
+      ),
+    getPlayerAchievements: (steamId, appId) =>
+      requestSteam(
+        fetchLike,
+        config,
+        "/ISteamUserStats/GetPlayerAchievements/v0001/",
+        { steamid: steamId, appid: String(appId), l: "english" },
+        playerAchievementsResponseSchema,
+      ),
+    getAchievementSchema: (appId) =>
+      requestSteam(
+        fetchLike,
+        config,
+        "/ISteamUserStats/GetSchemaForGame/v2/",
+        { appid: String(appId), l: "english" },
+        gameSchemaResponseSchema,
       ),
   };
 }

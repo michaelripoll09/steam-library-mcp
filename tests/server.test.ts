@@ -7,14 +7,43 @@ import { describe, expect, test, vi } from "vitest";
 
 import { TtlCache } from "../src/cache/ttl-cache.js";
 import { loadConfig } from "../src/config.js";
-import { createServer, startStdioServer } from "../src/server.js";
+import {
+  createServer,
+  createServerRuntime,
+  type ServerOverrides,
+  startStdioServer,
+} from "../src/server.js";
+import type { BacklogPlanService } from "../src/backlog/backlog-plan-service.js";
+import type { BacklogSelectionService } from "../src/backlog/backlog-selection-service.js";
+import type { GameDurationService } from "../src/durations/game-duration-service.js";
+import type { PlayNowRecommendationService } from "../src/recommendations/play-now-recommendation-service.js";
+import type { RecommendationPreferencesService } from "../src/recommendations/recommendation-preferences-service.js";
+import type { MetadataService } from "../src/services/metadata-service.js";
+import type { AchievementService } from "../src/services/achievement-service.js";
+import type { SteamService } from "../src/services/steam-service.js";
 import type { SteamApiClient } from "../src/steam/client.js";
+import type { TaskRunner } from "../src/tasks/task-runner.js";
 import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
+import { registerAchievementTools } from "../src/tools/register-achievement-tools.js";
+import type { ToolRegistrar } from "../src/tools/register-steam-tools.js";
 
 const config = loadConfig({
   STEAM_API_KEY: "secret-api-key",
   STEAM_ID: "76561198000000000",
 });
+
+const allServiceOverrides = {
+  steamService: {} as SteamService,
+  achievementService: {} as AchievementService,
+  gamingTrackerService: {} as GamingTrackerService,
+  recommendationPreferencesService: {} as RecommendationPreferencesService,
+  metadataService: {} as MetadataService,
+  gameDurationService: {} as GameDurationService,
+  playNowRecommendationService: {} as PlayNowRecommendationService,
+  backlogPlanService: {} as BacklogPlanService,
+  backlogSelectionService: {} as BacklogSelectionService,
+  taskRunner: {} as TaskRunner,
+} satisfies ServerOverrides;
 
 function createSteamClient(): SteamApiClient {
   return {
@@ -27,6 +56,12 @@ function createSteamClient(): SteamApiClient {
       response: {
         games: [{ appid: 620, name: "Portal 2", playtime_forever: 135 }],
       },
+    })),
+    getPlayerAchievements: vi.fn(async () => ({
+      playerstats: { success: false, achievements: [] },
+    })),
+    getAchievementSchema: vi.fn(async () => ({
+      game: { gameName: "Portal 2", availableGameStats: { achievements: [] } },
     })),
   };
 }
@@ -41,7 +76,25 @@ function createGamingTrackerService(): GamingTrackerService {
   };
 }
 
+function createAchievementService(
+  result: Awaited<ReturnType<AchievementService["getGameAchievements"]>> = {
+    status: "unavailable",
+    appId: 620,
+    name: "Portal 2",
+    reason: "not_available",
+  },
+): AchievementService {
+  return { getGameAchievements: vi.fn(async () => result) };
+}
+
 describe("MCP server composition", () => {
+  test("server runtime exposes idempotent cleanup", () => {
+    const runtime = createServerRuntime(allServiceOverrides);
+
+    expect(() => runtime.close()).not.toThrow();
+    expect(() => runtime.close()).not.toThrow();
+  });
+
   test("lists the complete task-enabled Steam, tracker, metadata, and intelligence surface", async () => {
     const steamClient = createSteamClient();
     const server = createServer({
@@ -58,7 +111,7 @@ describe("MCP server composition", () => {
     await client.connect(clientTransport);
 
     const listedTools = await client.listTools();
-    expect(listedTools.tools).toHaveLength(25);
+    expect(listedTools.tools).toHaveLength(28);
     expect(listedTools).toMatchObject({
       tools: [
         { name: "steam_get_library" },
@@ -68,7 +121,12 @@ describe("MCP server composition", () => {
         { name: "steam_get_library_stats" },
         { name: "steam_get_manual_collection" },
         { name: "steam_add_manual_collection" },
+        { name: "steam_update_manual_collection" },
         { name: "steam_remove_manual_collection" },
+        {
+          name: "steam_get_game_achievements",
+          annotations: { readOnlyHint: true },
+        },
         {
           name: "gaming_get_backlog",
           inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -79,6 +137,14 @@ describe("MCP server composition", () => {
         },
         {
           name: "gaming_mark_playing",
+          inputSchema: {
+            type: "object",
+            properties: { appId: { type: "integer" } },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "gaming_mark_paused",
           inputSchema: {
             type: "object",
             properties: { appId: { type: "integer" } },
@@ -143,6 +209,69 @@ describe("MCP server composition", () => {
 
     await client.close();
     await server.close();
+  });
+
+  test("exposes read-only achievement progress with safe input errors", async () => {
+    const achievementService = createAchievementService();
+    const server = createServer({
+      config,
+      steamClient: createSteamClient(),
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+      gamingTrackerService: createGamingTrackerService(),
+      achievementService,
+    });
+    const client = new Client({ name: "test-client", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const listedTools = await client.listTools();
+    expect(listedTools.tools).toContainEqual(
+      expect.objectContaining({
+        name: "steam_get_game_achievements",
+        annotations: { readOnlyHint: true },
+      }),
+    );
+    await expect(
+      client.callTool({ name: "steam_get_game_achievements", arguments: { appId: 620 } }),
+    ).resolves.toMatchObject({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "unavailable",
+            appId: 620,
+            name: "Portal 2",
+            reason: "not_available",
+          }),
+        },
+      ],
+    });
+    expect(achievementService.getGameAchievements).toHaveBeenCalledWith(620);
+
+    await client.close();
+    await server.close();
+  });
+
+  test("returns INPUT_INVALID without invoking the achievement service for malformed input", async () => {
+    const achievementService = createAchievementService();
+    const registeredTools = new Map<string, Parameters<ToolRegistrar["registerTool"]>[2]>();
+    const registrar: ToolRegistrar = {
+      registerTool(name, _configuration, handler) {
+        registeredTools.set(name, handler);
+      },
+    };
+    registerAchievementTools(registrar, achievementService);
+
+    await expect(
+      registeredTools.get("steam_get_game_achievements")?.({ appId: 0 }),
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: expect.stringContaining("INPUT_INVALID") }],
+    });
+    expect(achievementService.getGameAchievements).not.toHaveBeenCalled();
   });
 
   test("exposes protocol-defaulted empty content with the unavailable metadata envelope", async () => {

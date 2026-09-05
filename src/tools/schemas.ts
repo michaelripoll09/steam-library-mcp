@@ -21,11 +21,27 @@ export const steamGameInputSchema = z
   })
   .strict();
 
+export const manualLibraryAccessTypeSchema = z.enum(["manual", "family"]);
+
 export const manualCollectionAddInputSchema = z
   .object({
     steam: z.string().trim().min(1, "Steam app ID or store URL must not be blank."),
+    accessType: manualLibraryAccessTypeSchema.optional(),
+    isPlayable: z.boolean().optional(),
   })
   .strict();
+
+export const manualCollectionUpdateInputSchema = z
+  .object({
+    appId: z.number().int().positive(),
+    accessType: manualLibraryAccessTypeSchema.optional(),
+    isPlayable: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.accessType !== undefined || value.isPlayable !== undefined,
+    "At least one access field must be provided.",
+  );
 
 export const manualCollectionRemoveInputSchema = steamGameInputSchema;
 

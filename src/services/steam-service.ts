@@ -12,6 +12,7 @@ import type { SteamApiClient } from "../steam/client.js";
 import type { SteamGameDto } from "../steam/schemas.js";
 import {
   parseManualSteamInput,
+  type ManualLibraryAccessType,
   type ManualLibraryGame,
   type ManualLibraryRepository,
   type PublicSteamGameLookup,
@@ -25,9 +26,22 @@ export interface SteamService {
   getRecentGames(count?: number): Promise<readonly SteamGame[]>;
   getLibraryStats(): Promise<LibraryStats>;
   getManualCollection?(): readonly ManualLibraryGame[];
-  addManualCollection?(steam: unknown): Promise<ManualLibraryGame>;
+  addManualCollection?(request: ManualCollectionAddRequest): Promise<ManualLibraryGame>;
+  updateManualCollection?(request: ManualCollectionUpdateRequest): Promise<ManualLibraryGame>;
   removeManualCollection?(appId: number): boolean;
 }
+
+type ManualCollectionAddRequest = Readonly<{
+  steam: string;
+  accessType?: ManualLibraryAccessType;
+  isPlayable?: boolean;
+}>;
+
+type ManualCollectionUpdateRequest = Readonly<{
+  appId: number;
+  accessType?: ManualLibraryAccessType;
+  isPlayable?: boolean;
+}>;
 
 type SteamServiceDependencies = Readonly<{
   config: AppConfig;
@@ -105,20 +119,45 @@ export function createSteamService({
     getManualCollection() {
       return manualRepository?.list() ?? [];
     },
-    async addManualCollection(steam) {
+    async addManualCollection(request) {
       if (manualRepository === undefined || publicGameLookup === undefined)
         throw new InputError("Manual collections are unavailable.");
-      const appId = parseManualSteamInput(steam);
+      const appId = parseManualSteamInput(request.steam);
       const game = await publicGameLookup(appId);
       const existing = manualRepository.list().find((entry) => entry.appId === appId);
-      if (existing !== undefined && existing.name === game.name) return existing;
+      const accessType = request.accessType ?? "manual";
+      const isPlayable = request.isPlayable ?? accessType === "family";
+      if (
+        existing !== undefined &&
+        existing.name === game.name &&
+        existing.accessType === accessType &&
+        existing.isPlayable === isPlayable
+      )
+        return existing;
       const timestamp = new Date(clock.now()).toISOString();
       const stored = manualRepository.upsert({
         appId,
         name: game.name,
+        accessType,
+        isPlayable,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
       });
+      cache.clear();
+      return stored;
+    },
+    async updateManualCollection(request) {
+      if (manualRepository === undefined)
+        throw new InputError("Manual collections are unavailable.");
+      if (!Number.isSafeInteger(request.appId) || request.appId <= 0)
+        throw new InputError("The app ID must be a positive integer.");
+      if (request.accessType === undefined && request.isPlayable === undefined)
+        throw new InputError("At least one access field must be provided.");
+      const stored = manualRepository.updateAccess({
+        ...request,
+        updatedAt: new Date(clock.now()).toISOString(),
+      });
+      if (stored === undefined) throw new GameNotFoundError(request.appId);
       cache.clear();
       return stored;
     },
@@ -160,8 +199,8 @@ function normalizeManualGame(game: ManualLibraryGame): SteamGame {
     appId: game.appId,
     name: game.name,
     playtimeMinutes: 0,
-    accessType: "manual",
-    isPlayable: false,
+    accessType: game.accessType,
+    isPlayable: game.isPlayable,
     manualCollection: true,
   });
 }

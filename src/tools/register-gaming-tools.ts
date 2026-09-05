@@ -15,6 +15,7 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
   register(
     server,
     "gaming_get_backlog",
+    "List accessible games that are untracked, backlogged, or paused.",
     emptySchema,
     () => service.getBacklog(),
     (games) => ({ games }),
@@ -22,16 +23,43 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
   register(
     server,
     "gaming_get_current_game",
+    "Get the accessible game currently marked as playing.",
     emptySchema,
     () => service.getCurrentGame(),
     (game) => ({ game }),
   );
-  registerMark(server, "gaming_mark_playing", service, "playing");
-  registerMark(server, "gaming_mark_completed", service, "completed");
-  registerMark(server, "gaming_mark_dropped", service, "dropped");
+  registerMark(
+    server,
+    "gaming_mark_playing",
+    "Mark an accessible game as currently playing.",
+    service,
+    "playing",
+  );
+  registerMark(
+    server,
+    "gaming_mark_paused",
+    "Mark an accessible game as paused.",
+    service,
+    "paused",
+  );
+  registerMark(
+    server,
+    "gaming_mark_completed",
+    "Mark an accessible game as completed.",
+    service,
+    "completed",
+  );
+  registerMark(
+    server,
+    "gaming_mark_dropped",
+    "Mark an accessible game as dropped.",
+    service,
+    "dropped",
+  );
   register(
     server,
     "gaming_get_completed",
+    "List accessible games marked as completed.",
     emptySchema,
     () => service.getCompleted(),
     (games) => ({ games }),
@@ -41,12 +69,14 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
 function registerMark(
   server: ToolRegistrar,
   name: string,
+  description: string,
   service: GamingTrackerService,
   status: TrackerMarkStatus,
 ): void {
   register<{ appId: number }, Awaited<ReturnType<GamingTrackerService["mark"]>>>(
     server,
     name,
+    description,
     markSchema,
     ({ appId }) => service.mark(appId, status),
     (value) => value,
@@ -56,13 +86,14 @@ function registerMark(
 function register<TInput extends object, TValue>(
   server: ToolRegistrar,
   name: string,
+  description: string,
   schema: z.ZodObject<z.ZodRawShape>,
   operation: (input: TInput) => Promise<TValue>,
   envelope: (value: TValue) => unknown,
 ): void {
   server.registerTool(
     name,
-    { description: name, inputSchema: schema },
+    { description, inputSchema: schema },
     async (input): Promise<Result> => {
       try {
         const parsed = schema.parse(input) as TInput;

@@ -10,14 +10,116 @@ import { createCoreServices } from "../src/core-services.js";
 import { registerSteamTools, type ToolRegistrar } from "../src/tools/register-steam-tools.js";
 import type { GameDurationService } from "../src/durations/game-duration-service.js";
 import type { BacklogPlanService } from "../src/backlog/backlog-plan-service.js";
+import type { BacklogSelectionService } from "../src/backlog/backlog-selection-service.js";
 import type { PlayNowRecommendationService } from "../src/recommendations/play-now-recommendation-service.js";
 import type { RecommendationPreferencesService } from "../src/recommendations/recommendation-preferences-service.js";
 import type { MetadataService } from "../src/services/metadata-service.js";
 import type { SteamService } from "../src/services/steam-service.js";
+import type { AchievementService } from "../src/services/achievement-service.js";
 import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
 import type { SteamApiClient } from "../src/steam/client.js";
+import { openTrackerDatabase } from "../src/tracker/sqlite/database.js";
 
 describe("core services", () => {
+  test("opens one shared database for all default repositories", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const config = loadConfig({
+      STEAM_API_KEY: "test-api-key",
+      STEAM_ID: "76561198000000000",
+      TRACKER_DATABASE_PATH: join(tmpdir(), "unused-core-services.sqlite"),
+    });
+    const playNowRecommendationService: PlayNowRecommendationService = {
+      recommend: async (request) => ({
+        request: {
+          ...(request as { availableMinutes: number; maxResults: number }),
+          sessionMode: "solo" as const,
+        },
+        recommendations: [
+          {
+            appId: 10,
+            name: "Shared Game",
+            durationEstimateMinutes: 90,
+            estimatedRemainingMinutes: 90,
+            reasons: [],
+            explanation: "Shared database test recommendation.",
+          },
+        ],
+        exclusions: [],
+      }),
+    };
+    const backlogSelectionService: BacklogSelectionService = {
+      select: async () => ({
+        selections: [
+          {
+            appId: 10,
+            name: "Shared Game",
+            durationEstimateMinutes: 90,
+            estimatedRemainingMinutes: 90,
+            explanation: "Shared database test selection.",
+          },
+        ],
+        allocatedMinutes: 90,
+        unallocatedMinutes: 30,
+        exclusions: [],
+      }),
+    };
+    const services = createCoreServices({
+      database,
+      config,
+      steamClient: {
+        getOwnedGames: async () => ({
+          response: { games: [{ appid: 10, name: "Shared Game", playtime_forever: 0 }] },
+        }),
+        getRecentGames: async () => ({ response: { games: [] } }),
+        getPlayerAchievements: async () => ({ playerstats: { success: false, achievements: [] } }),
+        getAchievementSchema: async () => ({
+          game: { gameName: "Shared Game", availableGameStats: { achievements: [] } },
+        }),
+      },
+      cache: new TtlCache(),
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ 20: { success: true, data: { name: "Manual Shared Game" } } }),
+        ),
+      clock: { now: () => 0 },
+      metadataService: {} as MetadataService,
+      gameDurationService: {} as GameDurationService,
+      playNowRecommendationService,
+      backlogSelectionService,
+    });
+
+    try {
+      await services.gamingTrackerService.mark(10, "playing");
+      services.recommendationPreferencesService.save(10, {
+        priority: "high",
+        excludedFromRecommendations: false,
+        playMode: "solo",
+      });
+      await services.steamService.addManualCollection?.({ steam: "20" });
+      await services.backlogPlanService.create({
+        cadence: "weekly",
+        availableMinutes: 120,
+        targetGameCount: 1,
+      });
+
+      expect(database.prepare("SELECT COUNT(*) AS count FROM tracker_entries").get()).toEqual({
+        count: 1,
+      });
+      expect(
+        database.prepare("SELECT COUNT(*) AS count FROM recommendation_preferences").get(),
+      ).toEqual({ count: 1 });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM manual_library_games").get()).toEqual({
+        count: 1,
+      });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM backlog_plans").get()).toEqual({
+        count: 1,
+      });
+    } finally {
+      services.close?.();
+      database.close();
+    }
+  });
+
   test("shares an absolute manual collection database across independently composed services", async () => {
     const directory = mkdtempSync(join(tmpdir(), "steam-library-core-parity-"));
     const config = loadConfig({
@@ -30,6 +132,12 @@ describe("core services", () => {
         response: { games: [{ appid: 620, name: "Portal 2", playtime_forever: 135 }] },
       })),
       getRecentGames: vi.fn(async () => ({ response: { games: [] } })),
+      getPlayerAchievements: vi.fn(async () => ({
+        playerstats: { success: false, achievements: [] },
+      })),
+      getAchievementSchema: vi.fn(async () => ({
+        game: { gameName: "Portal 2", availableGameStats: { achievements: [] } },
+      })),
     });
     const fetch = vi.fn(
       async () =>
@@ -69,7 +177,7 @@ describe("core services", () => {
 
     try {
       await mcpServices.steamService.getLibrary();
-      await dashboardServices.steamService.addManualCollection?.("413150");
+      await dashboardServices.steamService.addManualCollection?.({ steam: "413150" });
       await expect(tools.get("steam_get_library")?.({})).resolves.toMatchObject({
         content: [expect.objectContaining({ text: expect.stringContaining('"appId":413150') })],
       });
@@ -104,31 +212,37 @@ describe("core services", () => {
 
   test("reuses injected services without reading environment or opening tracker storage", () => {
     const steamService = {} as SteamService;
+    const achievementService = {} as AchievementService;
     const gamingTrackerService = {} as GamingTrackerService;
     const recommendationPreferencesService = {} as RecommendationPreferencesService;
     const metadataService = {} as MetadataService;
     const gameDurationService = {} as GameDurationService;
     const playNowRecommendationService = {} as PlayNowRecommendationService;
     const backlogPlanService = {} as BacklogPlanService;
+    const backlogSelectionService = {} as BacklogSelectionService;
 
     const services = createCoreServices({
       steamService,
+      achievementService,
       gamingTrackerService,
       recommendationPreferencesService,
       metadataService,
       gameDurationService,
       playNowRecommendationService,
       backlogPlanService,
+      backlogSelectionService,
     });
 
     expect(services).toMatchObject({
       steamService,
+      achievementService,
       gamingTrackerService,
       recommendationPreferencesService,
       metadataService,
       gameDurationService,
       playNowRecommendationService,
       backlogPlanService,
+      backlogSelectionService,
     });
     expect(services.taskRunner.list()).toEqual([]);
   });

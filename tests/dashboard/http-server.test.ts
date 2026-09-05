@@ -98,6 +98,7 @@ describe("dashboard HTTP server", () => {
       getLibrary: vi.fn(async () => library),
       syncLibrary: vi.fn(async () => library),
       updateStatus: vi.fn(async () => update),
+      getAchievements: vi.fn(),
     };
     const started = await startServer(service, root);
     server = started.server;
@@ -113,11 +114,36 @@ describe("dashboard HTTP server", () => {
     const response = await call(port, "/api/games/10/status", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: "playing" }),
+      body: JSON.stringify({ status: "paused" }),
     });
     expect(response.status).toBe(200);
-    expect(service.updateStatus).toHaveBeenCalledWith(10, "playing");
+    expect(service.updateStatus).toHaveBeenCalledWith(10, "paused");
     expect(JSON.parse(response.body)).toEqual(update);
+  });
+
+  test("routes an achievement request to the dashboard service", async () => {
+    const { port, service } = await setup();
+    const result = {
+      status: "available" as const,
+      progress: {
+        appId: 1245620,
+        name: "ELDEN RING",
+        unlockedCount: 12,
+        totalCount: 49,
+        completionPercent: 24.49,
+        achievements: [],
+      },
+    };
+    service.getAchievements.mockResolvedValue(result);
+
+    const response = await call(port, "/api/games/1245620/achievements");
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(result);
+    expect(service.getAchievements).toHaveBeenCalledWith(1245620);
+    expect((await call(port, "/api/games/1245620/achievements", { method: "POST" })).status).toBe(
+      405,
+    );
   });
 
   test("does not expose a Steam Families status endpoint", async () => {
@@ -280,8 +306,9 @@ describe("dashboard HTTP server", () => {
     const { port, service } = await setup();
     Object.assign(service, {
       getIntelligenceSnapshot: vi.fn(async () => ({ library: { totalGames: 0 } })),
-      getRecommendations: vi.fn(async (availableMinutes: number) => ({
+      getRecommendations: vi.fn(async (availableMinutes: number, sessionMode: string) => ({
         availableMinutes,
+        sessionMode,
         recommendations: [],
       })),
       getPreference: vi.fn((appId: number) => ({
@@ -314,7 +341,7 @@ describe("dashboard HTTP server", () => {
     expect((await call(port, "/api/intelligence/insights")).status).toBe(200);
     expect(
       JSON.parse((await call(port, "/api/intelligence/recommendations?availableMinutes=45")).body),
-    ).toEqual({ availableMinutes: 45, recommendations: [] });
+    ).toEqual({ availableMinutes: 45, sessionMode: "solo", recommendations: [] });
     await call(port, "/api/games/10/preference", {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -336,7 +363,7 @@ describe("dashboard HTTP server", () => {
     });
 
     expect(intelligenceService.getIntelligenceSnapshot).toHaveBeenCalledOnce();
-    expect(intelligenceService.getRecommendations).toHaveBeenCalledWith(45);
+    expect(intelligenceService.getRecommendations).toHaveBeenCalledWith(45, "solo");
     expect(intelligenceService.savePreference).toHaveBeenCalledWith(10, {
       priority: "high",
       excludedFromRecommendations: false,
@@ -424,6 +451,56 @@ describe("dashboard HTTP server", () => {
     expect(response.status).toBe(403);
     expect(
       (service as unknown as { savePreference: ReturnType<typeof vi.fn> }).savePreference,
+    ).not.toHaveBeenCalled();
+  });
+
+  test("updates manual collection access metadata with an exact PATCH payload", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, {
+      updateManualCollection: vi.fn(async () => ({
+        appId: 1245620,
+        name: "ELDEN RING",
+        accessType: "family",
+        isPlayable: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      })),
+    });
+    const manualCollectionService = service as unknown as {
+      updateManualCollection: ReturnType<typeof vi.fn>;
+    };
+
+    const response = await call(port, "/api/manual-collection/1245620", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accessType: "family", isPlayable: true }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(manualCollectionService.updateManualCollection).toHaveBeenCalledWith(1245620, {
+      accessType: "family",
+      isPlayable: true,
+    });
+    expect(JSON.parse(response.body)).toMatchObject({ accessType: "family", isPlayable: true });
+  });
+
+  test("rejects empty manual collection PATCH payloads", async () => {
+    const { port, service } = await setup();
+    Object.assign(service, { updateManualCollection: vi.fn() });
+
+    const response = await call(port, "/api/manual-collection/1245620", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body)).toEqual({
+      error: { code: "INPUT_INVALID", message: "At least one access field must be provided." },
+    });
+    expect(
+      (service as unknown as { updateManualCollection: ReturnType<typeof vi.fn> })
+        .updateManualCollection,
     ).not.toHaveBeenCalled();
   });
 

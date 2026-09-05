@@ -33,4 +33,21 @@ describe("README release guidance", () => {
     expect(content).toMatch(/recovery|restore/i);
     expect(content).toContain("gaming_mark_playing");
   });
+
+  test("documents the 1.0 library, collection, tracker, and planning surface", () => {
+    const content = readme();
+
+    expect(content).toMatch(/family access.*user-declared local metadata/i);
+    expect(content).toMatch(/not verified Steam Families synchronization/i);
+    expect(content).toContain("steam_get_game_achievements");
+    expect(content).toMatch(/achievements.*on demand/i);
+    expect(content).toContain("steam_update_manual_collection");
+    expect(content).toContain("gaming_mark_paused");
+    expect(content).toMatch(/sessionMode/i);
+    expect(content).toMatch(/Play Now.*Backlog Planner|Backlog Planner.*Play Now/i);
+    expect(content).toContain("npm test -- --run tests/readme.test.ts");
+    expect(content).toContain("npm run typecheck");
+    expect(content).toContain("npm run lint");
+    expect(content).toContain("npm run build");
+  });
 });

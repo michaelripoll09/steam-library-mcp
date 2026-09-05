@@ -112,4 +112,50 @@ describe("Steam API client", () => {
       response: { total_count: 1, games: [{ appid: 440, name: "TF2", playtime_forever: 1 }] },
     });
   });
+
+  test("requests player achievements with the documented endpoint and query", async () => {
+    const fetchLike = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(
+          JSON.stringify({
+            playerstats: { success: true, achievements: [{ apiname: "ACH_TEST", achieved: 1 }] },
+          }),
+          { status: 200 },
+        ),
+    );
+    const client = createSteamApiClient({ config, fetch: fetchLike as typeof fetch });
+
+    await expect(client.getPlayerAchievements(config.steamId, 620)).resolves.toMatchObject({
+      playerstats: { success: true, achievements: [{ apiname: "ACH_TEST", achieved: 1 }] },
+    });
+
+    const url = new URL(String(fetchLike.mock.calls[0]?.[0]));
+    expect(url.pathname).toBe("/ISteamUserStats/GetPlayerAchievements/v0001/");
+    expect(url.searchParams.get("steamid")).toBe(config.steamId);
+    expect(url.searchParams.get("appid")).toBe("620");
+    expect(url.searchParams.get("l")).toBe("english");
+  });
+
+  test("requests achievement schemas with the documented endpoint and query", async () => {
+    const fetchLike = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(JSON.stringify({ game: { gameName: "Portal 2", availableGameStats: {} } }), {
+          status: 200,
+        }),
+    );
+    const client = createSteamApiClient({ config, fetch: fetchLike as typeof fetch });
+
+    await expect(client.getAchievementSchema(620)).resolves.toMatchObject({
+      game: { gameName: "Portal 2", availableGameStats: { achievements: [] } },
+    });
+
+    const url = new URL(String(fetchLike.mock.calls[0]?.[0]));
+    expect(url.pathname).toBe("/ISteamUserStats/GetSchemaForGame/v2/");
+    expect(url.searchParams.get("appid")).toBe("620");
+    expect(url.searchParams.get("l")).toBe("english");
+  });
 });

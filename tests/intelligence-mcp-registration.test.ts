@@ -18,6 +18,12 @@ function createServerForRegistration(preferencesUnavailable = false) {
   const steamClient: SteamApiClient = {
     getOwnedGames: vi.fn(async () => ({ response: { games: [] } })),
     getRecentGames: vi.fn(async () => ({ response: { games: [] } })),
+    getPlayerAchievements: vi.fn(async () => ({
+      playerstats: { success: false, achievements: [] },
+    })),
+    getAchievementSchema: vi.fn(async () => ({
+      game: { gameName: "Test Game", availableGameStats: { achievements: [] } },
+    })),
   };
   const preferences: RecommendationPreferencesService = {
     get: vi.fn((appId) => ({
@@ -35,8 +41,12 @@ function createServerForRegistration(preferencesUnavailable = false) {
     }),
   } as unknown as RecommendationPreferencesService;
   const recommendations: PlayNowRecommendationService = {
-    recommend: vi.fn(async () => ({
-      request: { availableMinutes: 60, maxResults: 3 },
+    recommend: vi.fn(async (request) => ({
+      request: request as {
+        availableMinutes: number;
+        maxResults: number;
+        sessionMode: "solo" | "with_friends" | "any";
+      },
       recommendations: [],
       exclusions: [],
     })),
@@ -98,6 +108,64 @@ describe("intelligence MCP prompts and resources", () => {
     await server.close();
   });
 
+  test("clarifies session finishability and total planning budgets", async () => {
+    const server = createServerForRegistration();
+    const client = new Client({ name: "test", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const tools = await client.listTools();
+    expect(tools.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "recommendation_get_play_now",
+          description:
+            "Recommend games for the current play session using tracker state, preferences, session mode, and duration as a secondary finishability signal.",
+        }),
+        expect.objectContaining({
+          name: "backlog_create_plan",
+          description:
+            "Create a weekly or monthly local backlog plan whose selected games fit within the requested total time budget when duration estimates are available.",
+        }),
+      ]),
+    );
+
+    const playNowPrompt = await client.getPrompt({
+      name: "play-now",
+      arguments: { availableMinutes: "60" },
+    });
+    const playNowText = playNowPrompt.messages[0]?.content;
+    expect(playNowText).toMatchObject({ type: "text" });
+    if (playNowText?.type === "text") {
+      expect(playNowText.text).toContain("secondary finishability signal");
+      expect(playNowText.text).not.toMatch(/entire game must fit/i);
+    }
+
+    const weeklyPrompt = await client.getPrompt({
+      name: "weekly-plan",
+      arguments: { availableMinutes: "300", targetGameCount: "3" },
+    });
+    const weeklyText = weeklyPrompt.messages[0]?.content;
+    expect(weeklyText).toMatchObject({ type: "text" });
+    if (weeklyText?.type === "text") {
+      expect(weeklyText.text).toContain("total weekly time budget");
+    }
+
+    const monthlyPrompt = await client.getPrompt({
+      name: "monthly-plan",
+      arguments: { availableMinutes: "1200", targetGameCount: "5" },
+    });
+    const monthlyText = monthlyPrompt.messages[0]?.content;
+    expect(monthlyText).toMatchObject({ type: "text" });
+    if (monthlyText?.type === "text") {
+      expect(monthlyText.text).toContain("total monthly time budget");
+    }
+
+    await client.close();
+    await server.close();
+  });
+
   test("registers local, read-only resources with sanitized snapshots", async () => {
     const server = createServerForRegistration();
     const client = new Client({ name: "test", version: "1.0.0" });
@@ -133,6 +201,31 @@ describe("intelligence MCP prompts and resources", () => {
       uri: "steam-library://intelligence/library-insights",
     });
     expect(JSON.stringify(insights)).not.toContain("secret");
+    await client.close();
+    await server.close();
+  });
+
+  test("defaults play-now session mode to solo and accepts with_friends", async () => {
+    const server = createServerForRegistration();
+    const client = new Client({ name: "test", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const withFriends = await client.callTool({
+      name: "recommendation_get_play_now",
+      arguments: { availableMinutes: 60, maxResults: 3, sessionMode: "with_friends" },
+    });
+    const defaultMode = await client.callTool({
+      name: "recommendation_get_play_now",
+      arguments: { availableMinutes: 60, maxResults: 3 },
+    });
+
+    expect(withFriends.isError).toBeUndefined();
+    expect(JSON.stringify(withFriends)).toContain('\\"sessionMode\\":\\"with_friends\\"');
+    expect(defaultMode.isError).toBeUndefined();
+    expect(JSON.stringify(defaultMode)).toContain('\\"sessionMode\\":\\"solo\\"');
+
     await client.close();
     await server.close();
   });

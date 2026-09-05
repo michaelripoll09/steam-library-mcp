@@ -1,7 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { Clock } from "../../src/cache/ttl-cache.js";
-import type { PlayNowRecommendationService } from "../../src/recommendations/play-now-recommendation-service.js";
+import {
+  createBacklogSelectionService,
+  type BacklogSelectionService,
+} from "../../src/backlog/backlog-selection-service.js";
 import { InputError } from "../../src/errors.js";
 import {
   createBacklogPlanService,
@@ -13,24 +16,34 @@ import { openTrackerDatabase } from "../../src/tracker/sqlite/database.js";
 const now = "2026-08-28T12:00:00.000Z";
 const clock: Clock = { now: () => Date.parse(now) };
 
-function recommendation(appId: number, name: string, durationEstimateMinutes: number | null) {
+function selection(
+  appId: number,
+  name: string,
+  durationEstimateMinutes: number,
+  estimatedRemainingMinutes: number,
+) {
   return {
     appId,
     name,
     durationEstimateMinutes,
-    reasons: [],
-    explanation: `Recommendation for ${name}.`,
+    estimatedRemainingMinutes,
+    explanation: `Selection for ${name}.`,
   } as const;
 }
 
-function createRecommendationService(
-  recommendations = [recommendation(620, "Portal 2", 480), recommendation(730, "CS2", null)],
-): Pick<PlayNowRecommendationService, "recommend"> {
+function createSelectionService(
+  selections = [selection(620, "Portal 2", 480, 180), selection(730, "CS2", 240, 60)],
+  exclusions: Awaited<ReturnType<BacklogSelectionService["select"]>>["exclusions"] = [],
+): Pick<BacklogSelectionService, "select"> {
   return {
-    recommend: vi.fn(async () => ({
-      request: { availableMinutes: 120, maxResults: 2 },
-      recommendations,
-      exclusions: [],
+    select: vi.fn(async () => ({
+      selections,
+      allocatedMinutes: selections.reduce(
+        (total, selected) => total + selected.estimatedRemainingMinutes,
+        0,
+      ),
+      unallocatedMinutes: 0,
+      exclusions,
     })),
   };
 }
@@ -45,13 +58,13 @@ function createRepository(): BacklogPlanRepository {
 }
 
 describe("BacklogPlanService", () => {
-  test("snapshots selected play-now recommendations in rank order", async () => {
-    const recommendations = createRecommendationService();
+  test("snapshots backlog selections in rank order with their remaining estimates", async () => {
+    const selectionService = createSelectionService();
     const repository = createRepository();
     const service = createBacklogPlanService({
       clock,
       createId: () => "weekly-1",
-      recommendationService: recommendations,
+      selectionService,
       repository,
     });
 
@@ -61,9 +74,9 @@ describe("BacklogPlanService", () => {
       targetGameCount: 2,
     });
 
-    expect(recommendations.recommend).toHaveBeenCalledWith({
+    expect(selectionService.select).toHaveBeenCalledWith({
       availableMinutes: 120,
-      maxResults: 2,
+      targetGameCount: 2,
     });
     expect(result.plan).toMatchObject({
       id: "weekly-1",
@@ -79,8 +92,8 @@ describe("BacklogPlanService", () => {
           rank: 1,
           appId: 620,
           name: "Portal 2",
-          durationEstimateMinutes: 480,
-          explanation: "Recommendation for Portal 2.",
+          durationEstimateMinutes: 180,
+          explanation: "Selection for Portal 2.",
           progress: "not_started",
         },
         {
@@ -88,8 +101,8 @@ describe("BacklogPlanService", () => {
           rank: 2,
           appId: 730,
           name: "CS2",
-          durationEstimateMinutes: null,
-          explanation: "Recommendation for CS2.",
+          durationEstimateMinutes: 60,
+          explanation: "Selection for CS2.",
           progress: "not_started",
         },
       ],
@@ -97,12 +110,63 @@ describe("BacklogPlanService", () => {
     expect(repository.replaceActive).toHaveBeenCalledWith(result.plan);
   });
 
-  test("reports a shortfall without exceeding the requested item limit", async () => {
+  test("excludes fully played games before persisting a SQLite plan", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const repository = new SqliteBacklogPlanRepository(database);
+    const selectionService = createBacklogSelectionService({
+      library: {
+        getLibrary: async () => ({
+          steamId: "test-steam-id",
+          games: [
+            {
+              appId: 620,
+              name: "Portal 2",
+              playtimeMinutes: 480,
+              isPlayable: true,
+            },
+          ],
+          fetchedAt: now,
+        }),
+      },
+      trackerRepository: { list: () => [] },
+      preferenceRepository: { get: () => undefined },
+      gameDurationService: {
+        getEstimate: async () => ({
+          appId: 620,
+          igdbGameId: 620,
+          source: "igdb" as const,
+          refreshedAt: now,
+          normally: { minutes: 480, hours: 8 },
+        }),
+      },
+    });
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "weekly-fully-played",
+      selectionService,
+      repository,
+    });
+
+    try {
+      await expect(
+        service.create({ cadence: "weekly", availableMinutes: 60, targetGameCount: 1 }),
+      ).resolves.toMatchObject({ plan: { items: [] } });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM backlog_plan_items").get()).toEqual({
+        count: 0,
+      });
+    } finally {
+      database.close();
+    }
+  });
+  test("reports an eligibility shortfall with selected count and budget", async () => {
     const repository = createRepository();
     const service = createBacklogPlanService({
       clock,
       createId: () => "monthly-1",
-      recommendationService: createRecommendationService([recommendation(620, "Portal 2", 480)]),
+      selectionService: createSelectionService(
+        [selection(620, "Portal 2", 480, 180)],
+        [{ reason: "duration_unknown", count: 2 }],
+      ),
       repository,
     });
 
@@ -116,17 +180,44 @@ describe("BacklogPlanService", () => {
     expect(result.shortfall).toEqual({
       requestedGameCount: 3,
       selectedGameCount: 1,
-      message: "Only 1 eligible game was available for this plan; 2 more were requested.",
+      message:
+        "Selected 1 of 3 games within the 240-minute budget; no additional eligible games were available.",
+    });
+  });
+
+  test("reports a capacity shortfall separately from eligibility", async () => {
+    const repository = createRepository();
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "monthly-2",
+      selectionService: createSelectionService(
+        [selection(620, "Portal 2", 480, 180)],
+        [{ reason: "over_budget", count: 2 }],
+      ),
+      repository,
+    });
+
+    const result = await service.create({
+      cadence: "monthly",
+      availableMinutes: 240,
+      targetGameCount: 3,
+    });
+
+    expect(result.shortfall).toEqual({
+      requestedGameCount: 3,
+      selectedGameCount: 1,
+      message:
+        "Selected 1 of 3 games within the 240-minute budget; additional eligible games exceeded the remaining budget.",
     });
   });
 
   test("rejects invalid plan inputs before invoking injected dependencies", async () => {
-    const recommendationService = createRecommendationService();
+    const selectionService = createSelectionService();
     const repository = createRepository();
     const service = createBacklogPlanService({
       clock,
       createId: () => "unused",
-      recommendationService,
+      selectionService,
       repository,
     });
 
@@ -139,7 +230,7 @@ describe("BacklogPlanService", () => {
     await expect(
       service.create({ cadence: "weekly", availableMinutes: 60, targetGameCount: 0 }),
     ).rejects.toBeInstanceOf(InputError);
-    expect(recommendationService.recommend).not.toHaveBeenCalled();
+    expect(selectionService.select).not.toHaveBeenCalled();
     expect(repository.replaceActive).not.toHaveBeenCalled();
   });
 
@@ -148,7 +239,7 @@ describe("BacklogPlanService", () => {
     const service = createBacklogPlanService({
       clock,
       createId: () => "unused",
-      recommendationService: createRecommendationService(),
+      selectionService: createSelectionService(),
       repository,
     });
 
@@ -163,12 +254,12 @@ describe("BacklogPlanService", () => {
   test("archives an existing active cadence plan transactionally when creating its replacement", async () => {
     const database = openTrackerDatabase(":memory:");
     const repository = new SqliteBacklogPlanRepository(database);
-    const recommendations = createRecommendationService([recommendation(620, "Portal 2", 480)]);
+    const selectionService = createSelectionService([selection(620, "Portal 2", 480, 180)]);
     let nextId = 1;
     const service = createBacklogPlanService({
       clock,
       createId: () => `weekly-${nextId++}`,
-      recommendationService: recommendations,
+      selectionService,
       repository,
     });
 
@@ -205,7 +296,7 @@ describe("BacklogPlanService", () => {
     const service = createBacklogPlanService({
       clock,
       createId: () => `weekly-${nextId++}`,
-      recommendationService: createRecommendationService([recommendation(620, "Portal 2", 480)]),
+      selectionService: createSelectionService([selection(620, "Portal 2", 480, 180)]),
       repository,
     });
 
@@ -239,7 +330,7 @@ describe("BacklogPlanService", () => {
     const service = createBacklogPlanService({
       clock,
       createId: () => "weekly-1",
-      recommendationService: createRecommendationService([recommendation(620, "Portal 2", 480)]),
+      selectionService: createSelectionService([selection(620, "Portal 2", 480, 180)]),
       repository,
     });
 

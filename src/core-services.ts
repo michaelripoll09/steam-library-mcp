@@ -13,13 +13,18 @@ import {
 } from "./durations/game-duration-service.js";
 import { SqliteGameDurationRepository } from "./durations/sqlite/game-duration-repository.js";
 import { createMetadataService, type MetadataService } from "./services/metadata-service.js";
+import {
+  createAchievementService,
+  type AchievementService,
+  type AchievementResult,
+} from "./services/achievement-service.js";
 import { createSteamService, type SteamService } from "./services/steam-service.js";
 import { createSteamApiClient, type FetchLike, type SteamApiClient } from "./steam/client.js";
 import {
   createGamingTrackerService,
   type GamingTrackerService,
 } from "./tracker/gaming-tracker-service.js";
-import { openTrackerDatabase } from "./tracker/sqlite/database.js";
+import { openTrackerDatabase, type TrackerDatabase } from "./tracker/sqlite/database.js";
 import { SqliteTrackerRepository } from "./tracker/sqlite/tracker-repository.js";
 import {
   createRecommendationPreferencesService,
@@ -35,6 +40,10 @@ import {
   type BacklogPlanService,
 } from "./backlog/backlog-plan-service.js";
 import { SqliteBacklogPlanRepository } from "./backlog/sqlite/backlog-plan-repository.js";
+import {
+  createBacklogSelectionService,
+  type BacklogSelectionService,
+} from "./backlog/backlog-selection-service.js";
 import { createTaskRunner, type TaskRunner } from "./tasks/task-runner.js";
 import {
   createPublicSteamGameLookup,
@@ -43,29 +52,35 @@ import {
 
 export type CoreServiceOverrides = Readonly<{
   config?: AppConfig;
+  database?: TrackerDatabase;
   fetch?: FetchLike;
   clock?: Clock;
   cache?: Cache<ReturnType<SteamService["getLibrary"]> extends Promise<infer T> ? T : never>;
   steamClient?: SteamApiClient;
   steamService?: SteamService;
+  achievementService?: AchievementService;
   gamingTrackerService?: GamingTrackerService;
   recommendationPreferencesService?: RecommendationPreferencesService;
   metadataService?: MetadataService;
   gameDurationService?: GameDurationService;
   playNowRecommendationService?: PlayNowRecommendationService;
+  backlogSelectionService?: BacklogSelectionService;
   backlogPlanService?: BacklogPlanService;
   taskRunner?: TaskRunner;
 }>;
 
 export type CoreServices = Readonly<{
   steamService: SteamService;
+  achievementService: AchievementService;
   gamingTrackerService: GamingTrackerService;
   recommendationPreferencesService: RecommendationPreferencesService;
   metadataService: MetadataService;
   gameDurationService: GameDurationService;
   playNowRecommendationService: PlayNowRecommendationService;
+  backlogSelectionService: BacklogSelectionService;
   backlogPlanService: BacklogPlanService;
   taskRunner: TaskRunner;
+  close(): void;
 }>;
 
 export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreServices {
@@ -74,56 +89,100 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     resolvedConfig ??= overrides.config ?? loadConfig();
     return resolvedConfig;
   };
+  let resolvedSteamClient: SteamApiClient | undefined;
+  const steamClient = (): SteamApiClient => {
+    resolvedSteamClient ??=
+      overrides.steamClient ?? createSteamApiClient({ config: config(), fetch: overrides.fetch });
+    return resolvedSteamClient;
+  };
+  let resolvedDatabase: TrackerDatabase | undefined;
+  let ownsDatabase = false;
+  let databaseClosed = false;
+  const database = (): TrackerDatabase => {
+    if (resolvedDatabase !== undefined) return resolvedDatabase;
+    if (overrides.database !== undefined) {
+      resolvedDatabase = overrides.database;
+      return resolvedDatabase;
+    }
+    try {
+      resolvedDatabase = openTrackerDatabase(config().trackerDatabasePath);
+      ownsDatabase = true;
+      return resolvedDatabase;
+    } catch (error) {
+      throw new TrackerPersistenceError(error);
+    }
+  };
   const clock = overrides.clock ?? { now: Date.now };
   const steamService =
     overrides.steamService ??
     createSteamService({
       config: config(),
-      steamClient:
-        overrides.steamClient ?? createSteamApiClient({ config: config(), fetch: overrides.fetch }),
+      steamClient: steamClient(),
       cache: overrides.cache ?? new TtlCache({ now: clock.now }),
       clock,
-      manualRepository: createDefaultManualLibraryRepository(config()),
+      manualRepository: createDefaultManualLibraryRepository(database()),
       publicGameLookup: createPublicSteamGameLookup(overrides.fetch),
+    });
+  const achievementService =
+    overrides.achievementService ??
+    createAchievementService({
+      config: config(),
+      steamService,
+      steamClient: steamClient(),
+      cache: new TtlCache<AchievementResult>({ now: clock.now }),
     });
   const gamingTrackerService =
     overrides.gamingTrackerService ??
-    createDefaultGamingTrackerService(config(), clock, steamService);
+    createDefaultGamingTrackerService(database(), clock, steamService);
   const recommendationPreferencesService =
     overrides.recommendationPreferencesService ??
-    createDefaultRecommendationPreferencesService(config());
+    createDefaultRecommendationPreferencesService(database());
   const metadataService =
     overrides.metadataService ?? createDefaultMetadataService(steamService, clock, overrides.fetch);
   const gameDurationService =
     overrides.gameDurationService ??
-    createDefaultGameDurationService(config(), clock, overrides.fetch);
+    createDefaultGameDurationService(database(), clock, overrides.fetch);
   const playNowRecommendationService =
     overrides.playNowRecommendationService ??
-    createDefaultPlayNowRecommendationService(config(), steamService, gameDurationService);
+    createDefaultPlayNowRecommendationService(database(), steamService, gameDurationService);
+  const backlogSelectionService =
+    overrides.backlogSelectionService ??
+    createDefaultBacklogSelectionService(database(), steamService, gameDurationService);
   const backlogPlanService =
     overrides.backlogPlanService ??
-    createDefaultBacklogPlanService(config(), clock, playNowRecommendationService);
+    createDefaultBacklogPlanService(database(), clock, backlogSelectionService);
   const taskRunner =
     overrides.taskRunner ??
     (overrides.config === undefined && allCoreServicesAreOverridden(overrides)
       ? createUnavailableTaskRunner()
-      : createDefaultTaskRunner(config(), steamService, gameDurationService, backlogPlanService));
+      : createDefaultTaskRunner(database(), steamService, gameDurationService, backlogPlanService));
+
+  const close = () => {
+    if (!ownsDatabase || databaseClosed || resolvedDatabase === undefined) return;
+    resolvedDatabase.close();
+    databaseClosed = true;
+  };
 
   return Object.freeze({
     steamService,
+    achievementService,
     gamingTrackerService,
     recommendationPreferencesService,
     metadataService,
     gameDurationService,
     playNowRecommendationService,
+    backlogSelectionService,
     backlogPlanService,
     taskRunner,
+    close,
   });
 }
 
-function createDefaultManualLibraryRepository(config: AppConfig): SqliteManualLibraryRepository {
+function createDefaultManualLibraryRepository(
+  database: TrackerDatabase,
+): SqliteManualLibraryRepository {
   try {
-    return new SqliteManualLibraryRepository(openTrackerDatabase(config.trackerDatabasePath));
+    return new SqliteManualLibraryRepository(database);
   } catch (error) {
     throw new TrackerPersistenceError(error);
   }
@@ -132,11 +191,13 @@ function createDefaultManualLibraryRepository(config: AppConfig): SqliteManualLi
 function allCoreServicesAreOverridden(overrides: CoreServiceOverrides): boolean {
   return (
     overrides.steamService !== undefined &&
+    overrides.achievementService !== undefined &&
     overrides.gamingTrackerService !== undefined &&
     overrides.recommendationPreferencesService !== undefined &&
     overrides.metadataService !== undefined &&
     overrides.gameDurationService !== undefined &&
     overrides.playNowRecommendationService !== undefined &&
+    overrides.backlogSelectionService !== undefined &&
     overrides.backlogPlanService !== undefined
   );
 }
@@ -160,14 +221,14 @@ function createUnavailableTaskRunner(): TaskRunner {
 }
 
 function createDefaultTaskRunner(
-  config: AppConfig,
+  database: TrackerDatabase,
   steamService: SteamService,
   gameDurationService: GameDurationService,
   backlogPlanService: BacklogPlanService,
 ): TaskRunner {
   try {
     return createTaskRunner({
-      database: openTrackerDatabase(config.trackerDatabasePath),
+      database,
       handlers: {
         async sync_library(_request, context) {
           await steamService.refreshLibrary();
@@ -228,15 +289,13 @@ function disabledMetadataService(): MetadataService {
 }
 
 function createDefaultGameDurationService(
-  config: AppConfig,
+  database: TrackerDatabase,
   clock: Clock,
   fetch: FetchLike | undefined,
 ): GameDurationService {
   const metadataConfig = loadIgdbConfig();
   try {
-    const repository = new SqliteGameDurationRepository(
-      openTrackerDatabase(config.trackerDatabasePath),
-    );
+    const repository = new SqliteGameDurationRepository(database);
     return metadataConfig.enabled
       ? createGameDurationService({
           clock,
@@ -250,7 +309,7 @@ function createDefaultGameDurationService(
 }
 
 function createDefaultGamingTrackerService(
-  config: AppConfig,
+  database: TrackerDatabase,
   clock: Clock,
   steamService: SteamService,
 ): GamingTrackerService {
@@ -258,7 +317,7 @@ function createDefaultGamingTrackerService(
     return createGamingTrackerService({
       clock,
       ownershipLookup: { getOwnedGames: async () => (await steamService.getLibrary()).games },
-      repository: new SqliteTrackerRepository(openTrackerDatabase(config.trackerDatabasePath)),
+      repository: new SqliteTrackerRepository(database),
     });
   } catch (error) {
     throw new TrackerPersistenceError(error);
@@ -266,13 +325,11 @@ function createDefaultGamingTrackerService(
 }
 
 function createDefaultRecommendationPreferencesService(
-  config: AppConfig,
+  database: TrackerDatabase,
 ): RecommendationPreferencesService {
   try {
     return createRecommendationPreferencesService({
-      repository: new SqliteRecommendationPreferenceRepository(
-        openTrackerDatabase(config.trackerDatabasePath),
-      ),
+      repository: new SqliteRecommendationPreferenceRepository(database),
     });
   } catch (error) {
     throw new TrackerPersistenceError(error);
@@ -280,12 +337,11 @@ function createDefaultRecommendationPreferencesService(
 }
 
 function createDefaultPlayNowRecommendationService(
-  config: AppConfig,
+  database: TrackerDatabase,
   steamService: SteamService,
   gameDurationService: GameDurationService,
 ): PlayNowRecommendationService {
   try {
-    const database = openTrackerDatabase(config.trackerDatabasePath);
     return createPlayNowRecommendationService({
       library: steamService,
       trackerRepository: new SqliteTrackerRepository(database),
@@ -298,15 +354,32 @@ function createDefaultPlayNowRecommendationService(
 }
 
 function createDefaultBacklogPlanService(
-  config: AppConfig,
+  database: TrackerDatabase,
   clock: Clock,
-  recommendationService: PlayNowRecommendationService,
+  selectionService: BacklogSelectionService,
 ): BacklogPlanService {
   try {
     return createBacklogPlanService({
       clock,
-      recommendationService,
-      repository: new SqliteBacklogPlanRepository(openTrackerDatabase(config.trackerDatabasePath)),
+      selectionService,
+      repository: new SqliteBacklogPlanRepository(database),
+    });
+  } catch (error) {
+    throw new TrackerPersistenceError(error);
+  }
+}
+
+function createDefaultBacklogSelectionService(
+  database: TrackerDatabase,
+  steamService: SteamService,
+  gameDurationService: GameDurationService,
+): BacklogSelectionService {
+  try {
+    return createBacklogSelectionService({
+      library: steamService,
+      trackerRepository: new SqliteTrackerRepository(database),
+      preferenceRepository: new SqliteRecommendationPreferenceRepository(database),
+      gameDurationService,
     });
   } catch (error) {
     throw new TrackerPersistenceError(error);

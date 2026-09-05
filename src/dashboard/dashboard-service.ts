@@ -10,6 +10,7 @@ import type {
 } from "../recommendations/play-now-recommendation-service.js";
 import type { RecommendationPreferencesService } from "../recommendations/recommendation-preferences-service.js";
 import type { SteamService } from "../services/steam-service.js";
+import type { AchievementResult, AchievementService } from "../services/achievement-service.js";
 import type { ManualLibraryGame } from "../manual-library/manual-library.js";
 import type { GamingTrackerService, TrackerMarkResult } from "../tracker/gaming-tracker-service.js";
 import type { TrackerGame } from "../domain/tracker.js";
@@ -31,6 +32,7 @@ import {
   type DashboardRecommendation,
   type DashboardRecommendationPreference,
   type DashboardRecommendations,
+  type DashboardSessionMode,
 } from "./contracts.js";
 
 type DashboardServiceDependencies = Readonly<{
@@ -41,12 +43,14 @@ type DashboardServiceDependencies = Readonly<{
     | "getLibraryStats"
     | "getManualCollection"
     | "addManualCollection"
+    | "updateManualCollection"
     | "removeManualCollection"
   >;
   gamingTrackerService: Pick<GamingTrackerService, "getStatuses" | "mark">;
   recommendationPreferencesService: Pick<RecommendationPreferencesService, "get" | "list" | "save">;
   playNowRecommendationService: Pick<PlayNowRecommendationService, "recommend">;
   backlogPlanService: Pick<BacklogPlanService, "create" | "listActive" | "setItemProgress">;
+  achievementService: Pick<AchievementService, "getGameAchievements">;
   taskRunner?: Pick<TaskRunner, "list" | "get" | "cancel">;
 }>;
 
@@ -54,11 +58,19 @@ export type DashboardService = Readonly<{
   getLibrary(): Promise<DashboardLibrary>;
   syncLibrary(): Promise<DashboardLibrary>;
   updateStatus(appId: unknown, status: unknown): Promise<DashboardStatusUpdate>;
+  getAchievements(appId: unknown): Promise<AchievementResult>;
   getManualCollection(): readonly ManualLibraryGame[];
   addManualCollection(steam: unknown): Promise<ManualLibraryGame>;
+  updateManualCollection(
+    appId: unknown,
+    patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+  ): Promise<ManualLibraryGame>;
   removeManualCollection(appId: unknown): boolean;
   getIntelligenceSnapshot(): Promise<DashboardInsightSnapshot>;
-  getRecommendations(availableMinutes: unknown): Promise<DashboardRecommendations>;
+  getRecommendations(
+    availableMinutes: unknown,
+    sessionMode: unknown,
+  ): Promise<DashboardRecommendations>;
   getPreference(appId: unknown): DashboardRecommendationPreference;
   savePreference(appId: unknown, preference: unknown): DashboardRecommendationPreference;
   listPlans(): readonly DashboardPlan[];
@@ -79,6 +91,7 @@ export function createDashboardService({
   recommendationPreferencesService,
   playNowRecommendationService,
   backlogPlanService,
+  achievementService,
   taskRunner,
 }: DashboardServiceDependencies): DashboardService {
   async function project(library: SteamLibrary): Promise<DashboardLibrary> {
@@ -102,13 +115,25 @@ export function createDashboardService({
         library: await project(await steamService.getLibrary()),
       });
     },
+    getAchievements(appId) {
+      return achievementService.getGameAchievements(appId);
+    },
     getManualCollection() {
       return steamService.getManualCollection?.() ?? [];
     },
     addManualCollection(steam) {
       if (steamService.addManualCollection === undefined)
         throw new InputError("Manual collections are unavailable.");
-      return steamService.addManualCollection(steam);
+      if (typeof steam !== "string")
+        throw new InputError("Provide a positive Steam app ID or a Steam store app URL.");
+      return steamService.addManualCollection({ steam });
+    },
+    updateManualCollection(appId, patch) {
+      assertAppId(appId);
+      if (steamService.updateManualCollection === undefined)
+        throw new InputError("Manual collections are unavailable.");
+      assertManualCollectionPatch(patch);
+      return steamService.updateManualCollection({ appId, ...patch });
     },
     removeManualCollection(appId) {
       assertAppId(appId);
@@ -128,17 +153,20 @@ export function createDashboardService({
         preferences: createPreferenceSummary(preferences),
       });
     },
-    async getRecommendations(availableMinutes) {
+    async getRecommendations(availableMinutes, sessionMode) {
       assertPositiveSafeInteger(
         availableMinutes,
         "Available minutes must be a positive safe integer.",
       );
+      assertDashboardSessionMode(sessionMode);
       const result = await playNowRecommendationService.recommend({
         availableMinutes,
         maxResults: 5,
+        sessionMode,
       });
       return Object.freeze({
         availableMinutes: result.request.availableMinutes,
+        sessionMode: result.request.sessionMode,
         recommendations: Object.freeze(result.recommendations.map(toDashboardRecommendation)),
       });
     },
@@ -211,6 +239,7 @@ function toDashboardRecommendation(recommendation: PlayNowRecommendation): Dashb
     appId: recommendation.appId,
     name: recommendation.name,
     durationEstimateMinutes: recommendation.durationEstimateMinutes,
+    estimatedRemainingMinutes: recommendation.estimatedRemainingMinutes,
     reasons: Object.freeze(recommendation.reasons.map((reason) => reason.code)),
     explanation: recommendation.explanation,
   });
@@ -304,7 +333,9 @@ function createStatusStats(games: readonly DashboardGame[]): DashboardStatusStat
   return Object.freeze(stats);
 }
 
-function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
+function toDashboardMarkResult(
+  result: TrackerMarkResult<DashboardMutableStatus>,
+): DashboardMarkResult {
   return result.outcome === "not_owned"
     ? Object.freeze({ outcome: result.outcome, appId: result.appId })
     : Object.freeze({ outcome: result.outcome, appId: result.appId, status: result.status });
@@ -313,6 +344,27 @@ function toDashboardMarkResult(result: TrackerMarkResult): DashboardMarkResult {
 function assertAppId(appId: unknown): asserts appId is number {
   if (typeof appId !== "number" || !Number.isSafeInteger(appId) || appId <= 0) {
     throw new TrackerInputError();
+  }
+}
+
+function assertManualCollectionPatch(
+  patch: unknown,
+): asserts patch is { accessType?: "manual" | "family"; isPlayable?: boolean } {
+  if (
+    patch === null ||
+    typeof patch !== "object" ||
+    Array.isArray(patch) ||
+    Object.keys(patch).length === 0 ||
+    Object.keys(patch).some((key) => key !== "accessType" && key !== "isPlayable") ||
+    ("accessType" in patch &&
+      patch.accessType !== undefined &&
+      patch.accessType !== "manual" &&
+      patch.accessType !== "family") ||
+    ("isPlayable" in patch &&
+      patch.isPlayable !== undefined &&
+      typeof patch.isPlayable !== "boolean")
+  ) {
+    throw new InputError("At least one access field must be provided.");
   }
 }
 
@@ -328,8 +380,14 @@ function assertPositiveSafeInteger(value: unknown, message: string): asserts val
   }
 }
 
+function assertDashboardSessionMode(value: unknown): asserts value is DashboardSessionMode {
+  if (value !== "solo" && value !== "with_friends" && value !== "any") {
+    throw new InputError("Session mode must be solo, with_friends, or any.");
+  }
+}
+
 function assertMutableStatus(status: unknown): asserts status is DashboardMutableStatus {
   if (!DASHBOARD_MUTABLE_STATUSES.includes(status as DashboardMutableStatus)) {
-    throw new InputError("Status must be one of playing, completed, or dropped.");
+    throw new InputError("Status must be one of playing, paused, completed, or dropped.");
   }
 }

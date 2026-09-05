@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   manualCollectionAddInputSchema,
   manualCollectionRemoveInputSchema,
+  manualCollectionUpdateInputSchema,
   recentGamesInputSchema,
   searchLibraryInputSchema,
   steamGameInputSchema,
@@ -56,8 +57,18 @@ function createService(): SteamService {
     addManualCollection: vi.fn(async () => ({
       appId: 413150,
       name: "Stardew Valley",
+      accessType: "manual" as const,
+      isPlayable: false,
       createdAt: "2026-08-30T00:00:00.000Z",
       updatedAt: "2026-08-30T00:00:00.000Z",
+    })),
+    updateManualCollection: vi.fn(async () => ({
+      appId: 413150,
+      name: "Stardew Valley",
+      accessType: "family" as const,
+      isPlayable: true,
+      createdAt: "2026-08-30T00:00:00.000Z",
+      updatedAt: "2026-08-31T00:00:00.000Z",
     })),
     removeManualCollection: vi.fn(() => true),
   };
@@ -71,6 +82,10 @@ describe("Steam tool input schemas", () => {
     expect(recentGamesInputSchema.safeParse({ count: 51 }).success).toBe(false);
     expect(recentGamesInputSchema.safeParse({ count: 1.5 }).success).toBe(false);
     expect(manualCollectionAddInputSchema.safeParse({ steam: 413150 }).success).toBe(false);
+    expect(manualCollectionUpdateInputSchema.safeParse({ appId: 413150 }).success).toBe(false);
+    expect(
+      manualCollectionUpdateInputSchema.safeParse({ appId: 413150, accessType: "shared" }).success,
+    ).toBe(false);
     expect(manualCollectionRemoveInputSchema.safeParse({ appId: 0 }).success).toBe(false);
   });
 
@@ -80,6 +95,13 @@ describe("Steam tool input schemas", () => {
     expect(recentGamesInputSchema.parse({})).toEqual({ count: 10 });
     expect(recentGamesInputSchema.parse({ count: 50 })).toEqual({ count: 50 });
     expect(manualCollectionAddInputSchema.parse({ steam: "413150" })).toEqual({ steam: "413150" });
+    expect(manualCollectionAddInputSchema.parse({ steam: "413150", accessType: "family" })).toEqual(
+      { steam: "413150", accessType: "family" },
+    );
+    expect(manualCollectionUpdateInputSchema.parse({ appId: 413150, isPlayable: true })).toEqual({
+      appId: 413150,
+      isPlayable: true,
+    });
     expect(manualCollectionRemoveInputSchema.parse({ appId: 413150 })).toEqual({ appId: 413150 });
   });
 });
@@ -99,6 +121,7 @@ describe("Steam MCP tools", () => {
       "steam_get_library_stats",
       "steam_get_manual_collection",
       "steam_add_manual_collection",
+      "steam_update_manual_collection",
       "steam_remove_manual_collection",
     ]);
     await expect(tools.get("steam_get_library")?.handler({})).resolves.toEqual({
@@ -119,6 +142,10 @@ describe("Steam MCP tools", () => {
     await tools.get("steam_get_library_stats")?.handler({});
     await tools.get("steam_get_manual_collection")?.handler({});
     await tools.get("steam_add_manual_collection")?.handler({ steam: "413150" });
+    await tools.get("steam_update_manual_collection")?.handler({
+      appId: 413150,
+      accessType: "family",
+    });
     await tools.get("steam_remove_manual_collection")?.handler({ appId: 413150 });
 
     expect(service.searchLibrary).toHaveBeenCalledWith("Portal");
@@ -126,7 +153,11 @@ describe("Steam MCP tools", () => {
     expect(service.getRecentGames).toHaveBeenCalledWith(10);
     expect(service.getLibraryStats).toHaveBeenCalledOnce();
     expect(service.getManualCollection).toHaveBeenCalledOnce();
-    expect(service.addManualCollection).toHaveBeenCalledWith("413150");
+    expect(service.addManualCollection).toHaveBeenCalledWith({ steam: "413150" });
+    expect(service.updateManualCollection).toHaveBeenCalledWith({
+      appId: 413150,
+      accessType: "family",
+    });
     expect(service.removeManualCollection).toHaveBeenCalledWith(413150);
   });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { SteamLibrary } from "../../src/domain/models.js";
+import type { AchievementResult } from "../../src/services/achievement-service.js";
 import type { TrackerGame } from "../../src/domain/tracker.js";
 import { InputError, TrackerInputError } from "../../src/errors.js";
 import { createDashboardService } from "../../src/dashboard/dashboard-service.js";
@@ -40,12 +41,17 @@ const library: SteamLibrary = {
   ],
 };
 
+type TrackerMark = <TStatus extends TrackerMarkStatus>(
+  appId: unknown,
+  status: TStatus,
+) => Promise<TrackerMarkResult<TStatus>>;
+
 function createFakes(
   overrides: {
     readonly getLibrary?: () => Promise<SteamLibrary>;
     readonly refreshLibrary?: () => Promise<SteamLibrary>;
     readonly getStatuses?: () => Promise<readonly TrackerGame[]>;
-    readonly mark?: (appId: unknown, status: TrackerMarkStatus) => Promise<TrackerMarkResult>;
+    readonly mark?: TrackerMark;
   } = {},
 ) {
   return {
@@ -64,12 +70,15 @@ function createFakes(
       getStatuses: vi.fn(overrides.getStatuses ?? (async () => [])),
       mark: vi.fn(
         overrides.mark ??
-          (async (appId: unknown, status: TrackerMarkStatus): Promise<TrackerMarkResult> => ({
+          (async <TStatus extends TrackerMarkStatus>(
+            appId: unknown,
+            status: TStatus,
+          ): Promise<TrackerMarkResult<TStatus>> => ({
             outcome: "updated",
             appId: appId as number,
             status,
           })),
-      ),
+      ) as unknown as TrackerMark,
     },
     recommendationPreferencesService: {
       get: vi.fn((appId: unknown) => ({
@@ -89,7 +98,7 @@ function createFakes(
     },
     playNowRecommendationService: {
       recommend: vi.fn(async () => ({
-        request: { availableMinutes: 1, maxResults: 5 },
+        request: { availableMinutes: 1, maxResults: 5, sessionMode: "solo" as const },
         recommendations: [],
         exclusions: [],
       })),
@@ -98,6 +107,9 @@ function createFakes(
       create: vi.fn(),
       listActive: vi.fn(() => []),
       setItemProgress: vi.fn(),
+    },
+    achievementService: {
+      getGameAchievements: vi.fn(),
     },
   };
 }
@@ -111,6 +123,74 @@ type StatusFixture = Readonly<{
 }>;
 
 describe("DashboardService", () => {
+  test("returns normalized achievement progress from the achievement service", async () => {
+    const result: AchievementResult = {
+      status: "available",
+      progress: {
+        appId: 10,
+        name: "Owned game",
+        unlockedCount: 1,
+        totalCount: 2,
+        completionPercent: 50,
+        achievements: [
+          {
+            apiName: "FIRST",
+            displayName: "First steps",
+            description: null,
+            achieved: true,
+            unlockTime: "2026-09-05T00:00:00.000Z",
+            iconUrl: "https://cdn.example/first.jpg",
+            iconGrayUrl: "https://cdn.example/first-gray.jpg",
+          },
+        ],
+      },
+    };
+    const fakes = createFakes();
+    fakes.achievementService.getGameAchievements.mockResolvedValue(result);
+    const service = createDashboardService(fakes as never) as unknown as {
+      getAchievements: (appId: unknown) => Promise<AchievementResult>;
+    };
+
+    await expect(service.getAchievements(10)).resolves.toEqual(result);
+    expect(fakes.achievementService.getGameAchievements).toHaveBeenCalledWith(10);
+  });
+
+  test("updates a manual collection entry with family access and playability", async () => {
+    const updateManualCollection = vi.fn(
+      async (patch: { appId: number; accessType?: "manual" | "family"; isPlayable?: boolean }) => ({
+        appId: patch.appId,
+        name: "Manual game",
+        accessType: patch.accessType ?? "manual",
+        isPlayable: patch.isPlayable ?? false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    );
+    const fakes = createFakes();
+    const service = createDashboardService({
+      ...fakes,
+      steamService: { ...fakes.steamService, updateManualCollection },
+    } as never) as unknown as {
+      updateManualCollection: (
+        appId: unknown,
+        patch: unknown,
+      ) => Promise<{ accessType: string; isPlayable: boolean }>;
+    };
+
+    const game = await service.updateManualCollection(20, {
+      accessType: "family",
+      isPlayable: true,
+    });
+
+    expect(updateManualCollection).toHaveBeenCalledWith({
+      appId: 20,
+      accessType: "family",
+      isPlayable: true,
+    });
+    expect(game.accessType).toBe("family");
+    expect(game.isPlayable).toBe(true);
+  });
+
   test("does not label an official library winner as manual", async () => {
     const fakes = createFakes();
     const service = createDashboardService({
@@ -121,6 +201,8 @@ describe("DashboardService", () => {
           {
             appId: 10,
             name: "Old manual",
+            accessType: "manual" as const,
+            isPlayable: false,
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
           },
@@ -165,12 +247,17 @@ describe("DashboardService", () => {
       },
       playNowRecommendationService: {
         recommend: vi.fn(async () => ({
-          request: { availableMinutes: 45, maxResults: 5 },
+          request: {
+            availableMinutes: 45,
+            maxResults: 5,
+            sessionMode: "with_friends" as const,
+          },
           recommendations: [
             {
               appId: 10,
               name: "Owned game",
               durationEstimateMinutes: null,
+              estimatedRemainingMinutes: null,
               reasons: [{ code: "duration_unknown" as const }],
               explanation: "Duration is unknown.",
             },
@@ -198,7 +285,7 @@ describe("DashboardService", () => {
       },
     } as never) as unknown as {
       getIntelligenceSnapshot: () => Promise<unknown>;
-      getRecommendations: (minutes: unknown) => Promise<unknown>;
+      getRecommendations: (minutes: unknown, sessionMode: unknown) => Promise<unknown>;
     };
 
     await expect(service.getIntelligenceSnapshot()).resolves.toEqual({
@@ -218,13 +305,15 @@ describe("DashboardService", () => {
         withFriendsGames: 1,
       },
     });
-    await expect(service.getRecommendations(45)).resolves.toEqual({
+    await expect(service.getRecommendations(45, "with_friends")).resolves.toEqual({
       availableMinutes: 45,
+      sessionMode: "with_friends",
       recommendations: [
         {
           appId: 10,
           name: "Owned game",
           durationEstimateMinutes: null,
+          estimatedRemainingMinutes: null,
           reasons: ["duration_unknown"],
           explanation: "Duration is unknown.",
         },
@@ -364,7 +453,14 @@ describe("DashboardService", () => {
       ]);
     const fakes = createFakes({
       getStatuses,
-      mark: async () => ({ outcome: "updated", appId: 20, status: "playing" }),
+      mark: async <TStatus extends TrackerMarkStatus>(
+        appId: unknown,
+        status: TStatus,
+      ): Promise<TrackerMarkResult<TStatus>> => ({
+        outcome: "updated",
+        appId: appId as number,
+        status,
+      }),
     });
     const service = createDashboardService(fakes);
 
@@ -386,7 +482,12 @@ describe("DashboardService", () => {
 
   test("preserves a not-owned mark outcome while returning the current projection", async () => {
     const fakes = createFakes({
-      mark: async () => ({ outcome: "not_owned", appId: 999 }),
+      mark: async <TStatus extends TrackerMarkStatus>(
+        appId: unknown,
+      ): Promise<TrackerMarkResult<TStatus>> => ({
+        outcome: "not_owned",
+        appId: appId as number,
+      }),
     });
     const service = createDashboardService(fakes);
 
@@ -409,7 +510,16 @@ describe("DashboardService", () => {
     },
   );
 
-  test.each(["backlog", "paused", "invalid", undefined])(
+  test("marks a game as paused", async () => {
+    const fakes = createFakes();
+    const service = createDashboardService(fakes);
+
+    await service.updateStatus(10, "paused");
+
+    expect(fakes.gamingTrackerService.mark).toHaveBeenCalledWith(10, "paused");
+  });
+
+  test.each(["backlog", "invalid", undefined])(
     "rejects non-mutable status %p before calling the tracker",
     async (status) => {
       const fakes = createFakes();

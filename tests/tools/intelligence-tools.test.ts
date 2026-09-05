@@ -38,12 +38,13 @@ function setup() {
   };
   const recommendations: PlayNowRecommendationService = {
     recommend: vi.fn(async () => ({
-      request: { availableMinutes: 60, maxResults: 3 },
+      request: { availableMinutes: 60, maxResults: 3, sessionMode: "solo" as const },
       recommendations: [
         {
           appId: 620,
           name: "Portal 2",
           durationEstimateMinutes: null,
+          estimatedRemainingMinutes: null,
           reasons: [{ code: "duration_unknown" as const }],
           explanation:
             "Duration is unknown, so this is a lower-confidence fit for your 60 minutes.",

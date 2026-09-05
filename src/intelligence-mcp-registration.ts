@@ -29,7 +29,7 @@ export function registerIntelligencePromptsAndResources(
     },
     ({ availableMinutes }) =>
       prompt(
-        `Use recommendation_get_play_now with availableMinutes ${availableMinutes} and a suitable maxResults. Explain the ranked choices and note any unknown durations.`,
+        `Use recommendation_get_play_now with availableMinutes ${availableMinutes} for this play session; treat duration as a secondary finishability signal rather than requiring the entire game to fit. Include a suitable maxResults, explain the ranked choices, and note any unknown durations.`,
       ),
   );
   server.registerPrompt(
@@ -43,7 +43,7 @@ export function registerIntelligencePromptsAndResources(
     },
     ({ availableMinutes, targetGameCount }) =>
       prompt(
-        `Use backlog_create_plan with cadence weekly, availableMinutes ${availableMinutes}, and targetGameCount ${targetGameCount}. Summarize the selected games and any shortfall.`,
+        `Use backlog_create_plan with cadence weekly, availableMinutes ${availableMinutes} as the total weekly time budget, and targetGameCount ${targetGameCount}. Summarize the selected games and any shortfall.`,
       ),
   );
   server.registerPrompt(
@@ -57,7 +57,7 @@ export function registerIntelligencePromptsAndResources(
     },
     ({ availableMinutes, targetGameCount }) =>
       prompt(
-        `Use backlog_create_plan with cadence monthly, availableMinutes ${availableMinutes}, and targetGameCount ${targetGameCount}. Summarize the selected games and any shortfall.`,
+        `Use backlog_create_plan with cadence monthly, availableMinutes ${availableMinutes} as the total monthly time budget, and targetGameCount ${targetGameCount}. Summarize the selected games and any shortfall.`,
       ),
   );
   server.registerPrompt(

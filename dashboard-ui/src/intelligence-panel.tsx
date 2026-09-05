@@ -7,6 +7,7 @@ import type {
   DashboardPlanItemProgress,
   DashboardRecommendationPreference,
   DashboardRecommendations,
+  DashboardSessionMode,
 } from "../../src/dashboard/contracts.js";
 import type { DashboardApi } from "./api.js";
 import { CustomSelect, type CustomSelectOption } from "./custom-select.js";
@@ -28,6 +29,12 @@ const PLAY_MODE_OPTIONS = [
   { value: "with_friends", label: "Con amigos" },
 ] as const satisfies readonly CustomSelectOption<"any" | "solo" | "with_friends">[];
 
+const SESSION_MODE_OPTIONS = [
+  { value: "solo", label: "Solo" },
+  { value: "with_friends", label: "Con amigos" },
+  { value: "any", label: "Cualquiera" },
+] as const satisfies readonly CustomSelectOption<DashboardSessionMode>[];
+
 const CADENCE_OPTIONS = [
   { value: "weekly", label: "Semanal" },
   { value: "monthly", label: "Mensual" },
@@ -45,6 +52,8 @@ export function IntelligencePanel({
   games,
 }: Readonly<{ api: DashboardApi; games: readonly DashboardGame[] }>) {
   const [availableMinutes, setAvailableMinutes] = useState("45");
+  const [planAvailableMinutes, setPlanAvailableMinutes] = useState("45");
+  const [sessionMode, setSessionMode] = useState<DashboardSessionMode>("solo");
   const [snapshot, setSnapshot] = useState<DashboardInsightSnapshot>();
   const [recommendations, setRecommendations] = useState<DashboardRecommendations>();
   const [plans, setPlans] = useState<readonly DashboardPlan[]>([]);
@@ -91,7 +100,7 @@ export function IntelligencePanel({
         selectedAppId === undefined ? Promise.resolve() : loadPreference(selectedAppId);
       const [nextSnapshot, nextRecommendations, nextPlans] = await Promise.all([
         api.getInsights(),
-        api.getRecommendations(validAvailableMinutes),
+        api.getRecommendations(validAvailableMinutes, sessionMode),
         api.getPlans(),
       ]);
       await preferencePromise;
@@ -119,7 +128,7 @@ export function IntelligencePanel({
 
     try {
       setError(undefined);
-      const nextRecommendations = await api.getRecommendations(validAvailableMinutes);
+      const nextRecommendations = await api.getRecommendations(validAvailableMinutes, sessionMode);
       setRecommendations(
         Array.isArray(nextRecommendations?.recommendations) ? nextRecommendations : undefined,
       );
@@ -141,8 +150,8 @@ export function IntelligencePanel({
   };
 
   const createPlan = async () => {
-    const validAvailableMinutes = positiveSafeInteger(availableMinutes);
-    if (validAvailableMinutes === undefined) {
+    const validPlanAvailableMinutes = positiveSafeInteger(planAvailableMinutes);
+    if (validPlanAvailableMinutes === undefined) {
       setError("Ingresa minutos disponibles válidos.");
       return;
     }
@@ -156,7 +165,7 @@ export function IntelligencePanel({
       setError(undefined);
       const result = await api.createPlan({
         cadence,
-        availableMinutes: validAvailableMinutes,
+        availableMinutes: validPlanAvailableMinutes,
         targetGameCount: validTargetGameCount,
       });
       setPlans(await api.getPlans());
@@ -186,7 +195,7 @@ export function IntelligencePanel({
       <div className="library-panel-heading">
         <div>
           <p className="eyebrow">Inteligencia local</p>
-          <h2 id="intelligence-heading">Jugar ahora</h2>
+          <h2 id="intelligence-heading">Qué jugar ahora</h2>
         </div>
         <button className="intelligence-button" type="button" onClick={() => void load()}>
           Cargar inteligencia
@@ -209,7 +218,7 @@ export function IntelligencePanel({
           <h3 id="recommendations-heading">Recomendaciones</h3>
           <div className="recommendations-controls">
             <label>
-              Minutos disponibles
+              Tiempo de esta sesión
               <input
                 type="number"
                 min="1"
@@ -217,6 +226,12 @@ export function IntelligencePanel({
                 onChange={(event) => setAvailableMinutes(event.target.value)}
               />
             </label>
+            <CustomSelect
+              label="Modo de sesión"
+              value={sessionMode}
+              options={SESSION_MODE_OPTIONS}
+              onChange={setSessionMode}
+            />
             <button
               className="intelligence-button intelligence-button-primary"
               type="button"
@@ -291,13 +306,22 @@ export function IntelligencePanel({
           </section>
 
           <section className="intelligence-side-card" aria-labelledby="plans-heading">
-            <h3 id="plans-heading">Planes de backlog</h3>
+            <h3 id="plans-heading">Plan de backlog</h3>
             <CustomSelect
               label="Cadencia"
               value={cadence}
               options={CADENCE_OPTIONS}
               onChange={setCadence}
             />
+            <label>
+              Tiempo total disponible en la semana/mes
+              <input
+                type="number"
+                min="1"
+                value={planAvailableMinutes}
+                onChange={(event) => setPlanAvailableMinutes(event.target.value)}
+              />
+            </label>
             <label>
               Juegos objetivo
               <input

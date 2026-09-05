@@ -66,59 +66,191 @@ function unavailableDuration() {
 }
 
 describe("PlayNowRecommendationService", () => {
-  test("ranks duration fits before over-budget games, then high priority and ongoing play", async () => {
+  test("does not rank a long playing game below an unstarted short game only because total duration exceeds the session", async () => {
     const { service } = createService({
       games: [
         {
-          appId: 40,
-          name: "Over budget",
-          playtimeMinutes: 0,
-          accessType: "owned",
-          isPlayable: true,
-        },
-        {
-          appId: 30,
-          name: "Normal fit",
-          playtimeMinutes: 0,
-          accessType: "owned",
-          isPlayable: true,
-        },
-        {
           appId: 20,
-          name: "Playing fit",
-          playtimeMinutes: 10,
+          name: "Long playing game",
+          playtimeMinutes: 120,
           accessType: "owned",
           isPlayable: true,
         },
-        { appId: 10, name: "High fit", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+        {
+          appId: 10,
+          name: "Short untouched game",
+          playtimeMinutes: 0,
+          accessType: "owned",
+          isPlayable: true,
+        },
       ],
       trackerEntries: [
         { appId: 20, status: "playing", createdAt: fetchedAt, updatedAt: fetchedAt },
       ],
-      preferences: new Map([
-        [10, { appId: 10, priority: "high", excludedFromRecommendations: false, playMode: "solo" }],
-      ]),
       durationByAppId: new Map([
-        [10, estimate(10, 60)],
-        [20, estimate(20, 60)],
-        [30, estimate(30, 60)],
-        [40, estimate(40, 180)],
+        [10, estimate(10, 45)],
+        [20, estimate(20, 1_200)],
       ]),
     });
 
-    const result = await service.recommend({ availableMinutes: 120, maxResults: 4 });
+    const result = await service.recommend({
+      availableMinutes: 60,
+      maxResults: 2,
+      sessionMode: "solo",
+    });
 
-    expect(result.recommendations.map((recommendation) => recommendation.appId)).toEqual([
-      10, 20, 30, 40,
-    ]);
-    expect(result.recommendations[0].reasons.map((reason) => reason.code)).toEqual([
-      "duration_within_budget",
-      "priority_high",
-    ]);
-    expect(result.recommendations[1].reasons.map((reason) => reason.code)).toEqual([
-      "duration_within_budget",
-      "status_ongoing",
-    ]);
+    expect(result.recommendations.map((recommendation) => recommendation.appId)).toEqual([20, 10]);
+    expect(result.recommendations[0]).toMatchObject({
+      estimatedRemainingMinutes: 1_080,
+      reasons: [{ code: "status_playing" }],
+    });
+  });
+
+  test("ranks paused before untouched games", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Untouched", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+        { appId: 2, name: "Paused", playtimeMinutes: 10, accessType: "owned", isPlayable: true },
+      ],
+      trackerEntries: [{ appId: 2, status: "paused", createdAt: fetchedAt, updatedAt: fetchedAt }],
+    });
+
+    const result = await service.recommend({
+      availableMinutes: 60,
+      maxResults: 2,
+      sessionMode: "solo",
+    });
+
+    expect(result.recommendations.map((recommendation) => recommendation.appId)).toEqual([2, 1]);
+    expect(result.recommendations[0]?.reasons).toContainEqual({ code: "status_paused" });
+  });
+
+  test("uses high priority before finishability within the same status tier", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Finishable", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+        {
+          appId: 2,
+          name: "High priority",
+          playtimeMinutes: 0,
+          accessType: "owned",
+          isPlayable: true,
+        },
+      ],
+      preferences: new Map([
+        [2, { appId: 2, priority: "high", excludedFromRecommendations: false, playMode: "any" }],
+      ]),
+      durationByAppId: new Map([
+        [1, estimate(1, 45)],
+        [2, estimate(2, 180)],
+      ]),
+    });
+
+    const result = await service.recommend({
+      availableMinutes: 60,
+      maxResults: 2,
+      sessionMode: "solo",
+    });
+
+    expect(result.recommendations.map((recommendation) => recommendation.appId)).toEqual([2, 1]);
+  });
+
+  test("uses finishability only as a tie-breaker", async () => {
+    const { service } = createService({
+      games: [
+        {
+          appId: 2,
+          name: "Not finishable",
+          playtimeMinutes: 0,
+          accessType: "owned",
+          isPlayable: true,
+        },
+        { appId: 1, name: "Finishable", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+      durationByAppId: new Map([
+        [1, estimate(1, 45)],
+        [2, estimate(2, 180)],
+      ]),
+    });
+
+    const result = await service.recommend({
+      availableMinutes: 60,
+      maxResults: 2,
+      sessionMode: "solo",
+    });
+
+    expect(result.recommendations.map((recommendation) => recommendation.appId)).toEqual([1, 2]);
+    expect(result.recommendations[0]?.reasons).toContainEqual({
+      code: "finishable_in_session",
+      estimatedRemainingMinutes: 45,
+      availableMinutes: 60,
+    });
+  });
+
+  test("includes with-friends-only games when sessionMode is with_friends", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Co-op", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+      preferences: new Map([
+        [
+          1,
+          {
+            appId: 1,
+            priority: "normal",
+            excludedFromRecommendations: false,
+            playMode: "with_friends",
+          },
+        ],
+      ]),
+    });
+
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "with_friends" }),
+    ).resolves.toMatchObject({ recommendations: [{ appId: 1 }] });
+  });
+
+  test("excludes with-friends-only games in solo mode", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Co-op", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+      preferences: new Map([
+        [
+          1,
+          {
+            appId: 1,
+            priority: "normal",
+            excludedFromRecommendations: false,
+            playMode: "with_friends",
+          },
+        ],
+      ]),
+    });
+
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "solo" }),
+    ).resolves.toMatchObject({
+      recommendations: [],
+      exclusions: [{ reason: "with_friends_only", count: 1 }],
+    });
+  });
+
+  test("does not exclude unknown-duration games", async () => {
+    const { service } = createService({
+      games: [
+        { appId: 1, name: "Unknown", playtimeMinutes: 0, accessType: "owned", isPlayable: true },
+      ],
+    });
+
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "solo" }),
+    ).resolves.toMatchObject({
+      recommendations: [
+        { appId: 1, durationEstimateMinutes: null, estimatedRemainingMinutes: null },
+      ],
+      exclusions: [],
+    });
   });
 
   test("reports every ineligible reason as an exclusion count instead of hiding filters", async () => {
@@ -161,18 +293,18 @@ describe("PlayNowRecommendationService", () => {
       ]),
     });
 
-    await expect(service.recommend({ availableMinutes: 60, maxResults: 5 })).resolves.toMatchObject(
-      {
-        recommendations: [],
-        exclusions: [
-          { reason: "not_playable", count: 1 },
-          { reason: "preference_excluded", count: 1 },
-          { reason: "with_friends_only", count: 1 },
-          { reason: "completed", count: 1 },
-          { reason: "dropped", count: 1 },
-        ],
-      },
-    );
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 5, sessionMode: "solo" }),
+    ).resolves.toMatchObject({
+      recommendations: [],
+      exclusions: [
+        { reason: "not_playable", count: 1 },
+        { reason: "preference_excluded", count: 1 },
+        { reason: "with_friends_only", count: 1 },
+        { reason: "completed", count: 1 },
+        { reason: "dropped", count: 1 },
+      ],
+    });
   });
 
   test("uses unknown-duration candidates only after known candidates and explains uncertainty", async () => {
@@ -184,13 +316,18 @@ describe("PlayNowRecommendationService", () => {
       durationByAppId: new Map([[1, estimate(1, 45)]]),
     });
 
-    const result = await service.recommend({ availableMinutes: 60, maxResults: 2 });
+    const result = await service.recommend({
+      availableMinutes: 60,
+      maxResults: 2,
+      sessionMode: "solo",
+    });
 
     expect(result.recommendations.map((recommendation) => recommendation.appId)).toEqual([1, 2]);
     expect(result.recommendations[1]).toMatchObject({
       durationEstimateMinutes: null,
+      estimatedRemainingMinutes: null,
       reasons: [{ code: "duration_unknown" }],
-      explanation: "Duration is unknown, so this is a lower-confidence fit for your 60 minutes.",
+      explanation: "Duration is unknown.",
     });
   });
 
@@ -206,11 +343,11 @@ describe("PlayNowRecommendationService", () => {
       ]),
     });
 
-    await expect(service.recommend({ availableMinutes: 60, maxResults: 2 })).resolves.toMatchObject(
-      {
-        recommendations: [{ appId: 10 }, { appId: 30 }],
-      },
-    );
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 2, sessionMode: "solo" }),
+    ).resolves.toMatchObject({
+      recommendations: [{ appId: 10 }, { appId: 30 }],
+    });
   });
 
   test.each([
@@ -243,19 +380,24 @@ describe("PlayNowRecommendationService", () => {
       durationByAppId: new Map([[1, estimate(1, 45)]]),
     });
 
-    await expect(service.recommend({ availableMinutes: 60, maxResults: 1 })).resolves.toMatchObject(
-      {
-        recommendations: [
-          {
-            appId: 1,
-            explanation: "Fits your 60 minutes (about 45 minutes). High priority.",
-            reasons: [
-              { code: "duration_within_budget", durationMinutes: 45, availableMinutes: 60 },
-              { code: "priority_high" },
-            ],
-          },
-        ],
-      },
-    );
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 1, sessionMode: "solo" }),
+    ).resolves.toMatchObject({
+      recommendations: [
+        {
+          appId: 1,
+          explanation:
+            "High priority. Can be finished in your 60 minutes (about 45 minutes remaining).",
+          reasons: [
+            { code: "priority_high" },
+            {
+              code: "finishable_in_session",
+              estimatedRemainingMinutes: 45,
+              availableMinutes: 60,
+            },
+          ],
+        },
+      ],
+    });
   });
 });

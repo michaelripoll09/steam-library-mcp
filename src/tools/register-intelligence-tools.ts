@@ -22,6 +22,7 @@ const playNowSchema = z
   .object({
     availableMinutes: z.number().int().safe().positive(),
     maxResults: z.number().int().safe().positive(),
+    sessionMode: z.enum(["solo", "with_friends", "any"]).default("solo"),
   })
   .strict();
 const createPlanSchema = z
@@ -74,14 +75,14 @@ export function registerIntelligenceTools(
   register(
     server,
     "recommendation_get_play_now",
-    "Get play-now recommendations using stored preferences, tracker status, and safe duration estimates.",
+    "Recommend games for the current play session using tracker state, preferences, session mode, and duration as a secondary finishability signal.",
     playNowSchema,
     (request) => services.recommendations.recommend(request),
   );
   register(
     server,
     "backlog_create_plan",
-    "Explicitly create a weekly or monthly backlog plan. This does not change Steam or tracker status.",
+    "Create a weekly or monthly local backlog plan whose selected games fit within the requested total time budget when duration estimates are available.",
     createPlanSchema,
     (request) => services.plans.create(request),
     false,

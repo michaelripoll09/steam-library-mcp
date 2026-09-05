@@ -9,6 +9,7 @@ type DashboardApiModule = Readonly<{
     getLibrary: () => Promise<unknown>;
     syncLibrary: () => Promise<unknown>;
     updateGameStatus: (appId: number, status: string) => Promise<unknown>;
+    getAchievements: (appId: number) => Promise<unknown>;
   }>;
   DashboardApiError: new (status: number, code: string | undefined, message: string) => Error;
 }>;
@@ -48,7 +49,7 @@ describe("dashboard browser API", () => {
     const api = module.createDashboardApi(fetch);
 
     await api.syncLibrary();
-    await api.updateGameStatus(42, "completed");
+    await api.updateGameStatus(42, "paused");
 
     expect(fetch.mock.calls).toEqual([
       ["/api/library/sync", { method: "POST" }],
@@ -57,7 +58,44 @@ describe("dashboard browser API", () => {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "completed" }),
+          body: JSON.stringify({ status: "paused" }),
+        },
+      ],
+    ]);
+  });
+
+  test("uses the relative achievements endpoint with an exact GET request", async () => {
+    const module = await loadApi();
+    expect(module).toBeDefined();
+    if (module === undefined) return;
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ status: "unavailable" }));
+
+    await module.createDashboardApi(fetch).getAchievements(1245620);
+
+    expect(fetch.mock.calls).toEqual([["/api/games/1245620/achievements", { method: "GET" }]]);
+  });
+
+  test("updates manual collection access metadata with an exact PATCH request", async () => {
+    const module = await loadApi();
+    expect(module).toBeDefined();
+    if (module === undefined) return;
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}));
+    const api = module.createDashboardApi(fetch) as unknown as {
+      updateManualCollection: (
+        appId: number,
+        patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
+      ) => Promise<unknown>;
+    };
+
+    await api.updateManualCollection(1245620, { accessType: "family", isPlayable: true });
+
+    expect(fetch.mock.calls).toEqual([
+      [
+        "/api/manual-collection/1245620",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessType: "family", isPlayable: true }),
         },
       ],
     ]);
@@ -70,7 +108,10 @@ describe("dashboard browser API", () => {
     const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}));
     const api = module.createDashboardApi(fetch) as unknown as {
       getInsights: () => Promise<unknown>;
-      getRecommendations: (minutes: number) => Promise<unknown>;
+      getRecommendations: (
+        minutes: number,
+        sessionMode: "solo" | "with_friends" | "any",
+      ) => Promise<unknown>;
       savePreference: (appId: number, preference: object) => Promise<unknown>;
       createPlan: (request: object) => Promise<unknown>;
       updatePlanItemProgress: (
@@ -81,7 +122,7 @@ describe("dashboard browser API", () => {
     };
 
     await api.getInsights();
-    await api.getRecommendations(45);
+    await api.getRecommendations(45, "with_friends");
     await api.savePreference(10, {
       priority: "high",
       excludedFromRecommendations: false,
@@ -92,7 +133,10 @@ describe("dashboard browser API", () => {
 
     expect(fetch.mock.calls).toEqual([
       ["/api/intelligence/insights", { method: "GET" }],
-      ["/api/intelligence/recommendations?availableMinutes=45", { method: "GET" }],
+      [
+        "/api/intelligence/recommendations?availableMinutes=45&sessionMode=with_friends",
+        { method: "GET" },
+      ],
       [
         "/api/games/10/preference",
         {

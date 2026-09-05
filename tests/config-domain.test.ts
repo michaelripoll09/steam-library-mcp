@@ -191,12 +191,12 @@ describe("project tooling", () => {
     expect(manifest.type).toBe("module");
   });
 
-  test("loads local environment files before starting the compiled server", () => {
+  test("loads local environment files when present before starting the compiled server", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { scripts?: Record<string, string> };
 
-    expect(manifest.scripts?.start).toBe("node --env-file=.env dist/index.js");
+    expect(manifest.scripts?.start).toBe("node --env-file-if-exists=.env dist/index.js");
     expect(manifest.scripts?.dev).toBe("npm run build && npm run start");
   });
 });

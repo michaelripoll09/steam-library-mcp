@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { AppError, InputError } from "../../errors.js";
 import type { DashboardService } from "../dashboard-service.js";
 import type { ArtworkResolver } from "../artwork-resolver.js";
+import { DASHBOARD_MUTABLE_STATUSES, type DashboardMutableStatus } from "../contracts.js";
 
 export const DASHBOARD_HOST = "127.0.0.1";
 export const MAX_JSON_BODY_BYTES = 16 * 1024;
@@ -45,8 +46,10 @@ export type DashboardHttpServerOptions = Readonly<{
     | "getLibrary"
     | "syncLibrary"
     | "updateStatus"
+    | "getAchievements"
     | "getManualCollection"
     | "addManualCollection"
+    | "updateManualCollection"
     | "removeManualCollection"
     | "getIntelligenceSnapshot"
     | "getRecommendations"
@@ -233,6 +236,23 @@ async function handleApi(
     return;
   }
 
+  const achievementsMatch = /^\/api\/games\/([^/]+)\/achievements$/.exec(pathname);
+  if (achievementsMatch !== null) {
+    const appId = parseAppId(achievementsMatch[1]);
+    if (appId === undefined) {
+      sendJson(
+        response,
+        400,
+        { error: { code: "INPUT_INVALID", message: "The app ID must be a positive integer." } },
+        method,
+      );
+      return;
+    }
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    await runService(response, method, () => dashboardService.getAchievements(appId), logger);
+    return;
+  }
+
   if (pathname === "/api/manual-collection") {
     if (method === "GET") {
       await runService(
@@ -256,7 +276,6 @@ async function handleApi(
   }
   const manualCollectionMatch = /^\/api\/manual-collection\/(\d+)$/.exec(pathname);
   if (manualCollectionMatch !== null) {
-    if (method !== "DELETE") return sendMethodNotAllowed(response, method, "DELETE");
     const appId = parseAppId(manualCollectionMatch[1]);
     if (appId === undefined) {
       sendJson(
@@ -267,6 +286,16 @@ async function handleApi(
       );
       return;
     }
+    if (method === "PATCH") {
+      try {
+        const patch = parseManualCollectionUpdatePayload(await readJsonBody(request));
+        sendJson(response, 200, await dashboardService.updateManualCollection(appId, patch));
+      } catch (error) {
+        sendError(response, error, logger, method);
+      }
+      return;
+    }
+    if (method !== "DELETE") return sendMethodNotAllowed(response, method, "DELETE, PATCH");
     await runService(
       response,
       method,
@@ -319,8 +348,8 @@ async function handleApi(
 
   if (pathname === "/api/intelligence/recommendations") {
     if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
-    const availableMinutes = parsePositiveQuery(request.url, "availableMinutes");
-    if (availableMinutes === undefined) {
+    const requestParameters = parsePlayNowQuery(request.url);
+    if (requestParameters === undefined) {
       sendJson(response, 400, {
         error: { code: "INPUT_INVALID", message: "Available minutes must be a positive integer." },
       });
@@ -329,7 +358,11 @@ async function handleApi(
     await runService(
       response,
       method,
-      () => dashboardService.getRecommendations(availableMinutes),
+      () =>
+        dashboardService.getRecommendations(
+          requestParameters.availableMinutes,
+          requestParameters.sessionMode,
+        ),
       logger,
     );
     return;
@@ -563,20 +596,20 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
-function parseStatusPayload(payload: unknown): "playing" | "completed" | "dropped" {
+function parseStatusPayload(payload: unknown): DashboardMutableStatus {
   if (
     payload === null ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
     Object.keys(payload).length !== 1 ||
     !("status" in payload) ||
-    !["playing", "completed", "dropped"].includes(
-      (payload as { status?: unknown }).status as string,
+    !DASHBOARD_MUTABLE_STATUSES.includes(
+      (payload as { status?: unknown }).status as DashboardMutableStatus,
     )
   ) {
-    throw new InputError("Status must be one of playing, completed, or dropped.");
+    throw new InputError("Status must be one of playing, paused, completed, or dropped.");
   }
-  return (payload as { status: "playing" | "completed" | "dropped" }).status;
+  return (payload as { status: DashboardMutableStatus }).status;
 }
 
 function parseManualCollectionPayload(payload: unknown): string {
@@ -584,6 +617,29 @@ function parseManualCollectionPayload(payload: unknown): string {
     throw new InputError("Provide a positive Steam app ID or a Steam store app URL.");
   }
   return payload.steam;
+}
+
+function parseManualCollectionUpdatePayload(payload: unknown): {
+  accessType?: "manual" | "family";
+  isPlayable?: boolean;
+} {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    Object.keys(payload).length === 0 ||
+    Object.keys(payload).some((key) => key !== "accessType" && key !== "isPlayable") ||
+    ("accessType" in payload &&
+      payload.accessType !== undefined &&
+      payload.accessType !== "manual" &&
+      payload.accessType !== "family") ||
+    ("isPlayable" in payload &&
+      payload.isPlayable !== undefined &&
+      typeof payload.isPlayable !== "boolean")
+  ) {
+    throw new InputError("At least one access field must be provided.");
+  }
+  return payload as { accessType?: "manual" | "family"; isPlayable?: boolean };
 }
 
 function parsePreferencePayload(payload: unknown): {
@@ -654,14 +710,30 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-function parsePositiveQuery(rawUrl: string | undefined, key: string): number | undefined {
+function parsePlayNowQuery(
+  rawUrl: string | undefined,
+):
+  Readonly<{ availableMinutes: number; sessionMode: "solo" | "with_friends" | "any" }> | undefined {
   const url = parseRequestUrl(rawUrl);
-  if (url === undefined || [...url.searchParams.keys()].some((name) => name !== key))
+  if (
+    url === undefined ||
+    [...url.searchParams.keys()].some(
+      (name) => name !== "availableMinutes" && name !== "sessionMode",
+    )
+  )
     return undefined;
-  const values = url.searchParams.getAll(key);
+  const values = url.searchParams.getAll("availableMinutes");
   if (values.length !== 1 || !/^\d+$/.test(values[0])) return undefined;
-  const value = Number(values[0]);
-  return isPositiveSafeInteger(value) ? value : undefined;
+  const availableMinutes = Number(values[0]);
+  const sessionModeValues = url.searchParams.getAll("sessionMode");
+  const sessionMode = sessionModeValues.length === 0 ? "solo" : sessionModeValues[0];
+  if (
+    !isPositiveSafeInteger(availableMinutes) ||
+    sessionModeValues.length > 1 ||
+    (sessionMode !== "solo" && sessionMode !== "with_friends" && sessionMode !== "any")
+  )
+    return undefined;
+  return { availableMinutes, sessionMode };
 }
 
 function decodeRouteId(value: string): string | undefined {

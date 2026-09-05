@@ -1,7 +1,11 @@
 import { type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 
-import { createCoreServices, type CoreServiceOverrides } from "../core-services.js";
+import {
+  createCoreServices,
+  type CoreServiceOverrides,
+  type CoreServices,
+} from "../core-services.js";
 import {
   DEFAULT_TRACKER_DATABASE_PATH,
   loadConfig,
@@ -31,11 +35,13 @@ export type DashboardStartOptions = CoreServiceOverrides &
 export async function startDashboardServer(options: DashboardStartOptions = {}): Promise<Server> {
   const config = options.config ?? loadConfig();
   const igdbConfig = options.igdbConfig ?? loadIgdbConfig();
+  let coreServices: CoreServices | undefined;
   const dashboardService =
     options.dashboardService ??
-    createDashboardService({
-      ...createCoreServices({ ...options, config }),
-    });
+    (() => {
+      coreServices = createCoreServices({ ...options, config });
+      return createDashboardService(coreServices);
+    })();
   const server = createDashboardHttpServer({
     dashboardService,
     artworkResolver:
@@ -55,15 +61,22 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
     host: DASHBOARD_HOST,
     port: options.port ?? config.dashboardPort,
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.port ?? config.dashboardPort, DASHBOARD_HOST, () => {
-      server.removeListener("error", reject);
-      resolve();
+  if (coreServices !== undefined) server.once("close", coreServices.close);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(options.port ?? config.dashboardPort, DASHBOARD_HOST, () => {
+        server.removeListener("error", reject);
+        resolve();
+      });
     });
-  });
+  } catch (error) {
+    coreServices?.close();
+    throw error;
+  }
   if (options.installSignalHandlers !== false) {
     const close = () => {
+      coreServices?.close();
       server.close(() => process.exit(0));
     };
     process.once("SIGINT", close);
