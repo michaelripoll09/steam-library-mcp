@@ -1,6 +1,11 @@
 import { useRef } from "react";
 
-import type { DashboardGame, DashboardMutableStatus } from "../../src/dashboard/contracts.js";
+import type {
+  DashboardAchievementResult,
+  DashboardGame,
+  DashboardMutableStatus,
+} from "../../src/dashboard/contracts.js";
+import type { SteamAchievement } from "../../src/domain/achievements.js";
 import { formatPlaytime } from "./library-filters.js";
 import { CoverImage, formatLabel } from "./library-panel.js";
 
@@ -17,6 +22,10 @@ export function GameDetails({
   isUpdatingStatus,
   statusError,
   statusMessage,
+  achievementResult,
+  isLoadingAchievements,
+  achievementError,
+  onLoadAchievements,
   onClose,
   onStatusChange,
 }: Readonly<{
@@ -25,6 +34,10 @@ export function GameDetails({
   isUpdatingStatus: boolean;
   statusError: string | undefined;
   statusMessage: string | undefined;
+  achievementResult: DashboardAchievementResult | undefined;
+  isLoadingAchievements: boolean;
+  achievementError: string | undefined;
+  onLoadAchievements: (() => Promise<void>) | undefined;
   onClose: () => void;
   onStatusChange: (status: DashboardMutableStatus) => Promise<void>;
 }>) {
@@ -119,10 +132,61 @@ export function GameDetails({
               {statusError}
             </p>
           )}
+          {onLoadAchievements !== undefined && (
+            <section className="achievement-progress" aria-labelledby="achievement-progress-title">
+              <h3 id="achievement-progress-title">Logros</h3>
+              {achievementResult === undefined &&
+                !isLoadingAchievements &&
+                achievementError === undefined && (
+                  <button type="button" onClick={() => void onLoadAchievements()}>
+                    Cargar logros
+                  </button>
+                )}
+              {isLoadingAchievements && <p aria-live="polite">Cargando logros…</p>}
+              {achievementError !== undefined && (
+                <p className="achievement-error" role="alert">
+                  No se pudieron cargar los logros. {achievementError}
+                </p>
+              )}
+              {achievementResult?.status === "unavailable" && (
+                <p className="achievement-unavailable">Los logros no están disponibles.</p>
+              )}
+              {achievementResult?.status === "available" && (
+                <>
+                  <p className="achievement-count">
+                    {achievementResult.progress.unlockedCount} /{" "}
+                    {achievementResult.progress.totalCount} ·{" "}
+                    {achievementResult.progress.completionPercent}%
+                  </p>
+                  <ul className="achievement-list" aria-label="Logros recientes y pendientes">
+                    {achievementResult.progress.achievements
+                      .slice()
+                      .sort(compareAchievements)
+                      .slice(0, 10)
+                      .map((achievement) => (
+                        <li key={achievement.apiName}>
+                          <strong>{achievement.displayName}</strong>
+                          <span>{achievement.achieved ? "Desbloqueado" : "Pendiente"}</span>
+                        </li>
+                      ))}
+                  </ul>
+                </>
+              )}
+            </section>
+          )}
         </div>
       </section>
     </div>
   );
+}
+
+function compareAchievements(left: SteamAchievement, right: SteamAchievement): number {
+  if (left.achieved !== right.achieved) return left.achieved ? -1 : 1;
+  if (left.achieved) {
+    const byUnlockTime = Date.parse(right.unlockTime ?? "") - Date.parse(left.unlockTime ?? "");
+    if (!Number.isNaN(byUnlockTime) && byUnlockTime !== 0) return byUnlockTime;
+  }
+  return left.displayName.localeCompare(right.displayName, "es");
 }
 
 function formatLastPlayed(value: string): string {

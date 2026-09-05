@@ -10,6 +10,7 @@ import type {
 } from "../recommendations/play-now-recommendation-service.js";
 import type { RecommendationPreferencesService } from "../recommendations/recommendation-preferences-service.js";
 import type { SteamService } from "../services/steam-service.js";
+import type { AchievementResult, AchievementService } from "../services/achievement-service.js";
 import type { ManualLibraryGame } from "../manual-library/manual-library.js";
 import type { GamingTrackerService, TrackerMarkResult } from "../tracker/gaming-tracker-service.js";
 import type { TrackerGame } from "../domain/tracker.js";
@@ -49,6 +50,7 @@ type DashboardServiceDependencies = Readonly<{
   recommendationPreferencesService: Pick<RecommendationPreferencesService, "get" | "list" | "save">;
   playNowRecommendationService: Pick<PlayNowRecommendationService, "recommend">;
   backlogPlanService: Pick<BacklogPlanService, "create" | "listActive" | "setItemProgress">;
+  achievementService: Pick<AchievementService, "getGameAchievements">;
   taskRunner?: Pick<TaskRunner, "list" | "get" | "cancel">;
 }>;
 
@@ -56,6 +58,7 @@ export type DashboardService = Readonly<{
   getLibrary(): Promise<DashboardLibrary>;
   syncLibrary(): Promise<DashboardLibrary>;
   updateStatus(appId: unknown, status: unknown): Promise<DashboardStatusUpdate>;
+  getAchievements(appId: unknown): Promise<AchievementResult>;
   getManualCollection(): readonly ManualLibraryGame[];
   addManualCollection(steam: unknown): Promise<ManualLibraryGame>;
   updateManualCollection(
@@ -88,6 +91,7 @@ export function createDashboardService({
   recommendationPreferencesService,
   playNowRecommendationService,
   backlogPlanService,
+  achievementService,
   taskRunner,
 }: DashboardServiceDependencies): DashboardService {
   async function project(library: SteamLibrary): Promise<DashboardLibrary> {
@@ -110,6 +114,9 @@ export function createDashboardService({
         mark: toDashboardMarkResult(mark),
         library: await project(await steamService.getLibrary()),
       });
+    },
+    getAchievements(appId) {
+      return achievementService.getGameAchievements(appId);
     },
     getManualCollection() {
       return steamService.getManualCollection?.() ?? [];

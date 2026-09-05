@@ -46,6 +46,7 @@ export type DashboardHttpServerOptions = Readonly<{
     | "getLibrary"
     | "syncLibrary"
     | "updateStatus"
+    | "getAchievements"
     | "getManualCollection"
     | "addManualCollection"
     | "updateManualCollection"
@@ -232,6 +233,23 @@ async function handleApi(
       return;
     }
     await runService(response, method, () => dashboardService.syncLibrary(), logger);
+    return;
+  }
+
+  const achievementsMatch = /^\/api\/games\/([^/]+)\/achievements$/.exec(pathname);
+  if (achievementsMatch !== null) {
+    const appId = parseAppId(achievementsMatch[1]);
+    if (appId === undefined) {
+      sendJson(
+        response,
+        400,
+        { error: { code: "INPUT_INVALID", message: "The app ID must be a positive integer." } },
+        method,
+      );
+      return;
+    }
+    if (method !== "GET") return sendMethodNotAllowed(response, method, "GET");
+    await runService(response, method, () => dashboardService.getAchievements(appId), logger);
     return;
   }
 

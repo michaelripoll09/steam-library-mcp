@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type {
   DashboardGame,
+  DashboardAchievementResult,
   DashboardLibrary,
   DashboardMutableStatus,
 } from "../../src/dashboard/contracts.js";
@@ -37,6 +38,11 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
   const [statusError, setStatusError] = useState<string | undefined>();
+  const [achievementCache, setAchievementCache] = useState<
+    ReadonlyMap<number, DashboardAchievementResult>
+  >(() => new Map());
+  const [loadingAchievementsAppId, setLoadingAchievementsAppId] = useState<number | undefined>();
+  const [achievementError, setAchievementError] = useState<string | undefined>();
   const [manualCollection, setManualCollection] = useState<readonly ManualLibraryGame[]>([]);
   const [manualSteam, setManualSteam] = useState("");
   const [manualError, setManualError] = useState<string | undefined>();
@@ -116,6 +122,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     openerRef.current = opener;
     setStatusError(undefined);
     setStatusMessage(undefined);
+    setAchievementError(undefined);
     setSelectedGame(game);
   };
 
@@ -150,6 +157,22 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
       setStatusError(errorMessage(error));
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  const loadAchievements = async () => {
+    if (selectedGame === undefined || !isAchievementsApi(api)) return;
+    const appId = selectedGame.appId;
+    if (achievementCache.has(appId)) return;
+    setLoadingAchievementsAppId(appId);
+    setAchievementError(undefined);
+    try {
+      const result = await api.getAchievements(appId);
+      setAchievementCache((cache) => new Map(cache).set(appId, result));
+    } catch (error) {
+      setAchievementError(errorMessage(error));
+    } finally {
+      setLoadingAchievementsAppId(undefined);
     }
   };
 
@@ -219,6 +242,10 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
           isUpdatingStatus={isUpdatingStatus}
           statusError={statusError}
           statusMessage={statusMessage}
+          achievementResult={achievementCache.get(selectedGame.appId)}
+          isLoadingAchievements={loadingAchievementsAppId === selectedGame.appId}
+          achievementError={achievementError}
+          onLoadAchievements={isAchievementsApi(api) ? loadAchievements : undefined}
           onClose={closeGame}
           onStatusChange={updateStatus}
         />
@@ -243,6 +270,12 @@ function isIntelligenceApi(api: DashboardApi): boolean {
     typeof api.createPlan === "function" &&
     typeof api.updatePlanItemProgress === "function"
   );
+}
+
+function isAchievementsApi(
+  api: DashboardApi,
+): api is DashboardApi & Required<Pick<DashboardApi, "getAchievements">> {
+  return typeof api.getAchievements === "function";
 }
 
 function isTaskApi(

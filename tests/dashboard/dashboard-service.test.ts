@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { SteamLibrary } from "../../src/domain/models.js";
+import type { AchievementResult } from "../../src/services/achievement-service.js";
 import type { TrackerGame } from "../../src/domain/tracker.js";
 import { InputError, TrackerInputError } from "../../src/errors.js";
 import { createDashboardService } from "../../src/dashboard/dashboard-service.js";
@@ -107,6 +108,9 @@ function createFakes(
       listActive: vi.fn(() => []),
       setItemProgress: vi.fn(),
     },
+    achievementService: {
+      getGameAchievements: vi.fn(),
+    },
   };
 }
 
@@ -119,6 +123,38 @@ type StatusFixture = Readonly<{
 }>;
 
 describe("DashboardService", () => {
+  test("returns normalized achievement progress from the achievement service", async () => {
+    const result: AchievementResult = {
+      status: "available",
+      progress: {
+        appId: 10,
+        name: "Owned game",
+        unlockedCount: 1,
+        totalCount: 2,
+        completionPercent: 50,
+        achievements: [
+          {
+            apiName: "FIRST",
+            displayName: "First steps",
+            description: null,
+            achieved: true,
+            unlockTime: "2026-09-05T00:00:00.000Z",
+            iconUrl: "https://cdn.example/first.jpg",
+            iconGrayUrl: "https://cdn.example/first-gray.jpg",
+          },
+        ],
+      },
+    };
+    const fakes = createFakes();
+    fakes.achievementService.getGameAchievements.mockResolvedValue(result);
+    const service = createDashboardService(fakes as never) as unknown as {
+      getAchievements: (appId: unknown) => Promise<AchievementResult>;
+    };
+
+    await expect(service.getAchievements(10)).resolves.toEqual(result);
+    expect(fakes.achievementService.getGameAchievements).toHaveBeenCalledWith(10);
+  });
+
   test("updates a manual collection entry with family access and playability", async () => {
     const updateManualCollection = vi.fn(
       async (patch: { appId: number; accessType?: "manual" | "family"; isPlayable?: boolean }) => ({

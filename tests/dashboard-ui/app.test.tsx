@@ -328,6 +328,90 @@ describe("DashboardApp", () => {
     expect(within(dialog).getByRole("option", { name: "Abandonado" })).toHaveValue("dropped");
   });
 
+  test("loads achievement progress only after intent and retains it when detail is reopened", async () => {
+    const user = userEvent.setup();
+    let resolveAchievements: ((value: unknown) => void) | undefined;
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveAchievements = resolve;
+          }),
+      ),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    expect(api.getAchievements).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cargar logros" }));
+    expect(api.getAchievements).toHaveBeenCalledWith(10);
+    expect(within(dialog).getByText("Cargando logros…")).toBeInTheDocument();
+    resolveAchievements?.({
+      status: "available",
+      progress: {
+        appId: 10,
+        name: "Celeste",
+        unlockedCount: 1,
+        totalCount: 2,
+        completionPercent: 50,
+        achievements: [
+          {
+            apiName: "SUMMIT",
+            displayName: "Summit",
+            description: "Reach the summit.",
+            achieved: true,
+            unlockTime: "2026-09-05T00:00:00.000Z",
+            iconUrl: null,
+            iconGrayUrl: null,
+          },
+          {
+            apiName: "BERRIES",
+            displayName: "Berries",
+            description: null,
+            achieved: false,
+            unlockTime: null,
+            iconUrl: null,
+            iconGrayUrl: null,
+          },
+        ],
+      },
+    });
+    expect(await within(dialog).findByText("1 / 2 · 50%")).toBeInTheDocument();
+    expect(within(dialog).getByText("Summit")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cerrar detalles" }));
+    await user.click(screen.getByRole("button", { name: "Ver detalles de Celeste" }));
+    expect(screen.getByText("1 / 2 · 50%")).toBeInTheDocument();
+    expect(api.getAchievements).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows a safe unavailable achievement state", async () => {
+    const user = userEvent.setup();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn().mockResolvedValue({
+        status: "unavailable",
+        appId: 10,
+        name: "Celeste",
+        reason: "not_available",
+      }),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    await user.click(within(dialog).getByRole("button", { name: "Cargar logros" }));
+
+    expect(await within(dialog).findByText("Los logros no están disponibles.")).toBeInTheDocument();
+  });
+
   test("opens a keyboard-accessible detail dialog, updates status, and restores focus on Escape", async () => {
     const user = userEvent.setup();
     const updatedLibrary: DashboardLibrary = {

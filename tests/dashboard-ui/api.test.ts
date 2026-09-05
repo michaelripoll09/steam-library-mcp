@@ -9,6 +9,7 @@ type DashboardApiModule = Readonly<{
     getLibrary: () => Promise<unknown>;
     syncLibrary: () => Promise<unknown>;
     updateGameStatus: (appId: number, status: string) => Promise<unknown>;
+    getAchievements: (appId: number) => Promise<unknown>;
   }>;
   DashboardApiError: new (status: number, code: string | undefined, message: string) => Error;
 }>;
@@ -61,6 +62,17 @@ describe("dashboard browser API", () => {
         },
       ],
     ]);
+  });
+
+  test("uses the relative achievements endpoint with an exact GET request", async () => {
+    const module = await loadApi();
+    expect(module).toBeDefined();
+    if (module === undefined) return;
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ status: "unavailable" }));
+
+    await module.createDashboardApi(fetch).getAchievements(1245620);
+
+    expect(fetch.mock.calls).toEqual([["/api/games/1245620/achievements", { method: "GET" }]]);
   });
 
   test("updates manual collection access metadata with an exact PATCH request", async () => {

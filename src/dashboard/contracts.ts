@@ -1,3 +1,5 @@
+import type { AchievementResult } from "../services/achievement-service.js";
+
 export const DASHBOARD_GAME_STATUSES = Object.freeze([
   "backlog",
   "playing",
@@ -57,6 +59,8 @@ export type DashboardStatusUpdate = Readonly<{
   mark: DashboardMarkResult;
   library: DashboardLibrary;
 }>;
+
+export type DashboardAchievementResult = AchievementResult;
 
 export type DashboardRecommendationPreference = Readonly<{
   appId: number;

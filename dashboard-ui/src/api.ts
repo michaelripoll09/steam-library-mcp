@@ -1,5 +1,6 @@
 import type {
   DashboardInsightSnapshot,
+  DashboardAchievementResult,
   DashboardLibrary,
   DashboardMutableStatus,
   DashboardPlan,
@@ -35,6 +36,7 @@ export type DashboardApi = Readonly<{
     appId: number,
     status: DashboardMutableStatus,
   ) => Promise<DashboardStatusUpdate>;
+  getAchievements: (appId: number) => Promise<DashboardAchievementResult>;
   getManualCollection: () => Promise<readonly ManualLibraryGame[]>;
   addManualCollection: (steam: string) => Promise<ManualLibraryGame>;
   updateManualCollection: (
@@ -77,6 +79,10 @@ export function createDashboardApi(fetch: DashboardFetch): DashboardApi {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
+      }),
+    getAchievements: (appId) =>
+      request<DashboardAchievementResult>(fetch, `/api/games/${appId}/achievements`, {
+        method: "GET",
       }),
     getManualCollection: () =>
       request<readonly ManualLibraryGame[]>(fetch, "/api/manual-collection", { method: "GET" }),

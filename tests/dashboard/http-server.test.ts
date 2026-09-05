@@ -98,6 +98,7 @@ describe("dashboard HTTP server", () => {
       getLibrary: vi.fn(async () => library),
       syncLibrary: vi.fn(async () => library),
       updateStatus: vi.fn(async () => update),
+      getAchievements: vi.fn(),
     };
     const started = await startServer(service, root);
     server = started.server;
@@ -118,6 +119,31 @@ describe("dashboard HTTP server", () => {
     expect(response.status).toBe(200);
     expect(service.updateStatus).toHaveBeenCalledWith(10, "paused");
     expect(JSON.parse(response.body)).toEqual(update);
+  });
+
+  test("routes an achievement request to the dashboard service", async () => {
+    const { port, service } = await setup();
+    const result = {
+      status: "available" as const,
+      progress: {
+        appId: 1245620,
+        name: "ELDEN RING",
+        unlockedCount: 12,
+        totalCount: 49,
+        completionPercent: 24.49,
+        achievements: [],
+      },
+    };
+    service.getAchievements.mockResolvedValue(result);
+
+    const response = await call(port, "/api/games/1245620/achievements");
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(result);
+    expect(service.getAchievements).toHaveBeenCalledWith(1245620);
+    expect((await call(port, "/api/games/1245620/achievements", { method: "POST" })).status).toBe(
+      405,
+    );
   });
 
   test("does not expose a Steam Families status endpoint", async () => {
