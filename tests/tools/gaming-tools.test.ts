@@ -91,22 +91,19 @@ describe("gaming MCP tools", () => {
     "gaming_mark_paused",
     "gaming_mark_completed",
     "gaming_mark_dropped",
-  ])(
-    "rejects unknown keys for strict mark schema %s",
-    async (name) => {
-      const { service, tools } = setup();
+  ])("rejects unknown keys for strict mark schema %s", async (name) => {
+    const { service, tools } = setup();
 
-      await expect(tools.get(name)?.({ appId: 620, unexpected: true })).resolves.toMatchObject({
-        isError: true,
-        content: [
-          {
-            text: '{"error":{"code":"INVALID_INPUT","message":"appId must be a positive safe integer."}}',
-          },
-        ],
-      });
-      expect(service.mark).not.toHaveBeenCalled();
-    },
-  );
+    await expect(tools.get(name)?.({ appId: 620, unexpected: true })).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          text: '{"error":{"code":"INVALID_INPUT","message":"appId must be a positive safe integer."}}',
+        },
+      ],
+    });
+    expect(service.mark).not.toHaveBeenCalled();
+  });
 
   test("wraps tracker persistence errors in the canonical nested error envelope", async () => {
     const { service, tools } = setup();
