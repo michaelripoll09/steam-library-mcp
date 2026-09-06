@@ -8,11 +8,16 @@ import type {
 } from "../../src/dashboard/contracts.js";
 import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
 import { createDashboardApi, type DashboardApi } from "./api.js";
-import { GameDetails } from "./game-details.js";
-import { IntelligencePanel } from "./intelligence-panel.js";
-import { LibraryPanel, LibrarySummary } from "./library-panel.js";
-import { ManualCollectionPanel } from "./manual-collection-panel.js";
-import { TaskPanel } from "./task-panel.js";
+import { GameDetailsDrawer } from "./game-details/game-details-drawer.js";
+import { AppShell, type DashboardView } from "./navigation/app-shell.js";
+import { HomeView } from "./views/home-view.js";
+import { useIntelligenceState, type IntelligenceApi } from "./intelligence-state.js";
+import { LibraryView } from "./views/library-view.js";
+import { ManualCollectionView } from "./views/manual-collection-view.js";
+import { useTaskState, type TaskApi } from "./task-state.js";
+import { TasksView } from "./views/tasks-view.js";
+import { BacklogView } from "./views/backlog-view.js";
+import { PlayNowView } from "./views/play-now-view.js";
 import {
   createLibraryFilters,
   filterLibraryGames,
@@ -20,6 +25,7 @@ import {
 } from "./library-filters.js";
 
 type DashboardAppProps = Readonly<{ api?: DashboardApi }>;
+const EMPTY_GAMES: readonly DashboardGame[] = [];
 
 export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const defaultApiRef = useRef<DashboardApi | undefined>(undefined);
@@ -27,9 +33,15 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     suppliedApi ?? (defaultApiRef.current ??= createDashboardApi(window.fetch.bind(window)));
   const intelligenceApi = isIntelligenceApi(api);
   const taskApi = isTaskApi(api);
+  const taskState = useTaskState(taskApi ? api : undefined);
   const manualCollectionApi = isManualCollectionApi(api);
   const [library, setLibrary] = useState<DashboardLibrary | undefined>();
+  const intelligenceState = useIntelligenceState({
+    api: api as IntelligenceApi,
+    games: libraryGames(library),
+  });
   const [filters, setFilters] = useState<LibraryFilters>(createLibraryFilters);
+  const [activeView, setActiveView] = useState<DashboardView>("home");
   const [initialError, setInitialError] = useState<string | undefined>();
   const [syncError, setSyncError] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
@@ -74,6 +86,11 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     if (!manualCollectionApi) return;
     void api.getManualCollection().then(setManualCollection, () => setManualCollection([]));
   }, [api, manualCollectionApi]);
+
+  useEffect(() => {
+    if (!intelligenceApi) return;
+    void intelligenceState.refreshPlans();
+  }, [api, intelligenceApi]);
 
   const addManual = async () => {
     if (!manualCollectionApi) return;
@@ -195,79 +212,79 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const games = library === undefined ? [] : filterLibraryGames(library.games, filters);
 
   return (
-    <main className="dashboard-shell">
-      <header className="dashboard-header">
-        <div>
-          <p className="eyebrow">Archivo personal de juegos</p>
-          <h1>Tu biblioteca de Steam</h1>
-          <p className="subtitle">Una vista enfocada de qué jugar después y qué ya importa.</p>
-        </div>
-        <button
-          className="sync-button"
-          type="button"
-          onClick={() => void syncLibrary()}
-          disabled={isSyncing}
-        >
-          {isSyncing ? "Sincronizando biblioteca…" : "Sincronizar biblioteca"}
-        </button>
-      </header>
+    <AppShell activeView={activeView} onViewChange={setActiveView}>
+      <main className="dashboard-main" data-view={activeView}>
+        {activeView === "home" && (
+          <HomeView
+            library={library}
+            isLoading={isLoading}
+            error={initialError}
+            intelligenceState={intelligenceState}
+            taskSummary={taskState?.summary}
+            onNavigate={setActiveView}
+          />
+        )}
 
-      {manualCollectionApi && (
-        <ManualCollectionPanel
-          collection={manualCollection}
-          steam={manualSteam}
-          error={manualError}
-          saving={isSavingManual}
-          onSteamChange={setManualSteam}
-          onAdd={() => void addManual()}
-          onUpdate={(appId, patch) => void updateManual(appId, patch)}
-          onRemove={(appId) => void removeManual(appId)}
-        />
-      )}
+        {activeView === "library" && (
+          <LibraryView
+            library={library}
+            games={games}
+            filters={filters}
+            isLoading={isLoading}
+            error={initialError}
+            isSyncing={isSyncing}
+            syncError={syncError}
+            onFiltersChange={setFilters}
+            onRetryLoad={() => void loadLibrary()}
+            onSync={() => void syncLibrary()}
+            onOpen={openGame}
+          />
+        )}
+        {activeView === "play-now" && library !== undefined && intelligenceApi && (
+          <PlayNowView games={library.games} state={intelligenceState} onOpenGame={openGame} />
+        )}
 
-      {syncError !== undefined && (
-        <section className="notice notice-error" role="alert">
-          <p>{syncError}</p>
-          <button type="button" onClick={() => void syncLibrary()} disabled={isSyncing}>
-            Reintentar sincronización
-          </button>
-        </section>
-      )}
+        {activeView === "backlog" && library !== undefined && intelligenceApi && (
+          <BacklogView state={intelligenceState} />
+        )}
 
-      {library !== undefined && <LibrarySummary library={library} />}
-      {taskApi && <TaskPanel api={api} />}
-      {library !== undefined && intelligenceApi && (
-        <IntelligencePanel api={api} games={library.games} />
-      )}
+        {activeView === "manual" && manualCollectionApi && (
+          <ManualCollectionView
+            collection={manualCollection}
+            steam={manualSteam}
+            error={manualError}
+            saving={isSavingManual}
+            onSteamChange={setManualSteam}
+            onAdd={() => void addManual()}
+            onUpdate={(appId, patch) => void updateManual(appId, patch)}
+            onRemove={(appId) => void removeManual(appId)}
+          />
+        )}
 
-      <LibraryPanel
-        library={library}
-        games={games}
-        filters={filters}
-        isLoading={isLoading}
-        error={initialError}
-        onFiltersChange={setFilters}
-        onRetryLoad={() => void loadLibrary()}
-        onOpen={openGame}
-      />
+        {activeView === "tasks" && taskState !== undefined && <TasksView state={taskState} />}
 
-      {selectedGame !== undefined && (
-        <GameDetails
-          game={selectedGame}
-          closeButtonRef={closeButtonRef}
-          isUpdatingStatus={isUpdatingStatus}
-          statusError={statusError}
-          statusMessage={statusMessage}
-          achievementResult={achievementCache.get(selectedGame.appId)}
-          isLoadingAchievements={loadingAchievementAppIds.has(selectedGame.appId)}
-          achievementError={achievementErrors.get(selectedGame.appId)}
-          onLoadAchievements={isAchievementsApi(api) ? loadAchievements : undefined}
-          onClose={closeGame}
-          onStatusChange={updateStatus}
-        />
-      )}
-    </main>
+        {selectedGame !== undefined && (
+          <GameDetailsDrawer
+            game={selectedGame}
+            closeButtonRef={closeButtonRef}
+            isUpdatingStatus={isUpdatingStatus}
+            statusError={statusError}
+            statusMessage={statusMessage}
+            achievementResult={achievementCache.get(selectedGame.appId)}
+            isLoadingAchievements={loadingAchievementAppIds.has(selectedGame.appId)}
+            achievementError={achievementErrors.get(selectedGame.appId)}
+            onLoadAchievements={isAchievementsApi(api) ? loadAchievements : undefined}
+            onClose={closeGame}
+            onStatusChange={updateStatus}
+          />
+        )}
+      </main>
+    </AppShell>
   );
+}
+
+function libraryGames(library: DashboardLibrary | undefined): readonly DashboardGame[] {
+  return library?.games ?? EMPTY_GAMES;
 }
 
 function errorMessage(error: unknown): string {
@@ -294,9 +311,7 @@ function isAchievementsApi(
   return typeof api.getAchievements === "function";
 }
 
-function isTaskApi(
-  api: DashboardApi,
-): api is DashboardApi & Required<Pick<DashboardApi, "getTasks" | "getTask" | "cancelTask">> {
+function isTaskApi(api: DashboardApi): api is TaskApi {
   return (
     typeof api.getTasks === "function" &&
     typeof api.getTask === "function" &&

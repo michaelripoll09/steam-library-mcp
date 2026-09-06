@@ -1,15 +1,7 @@
 import type { ManualLibraryGame } from "../../src/manual-library/manual-library.js";
+import { InlineNotice } from "./components/inline-notice.js";
 
-export function ManualCollectionPanel({
-  collection,
-  steam,
-  error,
-  saving,
-  onSteamChange,
-  onAdd,
-  onUpdate,
-  onRemove,
-}: Readonly<{
+export type ManualCollectionViewProps = Readonly<{
   collection: readonly ManualLibraryGame[];
   steam: string;
   error: string | undefined;
@@ -21,13 +13,26 @@ export function ManualCollectionPanel({
     patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
   ) => void;
   onRemove: (appId: number) => void;
-}>) {
+}>;
+
+export function ManualCollectionPanel({
+  collection,
+  steam,
+  error,
+  saving,
+  onSteamChange,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: ManualCollectionViewProps) {
   return (
     <section className="manual-collection-panel" aria-labelledby="manual-collection-heading">
       <div>
         <p className="eyebrow">Colección manual</p>
         <h2 id="manual-collection-heading">Juegos agregados manualmente</h2>
-        <p>Esta lista no confirma que Steam te dé acceso ni que el juego esté disponible ahora.</p>
+        <InlineNotice tone="info">
+          Esta lista no confirma que Steam te dé acceso ni que el juego esté disponible ahora.
+        </InlineNotice>
       </div>
       <form
         onSubmit={(event) => {
@@ -50,51 +55,61 @@ export function ManualCollectionPanel({
         </div>
       </form>
       {error !== undefined && (
-        <p id="manual-collection-error" className="status-error" role="alert">
-          {error}
-        </p>
+        <InlineNotice tone="error">
+          <span id="manual-collection-error">{error}</span>
+        </InlineNotice>
       )}
       {collection.length > 0 && (
         <ul className="manual-collection-list">
           {collection.map((game) => (
-            <li key={game.appId}>
-              <span>
-                {game.name} <small>· AppID {game.appId}</small>
-              </span>
-              <label>
-                Acceso de {game.name}
-                <select
-                  value={game.accessType}
-                  onChange={(event) =>
-                    onUpdate(game.appId, {
-                      accessType: event.target.value as "manual" | "family",
-                    })
-                  }
-                >
-                  <option value="manual">Manual</option>
-                  <option value="family">Familia</option>
-                </select>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={game.isPlayable}
-                  onChange={(event) => onUpdate(game.appId, { isPlayable: event.target.checked })}
-                />
-                Disponible para jugar: {game.name}
-              </label>
-              <span>{game.isPlayable ? "Listo para jugar" : "No disponible para jugar"}</span>
-              <button
-                type="button"
-                onClick={() => onRemove(game.appId)}
-                aria-label={`Quitar ${game.name}`}
-              >
-                Quitar
-              </button>
-            </li>
+            <ManualGameRow key={game.appId} game={game} onUpdate={onUpdate} onRemove={onRemove} />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+export function ManualGameRow({
+  game,
+  onUpdate,
+  onRemove,
+}: Readonly<{
+  game: ManualLibraryGame;
+  onUpdate: ManualCollectionViewProps["onUpdate"];
+  onRemove: ManualCollectionViewProps["onRemove"];
+}>) {
+  return (
+    <li className="manual-game-row">
+      <span>
+        {game.name} <small>· AppID {game.appId}</small>
+      </span>
+      <label>
+        Acceso de {game.name}
+        <select
+          value={game.accessType}
+          onChange={(event) =>
+            onUpdate(game.appId, {
+              accessType: event.target.value as "manual" | "family",
+            })
+          }
+        >
+          <option value="manual">Manual</option>
+          <option value="family">Familia</option>
+        </select>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={game.isPlayable}
+          onChange={(event) => onUpdate(game.appId, { isPlayable: event.target.checked })}
+        />
+        Disponible para jugar: {game.name}
+      </label>
+      <span>{game.isPlayable ? "Listo para jugar" : "No disponible para jugar"}</span>
+      <button type="button" onClick={() => onRemove(game.appId)} aria-label={`Quitar ${game.name}`}>
+        Quitar
+      </button>
+    </li>
   );
 }
