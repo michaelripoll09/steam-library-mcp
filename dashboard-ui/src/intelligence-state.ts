@@ -222,7 +222,7 @@ export function useIntelligenceState({
       await api.updatePlanItemProgress(planId, itemId, progress);
       setProgressDrafts((current) => {
         const key = progressDraftKey(planId, itemId);
-        if (!current.has(key)) return current;
+        if (current.get(key) !== progress) return current;
         const next = new Map(current);
         next.delete(key);
         return next;
