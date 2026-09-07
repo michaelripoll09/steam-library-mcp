@@ -156,6 +156,7 @@ function startNpmScript(script: string, environment: NodeJS.ProcessEnv): ChildPr
   });
 }
 
+// Building both artifacts can exceed the default 10-second hook budget during a full run.
 beforeAll(() => {
   if (process.platform === "win32") {
     execFileSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "npm run build"], {
@@ -166,7 +167,7 @@ beforeAll(() => {
   }
   expect(existsSync(entrypoint)).toBe(true);
   expect(existsSync(dashboardEntrypoint)).toBe(true);
-});
+}, 30_000);
 
 describe("released stdio entrypoint", () => {
   test("restarts with the same tracker database", async () => {

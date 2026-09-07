@@ -1,3 +1,4 @@
+import { presentationError } from "./presentation.js";
 import { useEffect, useRef, useState } from "react";
 
 import type {
@@ -206,7 +207,11 @@ export function useIntelligenceState({
         targetGameCount: validTargetGameCount,
       });
       setPlans(await api.getPlans());
-      setMessage(result.shortfall?.message ?? "Plan creado.");
+      setMessage(
+        result.shortfall
+          ? `Plan creado con ${result.shortfall.selectedGameCount} de ${result.shortfall.requestedGameCount} juegos: no hay suficientes candidatos disponibles.`
+          : "Plan creado.",
+      );
     } catch (cause) {
       setError(errorMessage(cause));
     }
@@ -280,9 +285,7 @@ export function useIntelligenceState({
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message !== ""
-    ? error.message
-    : "No se pudo completar la operación.";
+  return presentationError(error);
 }
 
 function positiveSafeInteger(value: string): number | undefined {

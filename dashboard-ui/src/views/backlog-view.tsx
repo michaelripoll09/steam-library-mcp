@@ -1,3 +1,6 @@
+import { CoverImage } from "../components/game-card.js";
+import { formatPlaytime } from "../library-filters.js";
+import type { DashboardGame } from "../../../src/dashboard/contracts.js";
 import type { DashboardPlan, DashboardPlanItemProgress } from "../../../src/dashboard/contracts.js";
 import { CustomSelect, type CustomSelectOption } from "../custom-select.js";
 import { progressDraftKey, type IntelligenceState } from "../intelligence-state.js";
@@ -15,13 +18,16 @@ const PROGRESS_OPTIONS = [
   { value: "skipped", label: "Omitido" },
 ] as const satisfies readonly CustomSelectOption<DashboardPlanItemProgress>[];
 
-export function BacklogView({ state }: Readonly<{ state: IntelligenceState }>) {
+export function BacklogView({
+  state,
+  games = [],
+}: Readonly<{ state: IntelligenceState; games?: readonly DashboardGame[] }>) {
   return (
     <section className="backlog-view intelligence-panel" aria-labelledby="backlog-view-heading">
       <div className="dashboard-view-heading">
         <div>
-          <p className="eyebrow">Planificación</p>
           <h2 id="backlog-view-heading">Backlog</h2>
+          <p className="subtitle">Planifica y sigue tu lista de pendientes.</p>
         </div>
       </div>
       {state.error !== undefined && <p role="alert">{state.error}</p>}
@@ -35,7 +41,7 @@ export function BacklogView({ state }: Readonly<{ state: IntelligenceState }>) {
           onChange={state.setCadence}
         />
         <label>
-          Tiempo total disponible en la semana/mes
+          Tiempo total disponible en la semana/mes (min)
           <input
             type="number"
             min="1"
@@ -61,10 +67,17 @@ export function BacklogView({ state }: Readonly<{ state: IntelligenceState }>) {
         </button>
       </section>
       <div className="backlog-plan-list">
+        {state.plans.length === 0 && (
+          <section className="utility-empty">
+            <h3>Tu próximo plan empieza aquí</h3>
+            <p>Define tu tiempo disponible y crea una lista de juegos a tu medida.</p>
+          </section>
+        )}
         {state.plans.map((plan) => (
           <PlanCard
             key={plan.id}
             plan={plan}
+            games={games}
             progressDrafts={state.progressDrafts}
             onProgressDraft={state.setProgressDraft}
             onProgress={state.updateProgress}
@@ -77,11 +90,13 @@ export function BacklogView({ state }: Readonly<{ state: IntelligenceState }>) {
 
 function PlanCard({
   plan,
+  games,
   progressDrafts,
   onProgressDraft,
   onProgress,
 }: Readonly<{
   plan: DashboardPlan;
+  games: readonly DashboardGame[];
   progressDrafts: ReadonlyMap<string, DashboardPlanItemProgress>;
   onProgressDraft: (planId: string, itemId: string, progress: DashboardPlanItemProgress) => void;
   onProgress: (
@@ -105,6 +120,7 @@ function PlanCard({
           <PlanItem
             key={item.id}
             item={item}
+            game={games.find((game) => game.appId === item.appId)}
             progress={progressDrafts.get(progressDraftKey(plan.id, item.id)) ?? item.progress}
             onProgressDraft={(progress) => onProgressDraft(plan.id, item.id, progress)}
             onProgress={(progress) => onProgress(plan.id, item.id, progress)}
@@ -117,19 +133,28 @@ function PlanCard({
 
 function PlanItem({
   item,
+  game,
   progress,
   onProgressDraft,
   onProgress,
 }: Readonly<{
   item: DashboardPlan["items"][number];
+  game: DashboardGame | undefined;
   progress: DashboardPlanItemProgress;
   onProgressDraft: (progress: DashboardPlanItemProgress) => void;
   onProgress: (progress: DashboardPlanItemProgress) => Promise<void>;
 }>) {
   return (
     <li>
-      <strong>{item.name}</strong>
-      <p>{item.explanation}</p>
+      {game ? <CoverImage game={game} /> : <span aria-hidden="true" />}
+      <div className="backlog-item-copy">
+        <strong>{item.name}</strong>
+        <p>
+          {item.durationEstimateMinutes == null
+            ? "Duración desconocida"
+            : `~${formatPlaytime(item.durationEstimateMinutes)} estimadas`}
+        </p>
+      </div>
       <CustomSelect
         label="Progreso"
         value={progress}

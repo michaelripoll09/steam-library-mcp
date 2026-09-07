@@ -45,7 +45,12 @@ export function ManualCollectionView({
           sincroniza Steam Families.
         </InlineNotice>
       </div>
-      {collection.length > 0 && (
+      {collection.length === 0 ? (
+        <section className="utility-empty">
+          <h3>Aún no tienes juegos agregados</h3>
+          <p>Añade títulos manualmente para tenerlos en cuenta.</p>
+        </section>
+      ) : (
         <ul className="manual-collection-list">
           {collection.map((game) => (
             <ManualGameRow key={game.appId} game={game} onUpdate={onUpdate} onRemove={onRemove} />
@@ -60,10 +65,9 @@ function PageHeader() {
   return (
     <header className="dashboard-view-heading">
       <div>
-        <p className="eyebrow">Utilidad local</p>
         <h2 id="manual-collection-heading">Colección manual</h2>
+        <p className="subtitle">Agrega juegos que no están en tu biblioteca de Steam.</p>
       </div>
-      <p>Agregá referencias personales sin convertirlas en una confirmación de acceso.</p>
     </header>
   );
 }

@@ -33,11 +33,8 @@ export function LibraryView({
     <section aria-labelledby="library-heading" className="library-view">
       <div className="dashboard-view-heading">
         <div>
-          <p className="eyebrow">Archivo personal de juegos</p>
-          <h2 id="library-heading">Tu biblioteca de Steam</h2>
-          <p className="subtitle">
-            Explora, filtra y actualiza tu colección sin perder el contexto.
-          </p>
+          <h2 id="library-heading">Biblioteca</h2>
+          <p className="subtitle">Explora, filtra y administra tu colección.</p>
         </div>
         <div className="library-view-actions">
           {library !== undefined && <p className="result-count">{games.length} mostrados</p>}

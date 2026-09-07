@@ -1,3 +1,5 @@
+import { CoverImage } from "../components/game-card.js";
+import { homeActivity } from "../presentation.js";
 import type { DashboardLibrary } from "../../../src/dashboard/contracts.js";
 import type { IntelligenceState } from "../intelligence-state.js";
 import { formatPlaytime } from "../library-filters.js";
@@ -27,6 +29,13 @@ export function HomeView({
   taskSummary: HomeTaskSummary | undefined;
   onNavigate: (view: HomeDestination) => void;
 }>) {
+  const games = library?.games ?? [];
+  const continueGame = games.find((game) => game.status === "playing" && game.isPlayable);
+  const activity = homeActivity(games);
+  const nextItems = intelligenceState.plans
+    .flatMap((plan) => plan.items)
+    .filter((item) => item.progress === "not_started")
+    .slice(0, 3);
   const snapshot = intelligenceState.snapshot;
   const recommendationCount = intelligenceState.recommendations?.recommendations.length;
 
@@ -34,7 +43,7 @@ export function HomeView({
     <section className="home-view" aria-labelledby="home-heading">
       <div>
         <p className="eyebrow">Tu espacio de juego</p>
-        <h2 id="home-heading">Resumen</h2>
+        <h2 id="home-heading">Hola, ¿qué vas a jugar?</h2>
         <p className="subtitle">Una lectura rápida de tu biblioteca y de lo que sigue.</p>
       </div>
       {library === undefined ? (
@@ -50,20 +59,93 @@ export function HomeView({
           />
         </div>
       )}
-      <section className="home-insight-summary" aria-label="Resumen de Play Now">
-        <h3>Play Now</h3>
-        {snapshot === undefined ? (
-          <CompactState>Calcula Play Now para cargar sus recomendaciones y planes.</CompactState>
-        ) : (
-          <p>
-            {snapshot.activePlans.length} planes activos · {snapshot.preferences.highPriorityGames}{" "}
-            con prioridad alta
+      <div className="home-feature-grid">
+        <section className="home-continue" aria-label="Resumen de Play Now">
+          {continueGame && <CoverImage game={continueGame} />}
+          <div className="home-continue-copy">
+            <h3>{continueGame ? "Continuar jugando" : "Tu próxima partida"}</h3>
+            <strong>{continueGame?.name ?? "Descubre qué jugar"}</strong>
+            <p>
+              {continueGame
+                ? formatPlaytime(continueGame.playtimeMinutes) + " jugado"
+                : "Una recomendación para el tiempo que tienes disponible."}
+            </p>
+            <button className="primary-button" type="button" onClick={() => onNavigate("play-now")}>
+              Calcular Play Now
+            </button>
+          </div>
+        </section>
+        <section className="home-insight-summary">
+          <h3>Tu actividad</h3>
+          <strong className="activity-value">
+            {library ? formatPlaytime(library.totals.totalPlaytimeMinutes) : "—"}
+          </strong>
+          <p>Tiempo total en tu biblioteca</p>
+          <p className="home-compact-state">
+            Steam no proporciona un desglose semanal en esta vista.
           </p>
-        )}
-        {recommendationCount !== undefined && (
-          <p>{recommendationCount} recomendaciones cargadas.</p>
-        )}
-      </section>
+          {snapshot && (
+            <p>
+              {snapshot.activePlans.length} planes activos ·{" "}
+              {snapshot.preferences.highPriorityGames} con prioridad alta
+            </p>
+          )}
+          {recommendationCount !== undefined && (
+            <p>{recommendationCount} recomendaciones cargadas.</p>
+          )}
+        </section>
+      </div>
+      <div className="home-lists-grid">
+        <section className="home-list-card">
+          <h3>Actividad reciente</h3>
+          {activity.length ? (
+            <ul className="home-game-list">
+              {activity.map((game) => (
+                <li key={game.appId}>
+                  <CoverImage game={game} />
+                  <div>
+                    <strong>{game.name}</strong>
+                    <span>
+                      {formatPlaytime(game.playtimeMinutes)} total ·{" "}
+                      {new Intl.DateTimeFormat("es-CO", {
+                        dateStyle: "medium",
+                        timeZone: "UTC",
+                      }).format(new Date(game.lastPlayedAt!))}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <CompactState>No hay fechas de actividad disponibles.</CompactState>
+          )}
+        </section>
+        <section className="home-list-card">
+          <h3>Próximo en tu backlog</h3>
+          {nextItems.length ? (
+            <ul className="home-game-list">
+              {nextItems.map((item, index) => {
+                const game = games.find((game) => game.appId === item.appId);
+                return (
+                  <li key={item.id + index}>
+                    {game && <CoverImage game={game} />}
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>
+                        {item.durationEstimateMinutes == null
+                          ? "Duración desconocida"
+                          : "~" + formatPlaytime(item.durationEstimateMinutes) + " estimadas"}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <CompactState>Crea un plan para ver aquí tus próximos juegos.</CompactState>
+          )}
+        </section>
+      </div>
       <section className="home-task-summary" aria-label="Estado de tareas">
         <span>Tareas locales</span>
         <strong>{formatTaskSummary(taskSummary)}</strong>
@@ -72,9 +154,7 @@ export function HomeView({
         <button type="button" onClick={() => onNavigate("library")}>
           Ver biblioteca
         </button>
-        <button type="button" onClick={() => onNavigate("play-now")}>
-          Calcular Play Now
-        </button>
+
         <button type="button" onClick={() => onNavigate("backlog")}>
           Ver backlog
         </button>

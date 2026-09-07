@@ -4,15 +4,15 @@ Dashboard UI 2.0 reorganizes the existing dashboard into a state-driven applicat
 
 ## Decision summary
 
-| Area | Decision |
-| --- | --- |
-| Navigation | Use local `activeView` state; do not add React Router or dependencies. |
-| Layout | Introduce a persistent `AppShell` with sidebar navigation and top bar. |
-| Shared state | Keep API clients, loaded data, filters, selections, mutation state, and achievement caches in `app.tsx`. |
-| Content | Render focused Home, Library, Play Now, Backlog, Manual, and Tasks views. |
-| Preferences | Keep Play Now and backlog preference controls as a secondary section within Play Now. |
-| Detail | Replace the current game-detail presentation with an accessible drawer. |
-| Compatibility | Reuse existing HTTP APIs, components, filters, selects, and semantic behavior. |
+| Area          | Decision                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| Navigation    | Use local `activeView` state; do not add React Router or dependencies.                                   |
+| Layout        | Introduce a persistent `AppShell` with sidebar navigation and top bar.                                   |
+| Shared state  | Keep API clients, loaded data, filters, selections, mutation state, and achievement caches in `app.tsx`. |
+| Content       | Render focused Home, Library, Play Now, Backlog, Manual, and Tasks views.                                |
+| Preferences   | Keep Play Now and backlog preference controls as a secondary section within Play Now.                    |
+| Detail        | Replace the current game-detail presentation with an accessible drawer.                                  |
+| Compatibility | Reuse existing HTTP APIs, components, filters, selects, and semantic behavior.                           |
 
 ## Goals
 
@@ -47,14 +47,14 @@ The shell is present across views. On small screens, its navigation must remain 
 
 ### View responsibilities
 
-| View | Purpose | Included behavior | Excluded behavior |
-| --- | --- | --- | --- |
-| Home | Fast orientation | Summary cards, concise status, and links/actions that switch to the relevant view | Full list/editor duplication |
-| Library | Browse and inspect games | Existing search/filter/sort/select controls, game grid/cards, selection, and game-detail drawer | New filtering semantics or cover sources |
-| Play Now | Decide what to play | Existing Play Now recommendation output, solo/friends mode controls, session-aware context, and secondary Preferences section | A separate primary Preferences destination |
-| Backlog | Plan finite play time | Existing backlog plan controls and result presentation | Invented duration or scheduling details |
-| Manual | Maintain manually entered collection games | Existing manual collection create/update/remove flows and Family/access presentation | Ownership or entitlement claims not supported by existing APIs |
-| Tasks | Manage local tasks | Existing task list and task mutation flows | A separate backend task model |
+| View     | Purpose                                    | Included behavior                                                                                                             | Excluded behavior                                              |
+| -------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Home     | Fast orientation                           | Summary cards, concise status, and links/actions that switch to the relevant view                                             | Full list/editor duplication                                   |
+| Library  | Browse and inspect games                   | Existing search/filter/sort/select controls, game grid/cards, selection, and game-detail drawer                               | New filtering semantics or cover sources                       |
+| Play Now | Decide what to play                        | Existing Play Now recommendation output, solo/friends mode controls, session-aware context, and secondary Preferences section | A separate primary Preferences destination                     |
+| Backlog  | Plan finite play time                      | Existing backlog plan controls and result presentation                                                                        | Invented duration or scheduling details                        |
+| Manual   | Maintain manually entered collection games | Existing manual collection create/update/remove flows and Family/access presentation                                          | Ownership or entitlement claims not supported by existing APIs |
+| Tasks    | Manage local tasks                         | Existing task list and task mutation flows                                                                                    | A separate backend task model                                  |
 
 Home action links are view changes, not duplicated workflows. For example, a Home backlog summary can lead to Backlog, but Home does not host the full backlog planner.
 
@@ -125,17 +125,17 @@ The redesign is a consumer of the current contracts. It must not manufacture pre
 
 The implementation adds or updates tests at the existing dashboard test level to prove both behavior and composition:
 
-| Area | Required coverage |
-| --- | --- |
-| Navigation | All six destinations render; selecting one changes visible content without resetting preserved shared state. |
-| Home | Summaries link to the appropriate view and do not duplicate full editors/lists. |
-| Library | Existing filters/selects work in the card/grid view; missing covers use the existing fallback; selecting a card opens the drawer. |
-| Drawer accessibility | Accessible name, focus entry, focus containment, Escape close, visible close action, and focus restoration. |
-| Play Now | Solo/friends behavior, session-aware output, and secondary Preferences controls retain existing request semantics. |
-| Backlog | Existing planner inputs/results retain their contract-driven display without invented duration details. |
-| Manual and Tasks | Existing mutation flows remain reachable and behave as before. |
-| Achievements | On-demand progress remains game-scoped; loading/error for one game does not affect another. |
-| Responsive/motion | Responsive shell/grid/drawer behavior and reduced-motion styling are covered by focused component/style assertions where supported by the current test setup. |
+| Area                 | Required coverage                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation           | All six destinations render; selecting one changes visible content without resetting preserved shared state.                                                  |
+| Home                 | Summaries link to the appropriate view and do not duplicate full editors/lists.                                                                               |
+| Library              | Existing filters/selects work in the card/grid view; missing covers use the existing fallback; selecting a card opens the drawer.                             |
+| Drawer accessibility | Accessible name, focus entry, focus containment, Escape close, visible close action, and focus restoration.                                                   |
+| Play Now             | Solo/friends behavior, session-aware output, and secondary Preferences controls retain existing request semantics.                                            |
+| Backlog              | Existing planner inputs/results retain their contract-driven display without invented duration details.                                                       |
+| Manual and Tasks     | Existing mutation flows remain reachable and behave as before.                                                                                                |
+| Achievements         | On-demand progress remains game-scoped; loading/error for one game does not affect another.                                                                   |
+| Responsive/motion    | Responsive shell/grid/drawer behavior and reduced-motion styling are covered by focused component/style assertions where supported by the current test setup. |
 
 Existing backend and MCP tests remain authoritative for contracts; this UI change should add no backend-specific test requirements.
 

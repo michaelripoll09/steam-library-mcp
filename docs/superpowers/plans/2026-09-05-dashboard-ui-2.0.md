@@ -49,12 +49,14 @@
 ### Task 1: Persistent shell and state-preserving navigation
 
 **Files:**
+
 - Create: `dashboard-ui/src/navigation/app-shell.tsx`
 - Create: `dashboard-ui/src/views/home-view.tsx`
 - Modify: `dashboard-ui/src/app.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Produces: `export type DashboardView = "home" | "library" | "play-now" | "backlog" | "manual" | "tasks"`.
 - Produces: `AppShell({ activeView, onViewChange, children }: Readonly<{ activeView: DashboardView; onViewChange: (view: DashboardView) => void; children: React.ReactNode }>)`.
 - Produces: `HomeView({ library, taskSummary, onNavigate }: Readonly<{ library: DashboardLibrary | undefined; taskSummary: HomeTaskSummary; onNavigate: (view: DashboardView) => void }>)`.
@@ -108,10 +110,30 @@ Use six native buttons with `aria-current="page"` on the active view, a labelled
 - [ ] **Step 4: Add responsive shell styles.**
 
 ```css
-.dashboard-workspace { min-height: 100dvh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
-.dashboard-sidebar { position: sticky; top: 0; height: 100dvh; }
-@media (max-width: 1199px) { .dashboard-workspace { grid-template-columns: 4.5rem minmax(0, 1fr); } }
-@media (max-width: 767px) { .dashboard-workspace { grid-template-columns: 1fr; } .dashboard-sidebar { position: static; height: auto; } }
+.dashboard-workspace {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+}
+.dashboard-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+@media (max-width: 1199px) {
+  .dashboard-workspace {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+  }
+}
+@media (max-width: 767px) {
+  .dashboard-workspace {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-sidebar {
+    position: static;
+    height: auto;
+  }
+}
 ```
 
 Use graphite surfaces and cold-blue active/focus treatment; compact controls retain accessible destination labels.
@@ -132,11 +154,13 @@ git commit -m "feat: add dashboard workspace shell"
 ### Task 2: Library workspace and game-card grid
 
 **Files:**
+
 - Create: `dashboard-ui/src/views/library-view.tsx`, `dashboard-ui/src/components/game-card.tsx`
 - Modify: `dashboard-ui/src/app.tsx`, `dashboard-ui/src/library-panel.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Produces: `LibraryView({ library, games, filters, isLoading, error, isSyncing, syncError, onFiltersChange, onRetryLoad, onSync, onOpen }: LibraryViewProps)`.
 - Produces: `GameCard({ game, onOpen }: Readonly<{ game: DashboardGame; onOpen: (game: DashboardGame, opener: HTMLButtonElement) => void }>)`.
 - Consumes: current `LibraryFilters`, `clearLibraryFilters`, `formatPlaytime`, `CoverImage`, `DashboardGame`; views never call APIs.
@@ -158,7 +182,9 @@ test("keeps filters in the Library card grid and opens the selected card", async
 test("uses the established fallback for a missing card cover", () => {
   render(<GameCard game={{ ...library.games[0], coverUrl: "" }} onOpen={vi.fn()} />);
   fireEvent.error(screen.getByRole("img", { name: "Portada de Celeste" }));
-  expect(screen.getByRole("img", { name: "Portada no disponible para Celeste" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: "Portada no disponible para Celeste" }),
+  ).toBeInTheDocument();
 });
 ```
 
@@ -174,7 +200,11 @@ Expected: FAIL because `LibraryView` and `GameCard` do not exist.
 <section aria-labelledby="library-heading" className="library-view">
   <PageHeader title="Biblioteca" meta={`${games.length} mostrados`} action={<SyncButton />} />
   <LibraryToolbar filters={filters} onChange={onFiltersChange} />
-  <div className="game-grid">{games.map((game) => <GameCard key={game.appId} game={game} onOpen={onOpen} />)}</div>
+  <div className="game-grid">
+    {games.map((game) => (
+      <GameCard key={game.appId} game={game} onOpen={onOpen} />
+    ))}
+  </div>
 </section>
 ```
 
@@ -183,8 +213,15 @@ Retain current retry/error/empty copy and filter payloads. Cards use only cover,
 - [ ] **Step 4: Add responsive grid/focus CSS.**
 
 ```css
-.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 1rem; }
-.game-card-button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 1rem;
+}
+.game-card-button:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
 ```
 
 - [ ] **Step 5: Run and confirm GREEN.**
@@ -203,11 +240,13 @@ git commit -m "feat: redesign library workspace"
 ### Task 3: Accessible responsive game-details drawer
 
 **Files:**
+
 - Create: `dashboard-ui/src/game-details/game-details-drawer.tsx`
 - Modify: `dashboard-ui/src/app.tsx`, `dashboard-ui/src/game-details.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Produces: `GameDetailsDrawer(props: GameDetailsDrawerProps)` with the exact current `GameDetails` status/achievement callback types.
 - Consumes: `DashboardGame`, `DashboardMutableStatus`, `DashboardAchievementResult`, `CoverImage`, `formatLabel`, `formatPlaytime`.
 - Invariant: `DashboardApp` keeps `ReadonlyMap<number, DashboardAchievementResult>`, `ReadonlySet<number>`, and `ReadonlyMap<number, string>` keyed by `game.appId`; drawer state is not global.
@@ -232,7 +271,14 @@ test("traps focus in the drawer and restores the card opener on Escape", async (
 
 test("keeps achievement loading and errors scoped to the selected app", async () => {
   const requests = new Map<number, ReturnType<typeof deferred<DashboardAchievementResult>>>();
-  const api = { ...libraryApiFixture(), getAchievements: vi.fn((appId: number) => { const request = deferred<DashboardAchievementResult>(); requests.set(appId, request); return request.promise; }) };
+  const api = {
+    ...libraryApiFixture(),
+    getAchievements: vi.fn((appId: number) => {
+      const request = deferred<DashboardAchievementResult>();
+      requests.set(appId, request);
+      return request.promise;
+    }),
+  };
   render(<DashboardApp api={api as never} />);
   // Open Celeste and load, close it, open Hades and load, reject requests.get(10), then assert Hades still shows "Cargando logros…" and no Celeste error.
 });
@@ -248,8 +294,18 @@ Expected: FAIL because the drawer component/layout does not exist.
 
 ```tsx
 <div className="drawer-backdrop" onMouseDown={onClose}>
-  <aside ref={dialogRef} className="game-details-drawer" role="dialog" aria-modal="true" aria-label={`Detalles de ${game.name}`} onMouseDown={(event) => event.stopPropagation()} onKeyDown={handleKeyDown}>
-    <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Cerrar detalles">×</button>
+  <aside
+    ref={dialogRef}
+    className="game-details-drawer"
+    role="dialog"
+    aria-modal="true"
+    aria-label={`Detalles de ${game.name}`}
+    onMouseDown={(event) => event.stopPropagation()}
+    onKeyDown={handleKeyDown}
+  >
+    <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Cerrar detalles">
+      ×
+    </button>
     {/* existing artwork, status/access/playability, status control, notice, achievements */}
   </aside>
 </div>
@@ -260,10 +316,28 @@ Port the current Tab-loop exactly. Keep app-level opener/close refs, Escape/back
 - [ ] **Step 4: Add responsive drawer styles.**
 
 ```css
-.game-details-drawer { width: min(42rem, 46vw); max-height: 100dvh; overflow-y: auto; }
-@media (max-width: 1199px) { .game-details-drawer { width: min(75vw, 42rem); } }
-@media (max-width: 767px) { .game-details-drawer { width: 100vw; height: 100dvh; } }
-@media (prefers-reduced-motion: reduce) { .game-details-drawer, .drawer-backdrop { transition: none; } }
+.game-details-drawer {
+  width: min(42rem, 46vw);
+  max-height: 100dvh;
+  overflow-y: auto;
+}
+@media (max-width: 1199px) {
+  .game-details-drawer {
+    width: min(75vw, 42rem);
+  }
+}
+@media (max-width: 767px) {
+  .game-details-drawer {
+    width: 100vw;
+    height: 100dvh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-details-drawer,
+  .drawer-backdrop {
+    transition: none;
+  }
+}
 ```
 
 - [ ] **Step 5: Run and confirm GREEN.**
@@ -282,11 +356,13 @@ git commit -m "feat: replace game modal with details drawer"
 ### Task 4: Shared intelligence state and dedicated Play Now/Backlog views
 
 **Files:**
+
 - Create: `dashboard-ui/src/intelligence-state.ts`, `dashboard-ui/src/views/play-now-view.tsx`, `dashboard-ui/src/views/backlog-view.tsx`, `dashboard-ui/src/components/progress-bar.tsx`
 - Modify: `dashboard-ui/src/app.tsx`, `dashboard-ui/src/intelligence-panel.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Produces: `useIntelligenceState({ api, games }: Readonly<{ api: IntelligenceApi; games: readonly DashboardGame[] }>): IntelligenceState`.
 - Produces: `IntelligenceState` with controlled `availableMinutes`, `sessionMode`, `recommendations`, `selectedAppId`, `preference`, `planAvailableMinutes`, `cadence`, `targetGameCount`, `plans`, `message`, `error`, and current refresh/save/create/update actions.
 - Produces: `PlayNowView({ games, state, onOpenGame }: Readonly<{ games: readonly DashboardGame[]; state: IntelligenceState; onOpenGame: (game: DashboardGame, opener: HTMLButtonElement) => void }>)` and `BacklogView({ state }: Readonly<{ state: IntelligenceState }>)`.
@@ -314,7 +390,11 @@ test("uses the existing backlog payload and does not invent remaining duration",
   render(<DashboardApp api={api as never} />);
   await user.click(screen.getByRole("button", { name: "Backlog" }));
   await user.click(screen.getByRole("button", { name: "Crear plan" }));
-  expect(api.createPlan).toHaveBeenCalledWith({ cadence: "weekly", availableMinutes: 45, targetGameCount: 3 });
+  expect(api.createPlan).toHaveBeenCalledWith({
+    cadence: "weekly",
+    availableMinutes: 45,
+    targetGameCount: 3,
+  });
   expect(screen.queryByText(/min restantes estimados/i)).not.toBeInTheDocument();
 });
 ```
@@ -335,7 +415,11 @@ export type IntelligenceState = Readonly<{
   plans: readonly DashboardPlan[];
   refreshRecommendations: () => Promise<void>;
   createPlan: () => Promise<void>;
-  updateProgress: (planId: string, itemId: string, progress: DashboardPlanItemProgress) => Promise<void>;
+  updateProgress: (
+    planId: string,
+    itemId: string,
+    progress: DashboardPlanItemProgress,
+  ) => Promise<void>;
   selectedAppId: number | undefined;
   preference: Omit<DashboardRecommendationPreference, "appId">;
   planAvailableMinutes: string;
@@ -355,7 +439,11 @@ Move positive-integer validation, `preferenceRequestRef`, preference loading, sa
 ```tsx
 <section aria-labelledby="play-now-heading">
   <PageHeader title="Play Now" />
-  <PlayNowControls availableMinutes={state.availableMinutes} sessionMode={state.sessionMode} onFind={state.refreshRecommendations} />
+  <PlayNowControls
+    availableMinutes={state.availableMinutes}
+    sessionMode={state.sessionMode}
+    onFind={state.refreshRecommendations}
+  />
   <PlayNowHero recommendation={state.recommendations?.recommendations[0]} />
   <RecommendationList recommendations={state.recommendations?.recommendations.slice(1, 4) ?? []} />
   <PreferencesSection {...preferenceProps} />
@@ -391,10 +479,12 @@ git commit -m "feat: create dedicated play now and backlog views"
 ### Task 5: Home summaries sourced from shared state
 
 **Files:**
+
 - Modify: `dashboard-ui/src/views/home-view.tsx`, `dashboard-ui/src/app.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Consumes: app-owned `DashboardLibrary | undefined`, `IntelligenceState`, and `HomeTaskSummary`.
 - Produces: summary actions with `onNavigate("library" | "play-now" | "backlog" | "tasks")`.
 - Invariant: Home never calls `DashboardApi`, mounts a planner/manual form, or renders full task/recommendation/library collections.
@@ -446,11 +536,13 @@ git commit -m "feat: add dashboard home view"
 ### Task 6: Manual collection utility workspace
 
 **Files:**
+
 - Create: `dashboard-ui/src/views/manual-collection-view.tsx`
 - Modify: `dashboard-ui/src/app.tsx`, `dashboard-ui/src/manual-collection-panel.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Produces: `ManualCollectionView({ collection, steam, error, saving, onSteamChange, onAdd, onUpdate, onRemove }: ManualCollectionViewProps)` with current controlled prop types.
 - Consumes: `ManualLibraryGame` and `DashboardApp` handlers.
 - Invariant: add/update/remove and post-mutation library refresh stay in `DashboardApp`; the view makes no API calls.
@@ -482,9 +574,23 @@ Expected: FAIL because the Manual destination does not exist.
 ```tsx
 <section aria-labelledby="manual-collection-heading" className="manual-collection-view">
   <PageHeader title="Colección manual" />
-  <form onSubmit={(event) => { event.preventDefault(); onAdd(); }}>{/* existing URL/AppID control */}</form>
-  <p className="inline-notice">El acceso Familia es metadata local declarada por el usuario. Steam Library MCP no sincroniza Steam Families.</p>
-  <ul>{collection.map((game) => <ManualGameRow key={game.appId} game={game} onUpdate={onUpdate} onRemove={onRemove} />)}</ul>
+  <form
+    onSubmit={(event) => {
+      event.preventDefault();
+      onAdd();
+    }}
+  >
+    {/* existing URL/AppID control */}
+  </form>
+  <p className="inline-notice">
+    El acceso Familia es metadata local declarada por el usuario. Steam Library MCP no sincroniza
+    Steam Families.
+  </p>
+  <ul>
+    {collection.map((game) => (
+      <ManualGameRow key={game.appId} game={game} onUpdate={onUpdate} onRemove={onRemove} />
+    ))}
+  </ul>
 </section>
 ```
 
@@ -506,11 +612,13 @@ git commit -m "feat: redesign manual collection workspace"
 ### Task 7: Shared task state and activity workspace
 
 **Files:**
+
 - Create: `dashboard-ui/src/task-state.ts`, `dashboard-ui/src/views/tasks-view.tsx`
 - Modify: `dashboard-ui/src/app.tsx`, `dashboard-ui/src/task-panel.tsx`, `dashboard-ui/src/views/home-view.tsx`, `dashboard-ui/src/styles.css`
 - Test: `tests/dashboard-ui/task-controls.test.tsx`, `tests/dashboard-ui/app.test.tsx`
 
 **Interfaces:**
+
 - Produces: `useTaskState(api: TaskApi): TaskState`, where `TaskApi = DashboardApi & Required<Pick<DashboardApi, "getTasks" | "getTask" | "cancelTask">>`.
 - Produces: `TaskState = Readonly<{ tasks: readonly LocalTask[]; error: string | undefined; cancellingTaskId: string | undefined; refresh: () => Promise<void>; cancel: (id: string) => Promise<void>; summary: HomeTaskSummary }>`.
 - Produces: `TasksView({ state }: Readonly<{ state: TaskState }>)`.
@@ -533,7 +641,11 @@ test("does not create a second task poller while switching Home and Tasks", asyn
 
 test("keeps cancellation when a stale shared poll resolves", async () => {
   const pendingPoll = deferred<LocalTask>();
-  const api = { ...taskApiFixtureWithRunningTask(), getTask: vi.fn(() => pendingPoll.promise), cancelTask: vi.fn(async () => ({ ...runningTask, state: "cancelled" as const })) };
+  const api = {
+    ...taskApiFixtureWithRunningTask(),
+    getTask: vi.fn(() => pendingPoll.promise),
+    cancelTask: vi.fn(async () => ({ ...runningTask, state: "cancelled" as const })),
+  };
   render(<DashboardApp api={api as never} />);
   // Advance 2,000ms, cancel runningTask.id, resolve pendingPoll with runningTask, and assert "Cancelada" remains while "En ejecución" is absent.
 });
@@ -548,8 +660,14 @@ Expected: FAIL because `TaskPanel` local state unmounts/restarts across navigati
 - [ ] **Step 3: Extract the current race-safe logic to `useTaskState`.**
 
 ```ts
-const activeTaskCount = state.tasks.filter((task) => task.state === "queued" || task.state === "running").length;
-const summary: HomeTaskSummary = { totalCount: state.tasks.length, activeCount: activeTaskCount, hasError: state.error !== undefined };
+const activeTaskCount = state.tasks.filter(
+  (task) => task.state === "queued" || task.state === "running",
+).length;
+const summary: HomeTaskSummary = {
+  totalCount: state.tasks.length,
+  activeCount: activeTaskCount,
+  hasError: state.error !== undefined,
+};
 ```
 
 Move `tasksRef`, per-task versions, list generation, cancellation set, 2-second poll, reconciliation, and errors unchanged. The app calls this hook once after the existing type guard and passes one stable state object to both views. `TasksView` renders existing type/state/progress/error/cancel data as activity rows and calls `refresh`/`cancel`.
@@ -570,10 +688,12 @@ git commit -m "feat: redesign tasks workspace"
 ### Task 8: Responsive polish and complete quality gates
 
 **Files:**
+
 - Modify: `dashboard-ui/src/styles.css`, `dashboard-ui/src/components/inline-notice.tsx`, `dashboard-ui/src/components/progress-bar.tsx`
 - Modify: `tests/dashboard-ui/app.test.tsx`, `tests/dashboard-ui/task-controls.test.tsx`
 
 **Interfaces:**
+
 - Produces: CSS tokens for graphite surfaces, cold-blue focus/selection, restricted muted-gold hero/achievement highlights, textual status treatments, responsive layouts, and reduced-motion overrides.
 - Consumes: existing view loading/error values; skeletons are presentation-only and never trigger requests or hide retry/error controls.
 
@@ -590,10 +710,14 @@ test("ships responsive shell, grid, mobile drawer, and reduced-motion CSS", asyn
 
 test("keeps Library error and retry visible instead of hiding it behind a skeleton", async () => {
   const user = userEvent.setup();
-  render(<DashboardApp api={{ getLibrary: vi.fn().mockRejectedValue(new Error("offline")) } as never} />);
+  render(
+    <DashboardApp api={{ getLibrary: vi.fn().mockRejectedValue(new Error("offline")) } as never} />,
+  );
   await user.click(screen.getByRole("button", { name: "Biblioteca" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("offline");
-  expect(screen.getByRole("button", { name: "Reintentar carga de la biblioteca" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Reintentar carga de la biblioteca" }),
+  ).toBeInTheDocument();
 });
 ```
 
@@ -606,8 +730,22 @@ Expected: FAIL until the final responsive/reduced-motion styling exists.
 - [ ] **Step 3: Apply visual polish without behavior changes.**
 
 ```css
-:root { --surface-0: #11151c; --surface-1: #181e28; --surface-2: #222a36; --color-accent: #66a9e8; --color-premium: #c9a96a; }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+:root {
+  --surface-0: #11151c;
+  --surface-1: #181e28;
+  --surface-2: #222a36;
+  --color-accent: #66a9e8;
+  --color-premium: #c9a96a;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 ```
 
 Apply 4/8px spacing, restrained radii/shadows, status text plus color, readable empty states, and skeleton blocks only for meaningful Library/Play Now/drawer loads. Gold is restricted to Play Now hero and achievement highlights; no charts, autoplaying movement, or decorative dependency. Guarantee 44px mobile target heights.

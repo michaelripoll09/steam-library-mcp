@@ -1,3 +1,4 @@
+import { presentationError } from "./presentation.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LocalTask } from "../../src/tasks/task-runner.js";
@@ -162,7 +163,5 @@ function isActiveTask(task: LocalTask): boolean {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message !== ""
-    ? error.message
-    : "Algo salió mal. Inténtalo de nuevo.";
+  return presentationError(error);
 }

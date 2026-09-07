@@ -1,3 +1,4 @@
+import { presentationError } from "./presentation.js";
 import { useEffect, useRef, useState } from "react";
 
 import type {
@@ -245,7 +246,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
         )}
 
         {activeView === "backlog" && library !== undefined && intelligenceApi && (
-          <BacklogView state={intelligenceState} />
+          <BacklogView state={intelligenceState} games={library.games} />
         )}
 
         {activeView === "manual" && manualCollectionApi && (
@@ -288,9 +289,7 @@ function libraryGames(library: DashboardLibrary | undefined): readonly Dashboard
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message !== ""
-    ? error.message
-    : "Algo salió mal. Inténtalo de nuevo.";
+  return presentationError(error);
 }
 
 function isIntelligenceApi(api: DashboardApi): boolean {

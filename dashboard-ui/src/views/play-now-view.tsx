@@ -1,3 +1,5 @@
+import { formatPlaytime } from "../library-filters.js";
+import { recommendationReason } from "../presentation.js";
 import type {
   DashboardGame,
   DashboardRecommendationPreference,
@@ -55,7 +57,7 @@ export function PlayNowView({
         onFind={state.refreshRecommendations}
       />
       <section className="play-now-recommendations" aria-labelledby="recommendations-heading">
-        <h3 id="recommendations-heading">Recomendaciones</h3>
+        <h3 id="recommendations-heading">Recomendación principal</h3>
         <PlayNowHero
           recommendation={hero}
           game={hero === undefined ? undefined : recommendationGames.get(hero.appId)}
@@ -76,8 +78,8 @@ function PageHeader({ title, onLoad }: Readonly<{ title: string; onLoad: () => P
   return (
     <div className="dashboard-view-heading">
       <div>
-        <p className="eyebrow">Inteligencia local</p>
         <h2 id="play-now-heading">{title}</h2>
+        <p className="subtitle">Encuentra el juego para tu próxima sesión.</p>
       </div>
       <button className="intelligence-button" type="button" onClick={() => void onLoad()}>
         Cargar inteligencia
@@ -101,8 +103,9 @@ function PlayNowControls({
 }>) {
   return (
     <div className="recommendations-controls">
+      <h3>Configuración de sesión</h3>
       <label>
-        Tiempo de esta sesión
+        Tiempo de esta sesión (min)
         <input
           type="number"
           min="1"
@@ -136,6 +139,7 @@ function PlayNowHero({
     | {
         name: string;
         durationEstimateMinutes: number | null;
+        estimatedRemainingMinutes?: number | null;
         explanation: string;
         reasons: readonly string[];
       }
@@ -144,7 +148,7 @@ function PlayNowHero({
   onOpenGame: (game: DashboardGame, opener: HTMLButtonElement) => void;
 }>) {
   if (recommendation === undefined) {
-    return <p className="play-now-empty">Elegí una duración y encontrá tu próxima partida.</p>;
+    return <p className="play-now-empty">Elige una duración y encuentra tu próxima partida.</p>;
   }
   return (
     <article className="play-now-hero">
@@ -155,10 +159,17 @@ function PlayNowHero({
         <span>
           {recommendation.durationEstimateMinutes === null
             ? "Duración desconocida"
-            : `~${recommendation.durationEstimateMinutes} min`}
+            : `Duración total estimada: ${formatPlaytime(recommendation.durationEstimateMinutes)}`}
         </span>
-        <p>{recommendation.explanation}</p>
-        <small>{recommendation.reasons.join(", ")}</small>
+        {recommendation.estimatedRemainingMinutes != null && (
+          <p>{`~${formatPlaytime(recommendation.estimatedRemainingMinutes)} restantes`}</p>
+        )}
+        <p>
+          {recommendation.reasons.map(recommendationReason).filter(Boolean).length > 0
+            ? `Por qué: ${recommendation.reasons.map(recommendationReason).filter(Boolean).join(" · ")}.`
+            : "Seleccionado según tu sesión y preferencias."}
+        </p>
+        <ReasonChips reasons={recommendation.reasons} />
         {game !== undefined && (
           <button type="button" onClick={(event) => onOpenGame(game, event.currentTarget)}>
             Ver detalles
@@ -178,6 +189,7 @@ function RecommendationList({
     appId: number;
     name: string;
     durationEstimateMinutes: number | null;
+    estimatedRemainingMinutes?: number | null;
     explanation: string;
     reasons: readonly string[];
   }[];
@@ -197,10 +209,10 @@ function RecommendationList({
               <span>
                 {recommendation.durationEstimateMinutes === null
                   ? "Duración desconocida"
-                  : `~${recommendation.durationEstimateMinutes} min`}
+                  : `Duración total estimada: ${formatPlaytime(recommendation.durationEstimateMinutes)}`}
               </span>
-              <p>{recommendation.explanation}</p>
-              <small>{recommendation.reasons.join(", ")}</small>
+
+              <ReasonChips reasons={recommendation.reasons.slice(0, 2)} />
               {game !== undefined && (
                 <button type="button" onClick={(event) => onOpenGame(game, event.currentTarget)}>
                   Ver detalles
@@ -272,5 +284,18 @@ function PreferencesSection({
         Guardar preferencias
       </button>
     </section>
+  );
+}
+
+function ReasonChips({ reasons }: Readonly<{ reasons: readonly string[] }>) {
+  return (
+    <div className="reason-chips">
+      {reasons
+        .filter((reason) => reason !== "duration_unknown")
+        .map((reason) => {
+          const label = recommendationReason(reason);
+          return label ? <span key={reason}>{label}</span> : null;
+        })}
+    </div>
   );
 }

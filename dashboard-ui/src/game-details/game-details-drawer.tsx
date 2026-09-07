@@ -1,3 +1,4 @@
+import { ProgressBar } from "../components/progress-bar.js";
 import { useRef, type KeyboardEvent, type RefObject } from "react";
 
 import type {
@@ -89,15 +90,24 @@ export function GameDetailsDrawer({
         >
           ×
         </button>
-        <CoverImage game={game} />
-        <div className="details-copy">
-          <h2 id="game-details-title">{game.name}</h2>
-          <p className="eyebrow">{`Juego ${formatLabel(game.accessType).toLowerCase()}`}</p>
-          <p>{formatPlaytime(game.playtimeMinutes)} jugado</p>
-          {game.lastPlayedAt !== undefined && (
-            <p>Última vez jugado: {formatLastPlayed(game.lastPlayedAt)}</p>
-          )}
-          <p>{game.isPlayable ? "Listo para jugar" : "No se puede jugar actualmente"}</p>
+        <div className="drawer-hero">
+          <CoverImage game={game} />
+          <div className="details-copy">
+            <h2 id="game-details-title">{game.name}</h2>
+            <div className="detail-badges">
+              <span className={`status-pill status-${game.status}`}>
+                {formatLabel(game.status)}
+              </span>
+              <span className="access-badge">{`Juego ${formatLabel(game.accessType).toLowerCase()}`}</span>
+            </div>
+            <p>{formatPlaytime(game.playtimeMinutes)} jugado</p>
+            {game.lastPlayedAt !== undefined && (
+              <p>Última vez jugado: {formatLastPlayed(game.lastPlayedAt)}</p>
+            )}
+            <p>{game.isPlayable ? "Listo para jugar" : "No se puede jugar actualmente"}</p>
+          </div>
+        </div>
+        <div className="details-body">
           <label className="status-control">
             <span>Estado</span>
             <select
@@ -160,6 +170,11 @@ export function GameDetailsDrawer({
                     {achievementResult.progress.totalCount} ·{" "}
                     {achievementResult.progress.completionPercent}%
                   </p>
+                  <ProgressBar
+                    value={achievementResult.progress.unlockedCount}
+                    max={achievementResult.progress.totalCount}
+                    label="Logros desbloqueados"
+                  />
                   <ul className="achievement-list" aria-label="Logros recientes y pendientes">
                     {achievementResult.progress.achievements
                       .slice()
@@ -167,6 +182,22 @@ export function GameDetailsDrawer({
                       .slice(0, 10)
                       .map((achievement) => (
                         <li key={achievement.apiName}>
+                          {(achievement.achieved
+                            ? achievement.iconUrl
+                            : achievement.iconGrayUrl) && (
+                            <img
+                              className="achievement-icon"
+                              src={
+                                (achievement.achieved
+                                  ? achievement.iconUrl
+                                  : achievement.iconGrayUrl)!
+                              }
+                              alt=""
+                              onError={(event) => {
+                                event.currentTarget.style.visibility = "hidden";
+                              }}
+                            />
+                          )}
                           <strong>{achievement.displayName}</strong>
                           <span>{achievement.achieved ? "Desbloqueado" : "Pendiente"}</span>
                         </li>

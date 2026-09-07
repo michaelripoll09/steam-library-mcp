@@ -181,7 +181,9 @@ describe("DashboardApp", () => {
 
     expect(await screen.findByText("Juegos totales")).toBeInTheDocument();
     expect(screen.getByText("Tiempo jugado")).toBeInTheDocument();
-    expect(screen.getByText("2h 5m")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Resumen de la biblioteca")).getByText("2h 5m"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("searchbox", { name: "Buscar juegos" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("URL de Steam o AppID")).not.toBeInTheDocument();
     await waitFor(() => expect(api.getManualCollection).toHaveBeenCalledTimes(1));
@@ -342,7 +344,9 @@ describe("DashboardApp", () => {
       />,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Steam no está disponible. Inténtalo de nuevo más tarde.",
+    );
     expect(screen.queryByText("0")).not.toBeInTheDocument();
   });
 
@@ -662,7 +666,7 @@ describe("DashboardApp", () => {
     await openDashboardView("library");
 
     expect(
-      await screen.findByRole("heading", { name: "Tu biblioteca de Steam" }),
+      await screen.findByRole("heading", { name: "Biblioteca", level: 2 }),
     ).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Portada de Celeste" })).toHaveAttribute(
       "src",
@@ -884,7 +888,9 @@ describe("DashboardApp", () => {
     await screen.findByRole("article", { name: "Celeste" });
     await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Steam no está disponible. Inténtalo de nuevo más tarde.",
+    );
     expect(screen.getByRole("article", { name: "Celeste" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar sincronización" })).toBeInTheDocument();
   });
@@ -903,7 +909,9 @@ describe("DashboardApp", () => {
     render(<DashboardApp api={api} />);
     await openDashboardView("library");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Steam is unavailable.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Steam no está disponible. Inténtalo de nuevo más tarde.",
+    );
     await user.click(screen.getByRole("button", { name: "Reintentar carga de la biblioteca" }));
 
     expect(await screen.findByRole("article", { name: "Celeste" })).toBeInTheDocument();
@@ -980,7 +988,9 @@ describe("DashboardApp", () => {
     const dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Estado"), "completed");
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Tracker is offline.");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "No se pudo conectar con el servicio. Inténtalo de nuevo.",
+    );
     expect(
       within(screen.getByRole("article", { name: "Hades" })).getByText("Jugando"),
     ).toBeInTheDocument();
@@ -1154,7 +1164,7 @@ test("closes a custom filter menu with Escape and an outside click", async () =>
   expect(screen.queryByRole("listbox", { name: "Acceso" })).not.toBeInTheDocument();
 
   await user.click(accessFilter);
-  await user.click(screen.getByRole("heading", { name: "Tu biblioteca de Steam" }));
+  await user.click(screen.getByRole("heading", { name: "Biblioteca", level: 2 }));
   expect(screen.queryByRole("listbox", { name: "Acceso" })).not.toBeInTheDocument();
 });
 
@@ -1322,17 +1332,19 @@ test("keeps recommendation controls and preferences in Play Now while Backlog ow
   render(<DashboardApp api={api as never} />);
   await openDashboardView("play-now");
 
-  const recommendations = await screen.findByRole("heading", { name: "Recomendaciones" });
+  const recommendations = await screen.findByRole("heading", { name: "Recomendación principal" });
   const preferences = screen.getByRole("heading", { name: "Preferencias" });
   expect(recommendations.closest("section")).toHaveClass("play-now-recommendations");
   expect(
-    screen.getByLabelText("Tiempo de esta sesión").closest(".recommendations-controls"),
+    screen.getByLabelText("Tiempo de esta sesión (min)").closest(".recommendations-controls"),
   ).toHaveClass("recommendations-controls");
   expect(preferences.closest("section")).toHaveClass("intelligence-side-card");
   expect(screen.queryByRole("heading", { name: "Plan de backlog" })).not.toBeInTheDocument();
   await openDashboardView("backlog");
   expect(screen.getByRole("heading", { name: "Plan de backlog" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Tiempo total disponible en la semana/mes")).toBeInTheDocument();
+  expect(
+    screen.getByLabelText("Tiempo total disponible en la semana/mes (min)"),
+  ).toBeInTheDocument();
 });
 
 test("uses accessible custom menus for every intelligence choice and closes them predictably", async () => {
@@ -1458,7 +1470,7 @@ test("allows replacing recommendation minutes after clearing the field and rejec
   render(<DashboardApp api={api as never} />);
   await openDashboardView("play-now");
 
-  const availableMinutes = await screen.findByLabelText("Tiempo de esta sesión");
+  const availableMinutes = await screen.findByLabelText("Tiempo de esta sesión (min)");
   await user.clear(availableMinutes);
   expect(availableMinutes).toHaveValue(null);
 
@@ -1598,7 +1610,9 @@ test("keeps Library error and retry visible instead of hiding it behind a skelet
 
   await user.click(screen.getByRole("button", { name: "Biblioteca" }));
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "No se pudo conectar con el servicio. Inténtalo de nuevo.",
+  );
   expect(
     screen.getByRole("button", { name: "Reintentar carga de la biblioteca" }),
   ).toBeInTheDocument();
