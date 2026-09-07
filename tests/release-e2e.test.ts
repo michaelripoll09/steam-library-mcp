@@ -65,8 +65,12 @@ async function reserveLoopbackPort(): Promise<number> {
   return address.port;
 }
 
-async function waitForDashboard(url: string, process?: ChildProcess): Promise<Response> {
-  const deadline = Date.now() + 5_000;
+async function waitForDashboard(
+  url: string,
+  process?: ChildProcess,
+  timeoutMs = 5_000,
+): Promise<Response> {
+  const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
   while (Date.now() < deadline) {
     if (process?.exitCode !== null && process?.exitCode !== undefined) {
@@ -388,6 +392,7 @@ describe("released dashboard", () => {
     }
   });
 
+  // dev:dashboard compiles the server before starting both services; allow startup and cleanup.
   test("starts the dashboard development lifecycle with the Vite UI", async () => {
     const dashboardPort = await reserveLoopbackPort();
     const vitePort = await reserveLoopbackPort();
@@ -400,7 +405,7 @@ describe("released dashboard", () => {
       TRACKER_DATABASE_PATH: join(databaseDirectory, "tracker.sqlite"),
     });
     try {
-      const root = await waitForDashboard(`http://127.0.0.1:${vitePort}/`, dashboard);
+      const root = await waitForDashboard(`http://127.0.0.1:${vitePort}/`, dashboard, 15_000);
       expect(root.status).toBe(200);
       expect(await root.text()).toContain('<div id="root">');
       expect(
@@ -410,5 +415,5 @@ describe("released dashboard", () => {
       await stopProcess(dashboard);
       rmSync(databaseDirectory, { force: true, recursive: true });
     }
-  });
+  }, 30_000);
 });
