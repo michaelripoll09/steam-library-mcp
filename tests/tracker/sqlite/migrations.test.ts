@@ -54,13 +54,28 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
-  test("adds recommendation preferences to an existing version-two tracker database", () => {
+  test("drops the legacy one-playing index when upgrading a version-two tracker database", () => {
     const database = new Database(":memory:");
 
     try {
       migrateDatabase(database, MIGRATIONS.slice(0, 2));
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'one_playing_entry'",
+          )
+          .get(),
+      ).toEqual({ name: "one_playing_entry" });
+
       migrateDatabase(database);
 
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'one_playing_entry'",
+          )
+          .get(),
+      ).toBeUndefined();
       expect(
         database
           .prepare(

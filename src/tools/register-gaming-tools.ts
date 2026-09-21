@@ -23,10 +23,10 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
   register(
     server,
     "gaming_get_current_game",
-    "Get the accessible game currently marked as playing.",
+    "List accessible games currently marked as playing.",
     emptySchema,
     () => service.getCurrentGame(),
-    (game) => ({ game }),
+    (games) => ({ games }),
   );
   registerMark(
     server,

@@ -31,7 +31,7 @@ export type GamingTrackerService = Readonly<{
     status: TStatus,
   ): Promise<TrackerMarkResult<TStatus>>;
   getBacklog(): Promise<readonly TrackerGame[]>;
-  getCurrentGame(): Promise<TrackerGame | null>;
+  getCurrentGame(): Promise<readonly TrackerGame[]>;
   getCompleted(): Promise<readonly TrackerGame[]>;
   getStatuses(): Promise<readonly TrackerGame[]>;
 }>;
@@ -84,10 +84,13 @@ export function createGamingTrackerService({
     async getCurrentGame() {
       const games = await getOwnedGames(ownershipLookup);
       const gameByAppId = new Map(games.map((game) => [game.appId, game]));
-      const current = repository.list().find((entry) => entry.status === "playing");
-      return current === undefined || gameByAppId.get(current.appId) === undefined
-        ? null
-        : toTrackerGame(gameByAppId.get(current.appId)!, current, "playing");
+      return Object.freeze(
+        repository
+          .list()
+          .filter((entry) => entry.status === "playing" && gameByAppId.has(entry.appId))
+          .map((entry) => toTrackerGame(gameByAppId.get(entry.appId)!, entry, "playing"))
+          .sort(compareTrackerGames),
+      );
     },
     async getCompleted() {
       const games = await getOwnedGames(ownershipLookup);
@@ -127,7 +130,6 @@ function setStatus(
   status: TrackerMarkStatus,
   at: string,
 ): boolean {
-  if (status === "playing") writer.pauseCurrent(appId, at);
   return writer.setStatus(appId, status, at);
 }
 

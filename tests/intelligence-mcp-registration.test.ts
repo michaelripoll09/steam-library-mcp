@@ -59,7 +59,7 @@ function createServerForRegistration(preferencesUnavailable = false) {
   } as unknown as BacklogPlanService;
   const tracker: GamingTrackerService = {
     getBacklog: vi.fn(async () => []),
-    getCurrentGame: vi.fn(async () => null),
+    getCurrentGame: vi.fn(async () => []),
     getCompleted: vi.fn(async () => []),
     getStatuses: vi.fn(async () => []),
     mark: vi.fn(),

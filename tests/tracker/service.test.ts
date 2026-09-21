@@ -130,10 +130,11 @@ describe("GamingTrackerService lifecycle", () => {
     }
   });
 
-  test("pauses the prior current game atomically and makes repeated marks unchanged", async () => {
+  test("keeps multiple playing games active and returns them newest updated first", async () => {
     const database = openTrackerDatabase(":memory:");
+    let now = 1_700_000_000_000;
     const service = createGamingTrackerService({
-      clock: { now: () => 1_700_000_000_000 },
+      clock: { now: () => now },
       ownershipLookup: createOwnershipLookup([
         ...ownedGames,
         { appId: 440, name: "Team Fortress 2", playtimeMinutes: 0 },
@@ -143,16 +144,14 @@ describe("GamingTrackerService lifecycle", () => {
 
     try {
       await expect(service.mark(620, "playing")).resolves.toMatchObject({ outcome: "updated" });
+      now += 1_000;
       await expect(service.mark(440, "playing")).resolves.toMatchObject({ outcome: "updated" });
       await expect(service.mark(440, "playing")).resolves.toMatchObject({ outcome: "unchanged" });
-      await expect(service.getCurrentGame()).resolves.toMatchObject({
-        appId: 440,
-        name: "Team Fortress 2",
-        status: "playing",
-      });
-      await expect(service.getBacklog()).resolves.toEqual([
-        expect.objectContaining({ appId: 620, status: "backlog" }),
+      await expect(service.getCurrentGame()).resolves.toEqual([
+        expect.objectContaining({ appId: 440, name: "Team Fortress 2", status: "playing" }),
+        expect.objectContaining({ appId: 620, name: "Portal 2", status: "playing" }),
       ]);
+      await expect(service.getBacklog()).resolves.toEqual([]);
     } finally {
       database.close();
     }

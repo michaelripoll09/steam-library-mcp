@@ -69,7 +69,7 @@ function createSteamClient(): SteamApiClient {
 function createGamingTrackerService(): GamingTrackerService {
   return {
     getBacklog: vi.fn(async () => []),
-    getCurrentGame: vi.fn(async () => null),
+    getCurrentGame: vi.fn(async () => []),
     getCompleted: vi.fn(async () => []),
     getStatuses: vi.fn(async () => []),
     mark: vi.fn(async (appId) => ({ outcome: "not_owned" as const, appId: appId as number })),

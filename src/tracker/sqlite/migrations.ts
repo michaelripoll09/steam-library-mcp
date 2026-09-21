@@ -167,6 +167,11 @@ export const MIGRATIONS = Object.freeze([
         CHECK (is_playable IN (0, 1))`,
     ],
   }),
+  createMigration({
+    version: 9,
+    name: "allow-multiple-playing-entries",
+    statements: ["DROP INDEX one_playing_entry"],
+  }),
 ]);
 
 const createMigrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (

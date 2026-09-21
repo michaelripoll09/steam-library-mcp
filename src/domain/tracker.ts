@@ -36,7 +36,6 @@ export interface OwnershipLookup {
 }
 
 export interface TrackerWriter {
-  pauseCurrent(exceptAppId: number, at: string): void;
   setStatus(appId: number, status: GameStatus, at: string): boolean;
 }
 

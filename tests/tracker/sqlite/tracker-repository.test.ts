@@ -45,26 +45,26 @@ describe("SQLite tracker repository", () => {
     }
   });
 
-  test("enforces one playing entry with the partial unique index", () => {
+  test("allows multiple playing entries after removing the legacy partial unique index", () => {
     const { database, repository } = createRepository();
 
     try {
-      repository.transaction((writer) => writer.setStatus(10, "playing", firstTimestamp));
+      repository.transaction((writer) => {
+        writer.setStatus(10, "playing", firstTimestamp);
+        writer.setStatus(20, "playing", laterTimestamp);
+      });
 
-      expect(() =>
-        database
-          .prepare(
-            "INSERT INTO tracker_entries (app_id, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
-          )
-          .run(20, "playing", firstTimestamp, firstTimestamp),
-      ).toThrow();
+      expect(repository.list()).toEqual([
+        expect.objectContaining({ appId: 20, status: "playing" }),
+        expect.objectContaining({ appId: 10, status: "playing" }),
+      ]);
       expect(
         database
           .prepare(
             "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'one_playing_entry'",
           )
           .get(),
-      ).toEqual({ name: "one_playing_entry" });
+      ).toBeUndefined();
     } finally {
       database.close();
     }

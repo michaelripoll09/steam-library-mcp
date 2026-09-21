@@ -18,7 +18,7 @@ function setup() {
   };
   const service: GamingTrackerService = {
     getBacklog: vi.fn(async () => []),
-    getCurrentGame: vi.fn(async () => null),
+    getCurrentGame: vi.fn(async () => []),
     getCompleted: vi.fn(async () => []),
     getStatuses: vi.fn(async () => []),
     mark: vi.fn(async (appId, status) => ({
@@ -47,7 +47,7 @@ describe("gaming MCP tools", () => {
       content: [{ text: '{"games":[]}' }],
     });
     await expect(tools.get("gaming_get_current_game")?.({})).resolves.toMatchObject({
-      content: [{ text: '{"game":null}' }],
+      content: [{ text: '{"games":[]}' }],
     });
     await expect(tools.get("gaming_get_completed")?.({})).resolves.toMatchObject({
       content: [{ text: '{"games":[]}' }],

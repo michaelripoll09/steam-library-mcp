@@ -58,9 +58,6 @@ export class SqliteTrackerRepository implements TrackerRepository {
   }
 
   private createWriter(isActive: () => boolean): TrackerWriter {
-    const pauseCurrent = this.#database.prepare(
-      "UPDATE tracker_entries SET status = 'paused', updated_at = ? WHERE status = 'playing' AND app_id != ?",
-    );
     const setStatus = this.#database.prepare(
       `INSERT INTO tracker_entries (app_id, status, created_at, updated_at)
        VALUES (?, ?, ?, ?)
@@ -74,10 +71,6 @@ export class SqliteTrackerRepository implements TrackerRepository {
     };
 
     return Object.freeze({
-      pauseCurrent: (exceptAppId: number, at: string) => {
-        assertActive();
-        pauseCurrent.run(at, exceptAppId);
-      },
       setStatus: (appId: number, status: GameStatus, at: string) => {
         assertActive();
         return setStatus.run(appId, status, at, at).changes === 1;
