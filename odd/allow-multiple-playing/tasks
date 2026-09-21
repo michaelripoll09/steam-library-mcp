@@ -1,9 +1,0 @@
-# ODD task mirror: allow-multiple-playing
-
-- [x] Map tracker status contracts and tests
-- [x] Support multiple playing games (including forward migration)
-- [x] Add regression coverage and run checks
-
-Decision: `gaming_get_current_game` returns all games marked `playing` rather than a single principal game.
-
-Evidence: 52 focused tests passed, server typecheck passed, diff check passed, and runtime MCP confirmed SILENT HILL 2 plus Blasphemous 2 are both playing.
