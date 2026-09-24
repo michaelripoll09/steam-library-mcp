@@ -88,7 +88,7 @@ Manual collection supports add, update, and remove using a positive Steam AppID 
 
 **Play Now** (`recommendation_get_play_now`) answers “what should I play in this session?” from tracker state, preferences, and `sessionMode`; duration is only a secondary finishability signal. The **Backlog Planner** answers “what fits in my weekly or monthly total time budget?” using estimated remaining duration and a target game count. Play Now `sessionMode` is `solo` by default; use `with_friends` to prioritize games marked for friends or `any` to consider both play modes.
 
-The server also exposes read-only task resources (steam-library://tasks and steam-library://tasks/{taskId}), intelligence resources, and prompts for play-now recommendations, weekly/monthly plans, and backlog review. Background task types include library sync, duration enrichment, and plan recalculation.
+`gaming_get_current_game` returns all accessible games currently marked as `playing`; multiple games can be active at the same time.\n\nThe server also exposes read-only task resources (steam-library://tasks and steam-library://tasks/{taskId}), intelligence resources, and prompts for play-now recommendations, weekly/monthly plans, and backlog review. Background task types include library sync, duration enrichment, and plan recalculation.
 
 ## Dashboard capabilities
 
