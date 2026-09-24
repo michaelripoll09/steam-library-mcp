@@ -180,6 +180,9 @@ export function createArtworkResolver({
     );
     if (titleMatch !== undefined) return titleMatch;
 
+    const cachedLandscape = await readCached(cacheDirectory, appId, "landscape");
+    if (cachedLandscape !== undefined) return cachedLandscape;
+
     return cacheFirst(
       fetch,
       cacheDirectory,
@@ -190,7 +193,11 @@ export function createArtworkResolver({
   return Object.freeze({ resolve });
 }
 
-async function readCached(directory: string, appId: number): Promise<ResolvedArtwork | undefined> {
+async function readCached(
+  directory: string,
+  appId: number,
+  orientation: ArtworkOrientation = "portrait",
+): Promise<ResolvedArtwork | undefined> {
   const filePath = join(directory, `${appId}.img`);
   try {
     const metadata = JSON.parse(
@@ -198,7 +205,7 @@ async function readCached(directory: string, appId: number): Promise<ResolvedArt
     ) as unknown;
     if (
       !isReadableMetadata(metadata) ||
-      metadata.orientation !== "portrait" ||
+      metadata.orientation !== orientation ||
       !isTrustedCacheRecord(metadata, appId)
     ) {
       return undefined;
@@ -241,7 +248,8 @@ async function publicSteamLandscapeArtwork(
     },
   ];
   try {
-    const response = await fetch(
+    const response = await fetchWithArtworkTimeout(
+      fetch,
       `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
     );
     const payload = (await response.json()) as Record<
@@ -266,7 +274,8 @@ async function steamGridArtwork(
   key: string,
 ): Promise<readonly URL[]> {
   try {
-    const response = await fetch(
+    const response = await fetchWithArtworkTimeout(
+      fetch,
       `https://www.steamgriddb.com/api/v2/grids/steam/${appId}?dimensions=600x900`,
       { headers: { Authorization: `Bearer ${key}` } },
     );
@@ -393,7 +402,7 @@ async function requestIgdbGames(
   if (credentials === undefined || tokenProvider === undefined) return undefined;
   try {
     const accessToken = await tokenProvider.getAccessToken();
-    const response = await fetch(IGDB_GAMES_URL, {
+    const response = await fetchWithArtworkTimeout(fetch, IGDB_GAMES_URL, {
       method: "POST",
       redirect: "error",
       headers: {
@@ -405,6 +414,20 @@ async function requestIgdbGames(
     return response.ok ? await response.json() : undefined;
   } catch {
     return undefined;
+  }
+}
+
+async function fetchWithArtworkTimeout(
+  fetch: FetchLike,
+  input: string,
+  init: Omit<RequestInit, "signal"> = {},
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, redirect: "error", signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

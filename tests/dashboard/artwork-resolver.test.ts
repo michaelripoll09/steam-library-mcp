@@ -1615,6 +1615,84 @@ describe("artwork resolver", () => {
     }
   });
 
+  test("reuses a valid cached landscape cover without re-downloading it when portraits stay unavailable", async () => {
+    await withDirectory(async (directory) => {
+      await Promise.all([
+        writeFile(join(directory, "858460.img"), new Uint8Array([9])),
+        writeFile(
+          join(directory, "858460.json"),
+          JSON.stringify({
+            version: 4,
+            contentType: "image/jpeg",
+            orientation: "landscape",
+            source: "steam",
+          }),
+        ),
+      ]);
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        throw new Error(`unexpected artwork fetch: ${url}`);
+      });
+      const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
+
+      await expect(resolver.resolve(858460)).resolves.toMatchObject({ orientation: "landscape" });
+      expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/858460/library_600x900.jpg",
+      ]);
+    });
+  });
+
+  test("sends artwork metadata lookups with a timeout signal and rejected redirects", async () => {
+    await withDirectory(async (directory) => {
+      const seen: Array<{ url: string; init?: RequestInit }> = [];
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        seen.push({ url, init });
+        if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
+        if (url.includes("steamgriddb.com/api/v2/grids/steam/858460")) {
+          return new Response(JSON.stringify({ success: true, data: [] }));
+        }
+        if (url === "https://id.twitch.tv/oauth2/token") {
+          return new Response(
+            JSON.stringify({
+              access_token: "temporary-artwork-token",
+              token_type: "bearer",
+              expires_in: 3600,
+            }),
+          );
+        }
+        if (url === "https://api.igdb.com/v4/games") return new Response(JSON.stringify([]));
+        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        return new Response(null, { status: 404 });
+      });
+      const resolver = createArtworkResolver({
+        cacheDirectory: directory,
+        steamGridDbApiKey: "grid-key",
+        igdbCredentials: { clientId: "fake-client-id", clientSecret: "fake-client-secret" },
+        fetch,
+      });
+
+      await resolver.resolve(858460, "Celeste");
+
+      const metadataCalls = seen.filter(
+        ({ url }) =>
+          url.includes("steamgriddb.com/api/v2/grids") ||
+          url.includes("store.steampowered.com/api/appdetails") ||
+          url === "https://api.igdb.com/v4/games",
+      );
+      expect(metadataCalls.length).toBeGreaterThan(0);
+      for (const { init } of metadataCalls) {
+        expect(init).toMatchObject({ redirect: "error" });
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+      }
+      expect(
+        seen.find(({ url }) => url.includes("steamgriddb.com/api/v2/grids"))?.init,
+      ).toMatchObject({ headers: { Authorization: "Bearer grid-key" } });
+    });
+  });
+
   test("caps the artwork cache and evicts the lowest app ID deterministically", async () => {
     await withDirectory(async (directory) => {
       const cacheEntries = Array.from({ length: 128 }, (_, index) => index + 1);
