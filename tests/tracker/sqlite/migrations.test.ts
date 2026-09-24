@@ -93,6 +93,24 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
+  test("upgrades safely when the legacy one-playing index is already absent", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database, MIGRATIONS.slice(0, 8));
+      database.exec("DROP INDEX one_playing_entry");
+
+      expect(() => migrateDatabase(database)).not.toThrow();
+      expect(
+        database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get(),
+      ).toEqual({
+        version: MIGRATIONS.at(-1)?.version,
+      });
+    } finally {
+      database.close();
+    }
+  });
+
   test("adds local game-duration estimates to existing tracker storage", () => {
     const database = new Database(":memory:");
 
