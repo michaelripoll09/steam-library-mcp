@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createBacklogSelectionService } from "../../src/backlog/backlog-selection-service.js";
+import type { GameDurationEstimate } from "../../src/domain/game-duration.js";
 import type { SteamGame } from "../../src/domain/models.js";
 import type { GameRecommendationPreference } from "../../src/domain/recommendation-preferences.js";
 import type { TrackerEntry } from "../../src/domain/tracker.js";
@@ -158,5 +159,105 @@ describe("BacklogSelectionService", () => {
 
     expect(result.selections.map((selection) => selection.appId)).toEqual([2]);
     expect(result.exclusions).toEqual([{ reason: "over_budget", count: 1 }]);
+  });
+
+  it("processes more than four candidates with at most four concurrent duration lookups", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const appIds = [1, 2, 3, 4, 5, 6, 7, 8];
+    const service = createBacklogSelectionService({
+      library: {
+        getLibrary: async () => ({
+          steamId: "test-steam-id",
+          games: appIds.map((appId) => toSteamGame({ appId })),
+          fetchedAt: "2026-09-04T00:00:00.000Z",
+        }),
+      },
+      trackerRepository: { list: () => [] },
+      preferenceRepository: { get: () => undefined },
+      gameDurationService: {
+        getEstimate: async (game) => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          try {
+            await new Promise<void>((resolve) => setTimeout(resolve, 5));
+            return {
+              appId: game.appId,
+              igdbGameId: game.appId,
+              source: "igdb" as const,
+              refreshedAt: "2026-09-04T00:00:00.000Z",
+              normally: { minutes: 30, hours: 0.5 },
+            };
+          } finally {
+            active -= 1;
+          }
+        },
+      },
+    });
+
+    const result = await service.select({ availableMinutes: 1000, targetGameCount: 8 });
+
+    expect(result.selections.map((selection) => selection.appId)).toEqual(appIds);
+    expect(maxActive).toBeLessThanOrEqual(4);
+  });
+
+  it("keeps deterministic selection order when duration lookups finish out of order", async () => {
+    const normallyByAppId = new Map([
+      [1, 120],
+      [2, 30],
+      [3, 60],
+    ]);
+    const resolvers = new Map<number, (value: GameDurationEstimate) => void>();
+    const buildService = () =>
+      createBacklogSelectionService({
+        library: {
+          getLibrary: async () => ({
+            steamId: "test-steam-id",
+            games: [...normallyByAppId.keys()].map((appId) => toSteamGame({ appId })),
+            fetchedAt: "2026-09-04T00:00:00.000Z",
+          }),
+        },
+        trackerRepository: { list: () => [] },
+        preferenceRepository: { get: () => undefined },
+        gameDurationService: {
+          getEstimate: (game) =>
+            new Promise<GameDurationEstimate>((resolve) => {
+              resolvers.set(game.appId, resolve);
+            }),
+        },
+      });
+    const resolvePending = async (order: "ascending" | "descending") => {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        const pending = [...resolvers.keys()].sort((left, right) =>
+          order === "descending" ? right - left : left - right,
+        );
+        if (pending.length === 0) return;
+        for (const appId of pending) {
+          resolvers.get(appId)?.({
+            appId,
+            igdbGameId: appId,
+            source: "igdb" as const,
+            refreshedAt: "2026-09-04T00:00:00.000Z",
+            normally: {
+              minutes: normallyByAppId.get(appId) ?? 0,
+              hours: (normallyByAppId.get(appId) ?? 0) / 60,
+            },
+          });
+          resolvers.delete(appId);
+        }
+      }
+      throw new Error("duration lookups did not settle");
+    };
+
+    const reversedPromise = buildService().select({ availableMinutes: 300, targetGameCount: 3 });
+    await resolvePending("descending");
+    const reversedAppIds = (await reversedPromise).selections.map((s) => s.appId);
+    const inOrderPromise = buildService().select({ availableMinutes: 300, targetGameCount: 3 });
+    await resolvePending("ascending");
+    const inOrderAppIds = (await inOrderPromise).selections.map((s) => s.appId);
+
+    expect(reversedAppIds).toEqual([2, 3, 1]);
+    expect(inOrderAppIds).toEqual([2, 3, 1]);
   });
 });

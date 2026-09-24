@@ -8,6 +8,10 @@ import {
 } from "../domain/recommendation-preferences.js";
 import type { TrackerEntry, TrackerRepository } from "../domain/tracker.js";
 import { InputError } from "../errors.js";
+import {
+  mapWithConcurrency,
+  MAX_DURATION_CONCURRENCY,
+} from "../concurrency/map-with-concurrency.js";
 
 export type BacklogSelectionRequest = Readonly<{
   availableMinutes: number;
@@ -102,8 +106,10 @@ export function createBacklogSelectionService({
         }
         return [{ game, preference, status: statusesByAppId.get(game.appId) }];
       });
-      const candidates = await Promise.all(
-        eligible.map(async (candidate): Promise<Candidate | undefined> => {
+      const candidates = await mapWithConcurrency(
+        eligible,
+        MAX_DURATION_CONCURRENCY,
+        async (candidate): Promise<Candidate | undefined> => {
           const durationEstimateMinutes = getNormallyMinutes(
             await gameDurationService.getEstimate(candidate.game),
           );
@@ -121,7 +127,7 @@ export function createBacklogSelectionService({
             durationEstimateMinutes,
             estimatedRemainingMinutes,
           };
-        }),
+        },
       );
 
       let remainingBudget = request.availableMinutes;

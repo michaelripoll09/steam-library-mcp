@@ -1,6 +1,12 @@
 import type Database from "better-sqlite3";
 
-import { InputError, SteamResponseError, SteamUnavailableError } from "../errors.js";
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "../config.js";
+import {
+  InputError,
+  SteamResponseError,
+  SteamTimeoutError,
+  SteamUnavailableError,
+} from "../errors.js";
 
 export type ManualLibraryAccessType = "family" | "manual";
 
@@ -142,34 +148,44 @@ export function createPublicSteamGameLookup(
   fetchLike: typeof fetch = globalThis.fetch,
 ): PublicSteamGameLookup {
   return async (appId) => {
-    let response: Response;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
     try {
-      response = await fetchLike(
-        `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
-      );
-    } catch (error) {
-      throw new SteamUnavailableError(error);
+      let response: Response;
+      try {
+        response = await fetchLike(
+          `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
+          { redirect: "error", signal: controller.signal },
+        );
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new SteamTimeoutError(error);
+        }
+        throw new SteamUnavailableError(error);
+      }
+      if (!response.ok) throw new SteamUnavailableError();
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch (error) {
+        throw new SteamResponseError(error);
+      }
+      const entry =
+        body !== null && typeof body === "object"
+          ? (body as Record<string, unknown>)[String(appId)]
+          : undefined;
+      if (
+        entry === null ||
+        typeof entry !== "object" ||
+        (entry as { success?: unknown }).success !== true
+      )
+        throw new InputError("That Steam app is not publicly available.");
+      const name = (entry as { data?: { name?: unknown } }).data?.name;
+      if (typeof name !== "string" || name.trim() === "")
+        throw new InputError("That Steam app is not publicly available.");
+      return Object.freeze({ appId, name: name.trim() });
+    } finally {
+      clearTimeout(timeout);
     }
-    if (!response.ok) throw new SteamUnavailableError();
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch (error) {
-      throw new SteamResponseError(error);
-    }
-    const entry =
-      body !== null && typeof body === "object"
-        ? (body as Record<string, unknown>)[String(appId)]
-        : undefined;
-    if (
-      entry === null ||
-      typeof entry !== "object" ||
-      (entry as { success?: unknown }).success !== true
-    )
-      throw new InputError("That Steam app is not publicly available.");
-    const name = (entry as { data?: { name?: unknown } }).data?.name;
-    if (typeof name !== "string" || name.trim() === "")
-      throw new InputError("That Steam app is not publicly available.");
-    return Object.freeze({ appId, name: name.trim() });
   };
 }

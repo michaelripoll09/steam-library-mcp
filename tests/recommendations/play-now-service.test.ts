@@ -480,4 +480,109 @@ describe("PlayNowRecommendationService", () => {
       ],
     });
   });
+
+  test("processes more than four candidates with at most four concurrent duration lookups", async () => {
+    const games = [10, 11, 12, 13, 14, 15, 16, 17].map((appId) => ({
+      appId,
+      name: `Game ${appId}`,
+      playtimeMinutes: 0,
+      accessType: "owned" as const,
+      isPlayable: true,
+    }));
+    let active = 0;
+    let maxActive = 0;
+    const library = {
+      steamId: "76561198000000000",
+      games,
+      fetchedAt,
+    };
+    const service = createPlayNowRecommendationService({
+      library: { getLibrary: async () => library },
+      trackerRepository: { list: () => [] },
+      preferenceRepository: { get: () => undefined },
+      gameDurationService: {
+        getEstimate: async (game: SteamGame) => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          try {
+            await new Promise<void>((resolve) => setTimeout(resolve, 5));
+            return estimate(game.appId, 30);
+          } finally {
+            active -= 1;
+          }
+        },
+      },
+    });
+
+    const result = await service.recommend({
+      availableMinutes: 60,
+      maxResults: 8,
+      sessionMode: "solo",
+    });
+
+    expect(result.recommendations).toHaveLength(8);
+    expect(maxActive).toBeLessThanOrEqual(4);
+  });
+
+  test("keeps deterministic ranking when duration lookups finish out of order", async () => {
+    const normallyByAppId = new Map([
+      [10, 300],
+      [11, 30],
+      [12, 60],
+      [13, 45],
+      [14, 120],
+      [15, 90],
+    ]);
+    const resolvers = new Map<number, (value: GameDurationEstimate) => void>();
+    const buildService = () => {
+      const library = {
+        steamId: "76561198000000000",
+        games: [...normallyByAppId.keys()].map((appId) => ({
+          appId,
+          name: `Game ${appId}`,
+          playtimeMinutes: 0,
+          accessType: "owned" as const,
+          isPlayable: true,
+        })),
+        fetchedAt,
+      };
+      return createPlayNowRecommendationService({
+        library: { getLibrary: async () => library },
+        trackerRepository: { list: () => [] },
+        preferenceRepository: { get: () => undefined },
+        gameDurationService: {
+          getEstimate: (game: SteamGame) =>
+            new Promise<GameDurationEstimate>((resolve) => {
+              resolvers.set(game.appId, resolve);
+            }),
+        },
+      });
+    };
+    const request = { availableMinutes: 60, maxResults: 6, sessionMode: "solo" as const };
+    const resolvePending = async (order: "ascending" | "descending") => {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        const pending = [...resolvers.keys()].sort((left, right) =>
+          order === "descending" ? right - left : left - right,
+        );
+        if (pending.length === 0) return;
+        for (const appId of pending) {
+          resolvers.get(appId)?.(estimate(appId, normallyByAppId.get(appId) ?? 0));
+          resolvers.delete(appId);
+        }
+      }
+      throw new Error("duration lookups did not settle");
+    };
+
+    const reversedPromise = buildService().recommend(request);
+    await resolvePending("descending");
+    const reversedAppIds = (await reversedPromise).recommendations.map((r) => r.appId);
+    const inOrderPromise = buildService().recommend(request);
+    await resolvePending("ascending");
+    const inOrderAppIds = (await inOrderPromise).recommendations.map((r) => r.appId);
+
+    const expected = [11, 12, 13, 10, 14, 15];
+    expect(reversedAppIds).toEqual(expected);
+    expect(inOrderAppIds).toEqual(expected);
+  });
 });
