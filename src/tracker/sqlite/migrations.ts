@@ -170,7 +170,7 @@ export const MIGRATIONS = Object.freeze([
   createMigration({
     version: 9,
     name: "allow-multiple-playing-entries",
-    statements: ["DROP INDEX one_playing_entry"],
+    statements: ["DROP INDEX IF EXISTS one_playing_entry"],
   }),
 ]);
 
