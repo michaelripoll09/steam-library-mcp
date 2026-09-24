@@ -226,6 +226,22 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
+  test("rejects an unknown checksum for migration 9", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database);
+      database
+        .prepare("UPDATE schema_migrations SET checksum = ? WHERE version = 9")
+        .run("unknown-v9-checksum");
+
+      expect(() => migrateDatabase(database)).toThrow(MigrationError);
+      expect(() => migrateDatabase(database)).toThrow("checksum does not match");
+    } finally {
+      database.close();
+    }
+  });
+
   test("rejects an edited migration history without applying pending migrations", () => {
     const database = new Database(":memory:");
     migrateDatabase(database);
