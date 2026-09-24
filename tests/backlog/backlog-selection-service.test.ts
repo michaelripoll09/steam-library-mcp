@@ -5,6 +5,7 @@ import type { GameDurationEstimate } from "../../src/domain/game-duration.js";
 import type { SteamGame } from "../../src/domain/models.js";
 import type { GameRecommendationPreference } from "../../src/domain/recommendation-preferences.js";
 import type { TrackerEntry } from "../../src/domain/tracker.js";
+import { InputError } from "../../src/errors.js";
 
 type GameInput = Readonly<{
   appId: number;
@@ -259,5 +260,20 @@ describe("BacklogSelectionService", () => {
 
     expect(reversedAppIds).toEqual([2, 3, 1]);
     expect(inOrderAppIds).toEqual([2, 3, 1]);
+  });
+
+  it("rejects budgets beyond the supported backlog limits", async () => {
+    await expect(
+      createService([{ appId: 1, durationEstimateMinutes: 30 }]).select({
+        availableMinutes: 44641,
+        targetGameCount: 1,
+      }),
+    ).rejects.toBeInstanceOf(InputError);
+    await expect(
+      createService([{ appId: 1, durationEstimateMinutes: 30 }]).select({
+        availableMinutes: 60,
+        targetGameCount: 101,
+      }),
+    ).rejects.toBeInstanceOf(InputError);
   });
 });

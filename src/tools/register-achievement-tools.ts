@@ -17,7 +17,12 @@ export function registerAchievementTools(server: ToolRegistrar, service: Achieve
       description:
         "Get on-demand achievement progress for one playable game in the configured Steam library.",
       inputSchema: steamGameInputSchema.shape,
-      annotations: { readOnlyHint: true },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
     },
     async (input) => {
       try {

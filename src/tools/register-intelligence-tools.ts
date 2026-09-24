@@ -1,14 +1,22 @@
 import { z } from "zod";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 
 import type { BacklogPlanService } from "../backlog/backlog-plan-service.js";
 import { BACKLOG_PLAN_CADENCES, BACKLOG_PLAN_ITEM_PROGRESS } from "../domain/backlog-plan.js";
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+  MCP_IDENTIFIER_MAX_LENGTH,
+  PLAY_NOW_MAX_AVAILABLE_MINUTES,
+  PLAY_NOW_MAX_RESULTS,
+} from "../domain/input-limits.js";
 import { PLAY_MODES, RECOMMENDATION_PRIORITIES } from "../domain/recommendation-preferences.js";
 import { AppError, InputError, SteamUnavailableError } from "../errors.js";
 import type { PlayNowRecommendationService } from "../recommendations/play-now-recommendation-service.js";
 import type { RecommendationPreferencesService } from "../recommendations/recommendation-preferences-service.js";
 import type { ToolRegistrar } from "./register-steam-tools.js";
+import { appIdSchema } from "./schemas.js";
 
-const appIdSchema = z.number().int().safe().positive();
 const getPreferenceSchema = z.object({ appId: appIdSchema }).strict();
 const setPreferenceSchema = z
   .object({
@@ -20,23 +28,23 @@ const setPreferenceSchema = z
   .strict();
 const playNowSchema = z
   .object({
-    availableMinutes: z.number().int().safe().positive(),
-    maxResults: z.number().int().safe().positive(),
+    availableMinutes: z.number().int().safe().positive().max(PLAY_NOW_MAX_AVAILABLE_MINUTES),
+    maxResults: z.number().int().safe().positive().max(PLAY_NOW_MAX_RESULTS),
     sessionMode: z.enum(["solo", "with_friends", "any"]).default("solo"),
   })
   .strict();
 const createPlanSchema = z
   .object({
     cadence: z.enum(BACKLOG_PLAN_CADENCES),
-    availableMinutes: z.number().int().safe().positive(),
-    targetGameCount: z.number().int().safe().positive(),
+    availableMinutes: z.number().int().safe().positive().max(BACKLOG_MAX_AVAILABLE_MINUTES),
+    targetGameCount: z.number().int().safe().positive().max(BACKLOG_MAX_TARGET_GAME_COUNT),
   })
   .strict();
 const listPlansSchema = z.object({}).strict();
 const updatePlanItemSchema = z
   .object({
-    planId: z.string().trim().min(1),
-    itemId: z.string().trim().min(1),
+    planId: z.string().trim().min(1).max(MCP_IDENTIFIER_MAX_LENGTH),
+    itemId: z.string().trim().min(1).max(MCP_IDENTIFIER_MAX_LENGTH),
     progress: z.enum(BACKLOG_PLAN_ITEM_PROGRESS),
   })
   .strict();
@@ -62,6 +70,7 @@ export function registerIntelligenceTools(
     "Get the recommendation preference stored for one Steam game.",
     getPreferenceSchema,
     ({ appId }) => services.preferences.get(appId),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   );
   register(
     server,
@@ -70,7 +79,7 @@ export function registerIntelligenceTools(
     setPreferenceSchema,
     ({ appId, priority, excludedFromRecommendations, playMode }) =>
       services.preferences.save(appId, { priority, excludedFromRecommendations, playMode }),
-    false,
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   );
   register(
     server,
@@ -78,6 +87,7 @@ export function registerIntelligenceTools(
     "Recommend games for the current play session using tracker state, preferences, session mode, and duration as a secondary finishability signal.",
     playNowSchema,
     (request) => services.recommendations.recommend(request),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   );
   register(
     server,
@@ -85,7 +95,7 @@ export function registerIntelligenceTools(
     "Create a weekly or monthly local backlog plan whose selected games fit within the requested total time budget when duration estimates are available.",
     createPlanSchema,
     (request) => services.plans.create(request),
-    false,
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   );
   register(
     server,
@@ -93,6 +103,7 @@ export function registerIntelligenceTools(
     "List active local backlog plans.",
     listPlansSchema,
     () => services.plans.listActive(),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   );
   register(
     server,
@@ -100,7 +111,7 @@ export function registerIntelligenceTools(
     "Explicitly update a backlog plan item progress value. This does not change Steam or tracker status.",
     updatePlanItemSchema,
     ({ planId, itemId, progress }) => services.plans.setItemProgress(planId, itemId, progress),
-    false,
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   );
 }
 
@@ -110,11 +121,11 @@ function register<TInput extends object>(
   description: string,
   schema: z.ZodType<TInput>,
   operation: (input: TInput) => unknown | Promise<unknown>,
-  readOnlyHint = true,
+  annotations: ToolAnnotations,
 ): void {
   server.registerTool(
     name,
-    { description, inputSchema: schema, annotations: { readOnlyHint } },
+    { description, inputSchema: schema, annotations },
     async (input): Promise<ToolResult> => {
       try {
         const value = await operation(schema.parse(input));

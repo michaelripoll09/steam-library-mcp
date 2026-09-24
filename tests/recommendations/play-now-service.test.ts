@@ -585,4 +585,16 @@ describe("PlayNowRecommendationService", () => {
     expect(reversedAppIds).toEqual(expected);
     expect(inOrderAppIds).toEqual(expected);
   });
+
+  test("rejects session budgets beyond the supported play-now limits", async () => {
+    const { service, gameDurationService } = createService({ games: [] });
+
+    await expect(
+      service.recommend({ availableMinutes: 1441, maxResults: 3, sessionMode: "solo" }),
+    ).rejects.toBeInstanceOf(InputError);
+    await expect(
+      service.recommend({ availableMinutes: 60, maxResults: 51, sessionMode: "solo" }),
+    ).rejects.toBeInstanceOf(InputError);
+    expect(gameDurationService.getEstimate).not.toHaveBeenCalled();
+  });
 });

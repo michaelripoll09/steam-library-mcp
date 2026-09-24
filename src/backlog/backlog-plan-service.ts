@@ -9,6 +9,10 @@ import {
   type BacklogPlanItem,
   type BacklogPlanItemProgress,
 } from "../domain/backlog-plan.js";
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+} from "../domain/input-limits.js";
 import { InputError } from "../errors.js";
 import type { BacklogSelectionService } from "./backlog-selection-service.js";
 
@@ -201,6 +205,14 @@ function assertCreateRequest(request: unknown): asserts request is CreateBacklog
   ) {
     throw new InputError(
       "Cadence, available minutes, and target game count must be valid positive values.",
+    );
+  }
+  if (
+    candidate.availableMinutes > BACKLOG_MAX_AVAILABLE_MINUTES ||
+    candidate.targetGameCount > BACKLOG_MAX_TARGET_GAME_COUNT
+  ) {
+    throw new InputError(
+      `Available minutes must not exceed ${BACKLOG_MAX_AVAILABLE_MINUTES} and target game count must not exceed ${BACKLOG_MAX_TARGET_GAME_COUNT}.`,
     );
   }
 }

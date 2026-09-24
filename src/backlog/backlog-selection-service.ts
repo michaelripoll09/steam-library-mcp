@@ -1,5 +1,9 @@
 import type { GameDurationService } from "../durations/game-duration-service.js";
 import type { GameDurationEstimate } from "../domain/game-duration.js";
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+} from "../domain/input-limits.js";
 import type { SteamGame, SteamLibrary } from "../domain/models.js";
 import {
   DEFAULT_RECOMMENDATION_PREFERENCE,
@@ -166,6 +170,14 @@ function assertRequest(request: unknown): asserts request is BacklogSelectionReq
     !isPositiveSafeInteger(candidate?.targetGameCount)
   ) {
     throw new InputError("Available minutes and target game count must be positive safe integers.");
+  }
+  if (
+    candidate.availableMinutes > BACKLOG_MAX_AVAILABLE_MINUTES ||
+    candidate.targetGameCount > BACKLOG_MAX_TARGET_GAME_COUNT
+  ) {
+    throw new InputError(
+      `Available minutes must not exceed ${BACKLOG_MAX_AVAILABLE_MINUTES} and target game count must not exceed ${BACKLOG_MAX_TARGET_GAME_COUNT}.`,
+    );
   }
 }
 

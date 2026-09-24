@@ -1,13 +1,16 @@
 import { z } from "zod";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { AppError, InputError, TaskNotFoundError, TrackerPersistenceError } from "../errors.js";
 import type { TaskRunner } from "../tasks/task-runner.js";
+import { MCP_IDENTIFIER_MAX_LENGTH } from "../domain/input-limits.js";
 import type { ToolRegistrar } from "./register-steam-tools.js";
+import { taskIdentifierSchema } from "./schemas.js";
 
 const listSchema = z.object({}).strict();
-const taskIdSchema = z.object({ id: z.string().trim().min(1).max(255) }).strict();
+const taskIdSchema = z.object({ id: taskIdentifierSchema }).strict();
 
 type ToolResult = Readonly<{
   content: readonly Readonly<{ type: "text"; text: string }>[];
@@ -23,6 +26,7 @@ export function registerTaskTools(server: ToolRegistrar, runner: TaskRunner): vo
     () => ({
       tasks: runner.list(),
     }),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   );
   register(
     server,
@@ -30,6 +34,7 @@ export function registerTaskTools(server: ToolRegistrar, runner: TaskRunner): vo
     "Get the current state of one local background task for polling.",
     taskIdSchema,
     ({ id }) => ({ task: getTask(runner, id) }),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   );
   register(
     server,
@@ -37,7 +42,7 @@ export function registerTaskTools(server: ToolRegistrar, runner: TaskRunner): vo
     "Cancel a queued or running local background task.",
     taskIdSchema,
     ({ id }) => ({ task: cancelTask(runner, id) }),
-    false,
+    { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   );
 }
 
@@ -68,7 +73,13 @@ export function registerTaskResources(
     },
     async (uri, variables) => {
       const taskId = variables.taskId;
-      const task = typeof taskId === "string" ? runner.get(taskId) : undefined;
+      const boundedTaskId =
+        typeof taskId === "string" &&
+        taskId.trim().length > 0 &&
+        taskId.length <= MCP_IDENTIFIER_MAX_LENGTH
+          ? taskId
+          : undefined;
+      const task = boundedTaskId === undefined ? undefined : runner.get(boundedTaskId);
       const value = task === undefined ? { error: new TaskNotFoundError().toJSON() } : { task };
       return {
         contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(value) }],
@@ -95,11 +106,11 @@ function register<TInput extends object>(
   description: string,
   schema: z.ZodType<TInput>,
   operation: (input: TInput) => unknown,
-  readOnlyHint = true,
+  annotations: ToolAnnotations,
 ): void {
   server.registerTool(
     name,
-    { description, inputSchema: schema, annotations: { readOnlyHint } },
+    { description, inputSchema: schema, annotations },
     async (input): Promise<ToolResult> => {
       try {
         return {

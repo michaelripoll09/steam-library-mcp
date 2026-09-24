@@ -130,7 +130,12 @@ describe("MCP server composition", () => {
         { name: "steam_remove_manual_collection" },
         {
           name: "steam_get_game_achievements",
-          annotations: { readOnlyHint: true },
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: true,
+          },
         },
         {
           name: "gaming_get_backlog",
@@ -236,7 +241,12 @@ describe("MCP server composition", () => {
     expect(listedTools.tools).toContainEqual(
       expect.objectContaining({
         name: "steam_get_game_achievements",
-        annotations: { readOnlyHint: true },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
       }),
     );
     await expect(

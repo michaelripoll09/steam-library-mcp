@@ -251,6 +251,24 @@ describe("BacklogPlanService", () => {
     expect(repository.setItemProgress).not.toHaveBeenCalled();
   });
 
+  test("rejects backlog budgets beyond the supported limits", async () => {
+    const repository = createRepository();
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "unused",
+      selectionService: createSelectionService(),
+      repository,
+    });
+
+    await expect(
+      service.create({ cadence: "weekly", availableMinutes: 44641, targetGameCount: 1 }),
+    ).rejects.toBeInstanceOf(InputError);
+    await expect(
+      service.create({ cadence: "weekly", availableMinutes: 60, targetGameCount: 101 }),
+    ).rejects.toBeInstanceOf(InputError);
+    expect(repository.replaceActive).not.toHaveBeenCalled();
+  });
+
   test("archives an existing active cadence plan transactionally when creating its replacement", async () => {
     const database = openTrackerDatabase(":memory:");
     const repository = new SqliteBacklogPlanRepository(database);

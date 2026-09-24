@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+  MANUAL_STEAM_INPUT_MAX_LENGTH,
+  MCP_IDENTIFIER_MAX_LENGTH,
+  METADATA_FILTER_ARRAY_MAX_ITEMS,
+  METADATA_FILTER_ITEM_MAX_LENGTH,
+  PLAY_NOW_MAX_AVAILABLE_MINUTES,
+  PLAY_NOW_MAX_RESULTS,
+  SEARCH_QUERY_MAX_LENGTH,
+} from "../domain/input-limits.js";
+
 export const RECENT_GAME_COUNT_DEFAULT = 10;
 export const RECENT_GAME_COUNT_MIN = 1;
 export const RECENT_GAME_COUNT_MAX = 50;
@@ -11,13 +23,19 @@ export const emptyInputSchema = z.object({}).strict();
 
 export const searchLibraryInputSchema = z
   .object({
-    query: z.string().trim().min(1, "Search query must not be blank."),
+    query: z
+      .string()
+      .trim()
+      .min(1, "Search query must not be blank.")
+      .max(SEARCH_QUERY_MAX_LENGTH, "Search query is too long."),
   })
   .strict();
 
+export const appIdSchema = z.number().int().safe().positive("App ID must be a positive integer.");
+
 export const steamGameInputSchema = z
   .object({
-    appId: z.number().int().positive("App ID must be a positive integer."),
+    appId: appIdSchema,
   })
   .strict();
 
@@ -25,7 +43,11 @@ export const manualLibraryAccessTypeSchema = z.enum(["manual", "family"]);
 
 export const manualCollectionAddInputSchema = z
   .object({
-    steam: z.string().trim().min(1, "Steam app ID or store URL must not be blank."),
+    steam: z
+      .string()
+      .trim()
+      .min(1, "Steam app ID or store URL must not be blank.")
+      .max(MANUAL_STEAM_INPUT_MAX_LENGTH, "Steam app ID or store URL is too long."),
     accessType: manualLibraryAccessTypeSchema.optional(),
     isPlayable: z.boolean().optional(),
   })
@@ -33,7 +55,7 @@ export const manualCollectionAddInputSchema = z
 
 export const manualCollectionUpdateInputSchema = z
   .object({
-    appId: z.number().int().positive(),
+    appId: appIdSchema,
     accessType: manualLibraryAccessTypeSchema.optional(),
     isPlayable: z.boolean().optional(),
   })
@@ -45,16 +67,24 @@ export const manualCollectionUpdateInputSchema = z
 
 export const manualCollectionRemoveInputSchema = steamGameInputSchema;
 
+const metadataFilterItemSchema = z.string().trim().min(1).max(METADATA_FILTER_ITEM_MAX_LENGTH);
+
+const metadataFilterArraySchema = z
+  .array(metadataFilterItemSchema)
+  .min(1)
+  .max(METADATA_FILTER_ARRAY_MAX_ITEMS);
+
 export const metadataQueryInputSchema = z
   .object({
-    genres: z.array(z.string().trim().min(1)).min(1).optional(),
-    tags: z.array(z.string().trim().min(1)).min(1).optional(),
-    themes: z.array(z.string().trim().min(1)).min(1).optional(),
-    releaseYearFrom: z.number().int().optional(),
-    releaseYearTo: z.number().int().optional(),
+    genres: metadataFilterArraySchema.optional(),
+    tags: metadataFilterArraySchema.optional(),
+    themes: metadataFilterArraySchema.optional(),
+    releaseYearFrom: z.number().int().safe().optional(),
+    releaseYearTo: z.number().int().safe().optional(),
     limit: z
       .number()
       .int("Metadata query limit must be an integer.")
+      .safe()
       .min(METADATA_QUERY_LIMIT_MIN)
       .max(METADATA_QUERY_LIMIT_MAX)
       .default(METADATA_QUERY_LIMIT_DEFAULT),
@@ -78,8 +108,11 @@ export const recentGamesInputSchema = z
     count: z
       .number()
       .int("Recent game count must be an integer.")
+      .safe()
       .min(RECENT_GAME_COUNT_MIN)
       .max(RECENT_GAME_COUNT_MAX)
       .default(RECENT_GAME_COUNT_DEFAULT),
   })
   .strict();
+
+export const taskIdentifierSchema = z.string().trim().min(1).max(MCP_IDENTIFIER_MAX_LENGTH);

@@ -1,5 +1,6 @@
 import type { GameDurationService } from "../durations/game-duration-service.js";
 import type { GameDurationEstimate } from "../domain/game-duration.js";
+import { PLAY_NOW_MAX_AVAILABLE_MINUTES, PLAY_NOW_MAX_RESULTS } from "../domain/input-limits.js";
 import type { SteamGame, SteamLibrary } from "../domain/models.js";
 import {
   DEFAULT_RECOMMENDATION_PREFERENCE,
@@ -165,6 +166,14 @@ function assertRequest(request: unknown): asserts request is PlayNowRecommendati
   ) {
     throw new InputError(
       "Available minutes and max results must be positive safe integers and session mode must be valid.",
+    );
+  }
+  if (
+    candidate.availableMinutes > PLAY_NOW_MAX_AVAILABLE_MINUTES ||
+    candidate.maxResults > PLAY_NOW_MAX_RESULTS
+  ) {
+    throw new InputError(
+      `Available minutes must not exceed ${PLAY_NOW_MAX_AVAILABLE_MINUTES} and max results must not exceed ${PLAY_NOW_MAX_RESULTS}.`,
     );
   }
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 
 import type { SteamService } from "../services/steam-service.js";
 import { AppError, InputError, SteamUnavailableError } from "../errors.js";
@@ -20,7 +21,7 @@ type ToolResult = Readonly<{
 type ToolConfiguration = Readonly<{
   description: string;
   inputSchema: z.ZodRawShape | z.ZodType;
-  annotations?: Readonly<{ readOnlyHint?: boolean }>;
+  annotations?: ToolAnnotations;
 }>;
 
 export interface ToolRegistrar {
@@ -38,6 +39,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
       description:
         "Get the configured user's normalized Steam library, including their persistent manual collection.",
       inputSchema: emptyInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
     },
     createHandler(emptyInputSchema, () => service.getLibrary()),
   );
@@ -46,6 +53,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Search the configured user's Steam library by game name.",
       inputSchema: searchLibraryInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
     },
     createHandler(searchLibraryInputSchema, ({ query }) => service.searchLibrary(query)),
   );
@@ -54,6 +67,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Get one normalized Steam game by app ID.",
       inputSchema: steamGameInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
     },
     createHandler(steamGameInputSchema, ({ appId }) => service.getGame(appId)),
   );
@@ -63,6 +82,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
       description:
         "Get the configured user's recently played Steam games, ordered by confirmed last-played date descending when Steam provides it.",
       inputSchema: recentGamesInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
     },
     createHandler(recentGamesInputSchema, ({ count }) => service.getRecentGames(count)),
   );
@@ -71,6 +96,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Get aggregate statistics for the configured user's Steam library.",
       inputSchema: emptyInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
     },
     createHandler(emptyInputSchema, () => service.getLibraryStats()),
   );
@@ -79,7 +110,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "List the persistent manual Steam collection.",
       inputSchema: emptyInputSchema.shape,
-      annotations: { readOnlyHint: true },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     createHandler(emptyInputSchema, async () => manualCollection(service).getManualCollection()),
   );
@@ -88,7 +124,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Look up and add a public Steam game to the persistent manual collection.",
       inputSchema: manualCollectionAddInputSchema.shape,
-      annotations: { readOnlyHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
     },
     createHandler(manualCollectionAddInputSchema, async (input) =>
       manualCollection(service).addManualCollection(input),
@@ -100,7 +141,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
       description:
         "Update local access metadata for a manually stored Steam game without changing Steam.",
       inputSchema: manualCollectionUpdateInputSchema.shape,
-      annotations: { readOnlyHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
     },
     createHandler(manualCollectionUpdateInputSchema, async (input) =>
       manualCollection(service).updateManualCollection(input),
@@ -111,7 +157,12 @@ export function registerSteamTools(server: ToolRegistrar, service: SteamService)
     {
       description: "Remove a game from the persistent manual Steam collection by app ID.",
       inputSchema: manualCollectionRemoveInputSchema.shape,
-      annotations: { readOnlyHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
     },
     createHandler(manualCollectionRemoveInputSchema, async ({ appId }) =>
       manualCollection(service).removeManualCollection(appId),

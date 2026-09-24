@@ -1,11 +1,13 @@
 import { z } from "zod";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 
 import { AppError, TrackerInputError, TrackerPersistenceError } from "../errors.js";
 import type { GamingTrackerService, TrackerMarkStatus } from "../tracker/gaming-tracker-service.js";
 import type { ToolRegistrar } from "./register-steam-tools.js";
+import { appIdSchema } from "./schemas.js";
 
 const emptySchema = z.object({}).strict();
-const markSchema = z.object({ appId: z.number().int().safe().positive() }).strict();
+const markSchema = z.object({ appId: appIdSchema }).strict();
 type Result = Readonly<{
   content: readonly Readonly<{ type: "text"; text: string }>[];
   isError?: boolean;
@@ -19,6 +21,7 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
     emptySchema,
     () => service.getBacklog(),
     (games) => ({ games }),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   );
   register(
     server,
@@ -27,6 +30,7 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
     emptySchema,
     () => service.getCurrentGame(),
     (games) => ({ games }),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   );
   registerMark(
     server,
@@ -63,6 +67,7 @@ export function registerGamingTools(server: ToolRegistrar, service: GamingTracke
     emptySchema,
     () => service.getCompleted(),
     (games) => ({ games }),
+    { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   );
 }
 
@@ -80,6 +85,7 @@ function registerMark(
     markSchema,
     ({ appId }) => service.mark(appId, status),
     (value) => value,
+    { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   );
 }
 
@@ -90,10 +96,11 @@ function register<TInput extends object, TValue>(
   schema: z.ZodObject<z.ZodRawShape>,
   operation: (input: TInput) => Promise<TValue>,
   envelope: (value: TValue) => unknown,
+  annotations: ToolAnnotations,
 ): void {
   server.registerTool(
     name,
-    { description, inputSchema: schema },
+    { description, inputSchema: schema, annotations },
     async (input): Promise<Result> => {
       try {
         const parsed = schema.parse(input) as TInput;
