@@ -1991,3 +1991,350 @@ describe("BacklogView progress updates", () => {
     );
   });
 });
+
+describe("DashboardApp concurrent manual mutations", () => {
+  type ManualEntry = {
+    appId: number;
+    name: string;
+    accessType: "manual" | "family";
+    isPlayable: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+  const entry = (appId: number, name: string, patch: Partial<ManualEntry> = {}): ManualEntry => ({
+    appId,
+    name,
+    accessType: "manual",
+    isPlayable: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...patch,
+  });
+
+  function manualServer(initial: readonly ManualEntry[]) {
+    const store = new Map(initial.map((game) => [game.appId, { ...game }]));
+    const snapshot = () => [...store.values()].map((game) => ({ ...game }));
+    const api = {
+      getLibrary: vi.fn(async () => library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi.fn(async () => snapshot()),
+      addManualCollection: vi.fn(async (steam: string) => {
+        const appId = Number.parseInt(steam, 10);
+        const created = entry(appId, `Game ${appId}`);
+        store.set(appId, created);
+        return { ...created };
+      }),
+      updateManualCollection: vi.fn(async (appId: number, patch: object) => ({
+        ...store.get(appId),
+        ...patch,
+      })),
+      removeManualCollection: vi.fn(async (appId: number) => {
+        store.delete(appId);
+      }),
+    };
+    return { api, store, snapshot };
+  }
+
+  function commitUpdate(
+    store: Map<number, ManualEntry>,
+    gates: Map<number, (value: ManualEntry) => void>,
+    appId: number,
+    patch: Partial<ManualEntry>,
+  ) {
+    const current = store.get(appId);
+    if (current === undefined) throw new Error(`missing manual game ${appId}`);
+    const committed = { ...current, ...patch };
+    store.set(appId, committed);
+    gates.get(appId)?.({ ...committed });
+  }
+
+  test("concurrent updates to different games converge to authoritative state", async () => {
+    const user = userEvent.setup();
+    const { api, store } = manualServer([entry(1, "Game One"), entry(2, "Game Two")]);
+    const gates = new Map<number, (value: ManualEntry) => void>();
+    api.updateManualCollection.mockImplementation(
+      (appId: number) =>
+        new Promise<ManualEntry>((resolve) => {
+          gates.set(appId, resolve);
+        }),
+    );
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Acceso de Game Two" }),
+      "family",
+    );
+    await waitFor(() => expect(api.updateManualCollection).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      commitUpdate(store, gates, 2, { accessType: "family" });
+    });
+    await act(async () => {
+      commitUpdate(store, gates, 1, { isPlayable: true });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }),
+      ).toBeChecked();
+    });
+    expect(screen.getByRole("combobox", { name: "Acceso de Game Two" })).toHaveValue("family");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("same-game stale update cannot overwrite newer intent and reconciles to server truth", async () => {
+    const user = userEvent.setup();
+    const { api, store } = manualServer([entry(1, "Game One")]);
+    const resolvers: Array<(value: ManualEntry) => void> = [];
+    api.updateManualCollection.mockImplementation(
+      () =>
+        new Promise<ManualEntry>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }));
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }));
+    await waitFor(() => expect(api.updateManualCollection).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      const committed = { ...(store.get(1) as ManualEntry), isPlayable: false };
+      store.set(1, committed);
+      resolvers[1]?.({ ...committed });
+    });
+    expect(
+      screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }),
+    ).not.toBeChecked();
+    await act(async () => {
+      const committed = { ...(store.get(1) as ManualEntry), isPlayable: true };
+      store.set(1, committed);
+      resolvers[0]?.({ ...committed });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }),
+      ).toBeChecked();
+    });
+  });
+
+  test("remove concurrent with an update to another game keeps both outcomes", async () => {
+    const user = userEvent.setup();
+    const { api, store } = manualServer([entry(1, "Game One"), entry(2, "Game Two")]);
+    const removeGate = deferred<void>();
+    const updateGate = deferred<ManualEntry>();
+    api.removeManualCollection.mockImplementationOnce(() => removeGate.promise);
+    api.updateManualCollection.mockImplementationOnce(() => updateGate.promise);
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game Two" }));
+    await user.click(screen.getByRole("button", { name: "Quitar Game One" }));
+    await waitFor(() => expect(api.updateManualCollection).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.removeManualCollection).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      commitUpdate(store, new Map([[2, updateGate.resolve]]), 2, { isPlayable: true });
+    });
+    await act(async () => {
+      store.delete(1);
+      removeGate.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Game One")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("checkbox", { name: "Disponible para jugar: Game Two" })).toBeChecked();
+  });
+
+  test("stale failure after newer success keeps success state without stale error", async () => {
+    const user = userEvent.setup();
+    const { api, store } = manualServer([entry(1, "Game One"), entry(2, "Game Two")]);
+    const resolvers = new Map<number, (value: ManualEntry) => void>();
+    const rejecters = new Map<number, (reason?: unknown) => void>();
+    api.updateManualCollection.mockImplementation(
+      (appId: number) =>
+        new Promise<ManualEntry>((resolve, reject) => {
+          resolvers.set(appId, resolve);
+          rejecters.set(appId, reject);
+        }),
+    );
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Acceso de Game Two" }),
+      "family",
+    );
+    await waitFor(() => expect(api.updateManualCollection).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      commitUpdate(store, resolvers, 2, { accessType: "family" });
+    });
+    expect(screen.getByRole("combobox", { name: "Acceso de Game Two" })).toHaveValue("family");
+    await act(async () => {
+      rejecters.get(1)?.(new Error("stale failure"));
+    });
+
+    expect(screen.getByRole("combobox", { name: "Acceso de Game Two" })).toHaveValue("family");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardApp manual/library cross races", () => {
+  type ManualEntry = {
+    appId: number;
+    name: string;
+    accessType: "manual" | "family";
+    isPlayable: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+  const entry = (appId: number, name: string): ManualEntry => ({
+    appId,
+    name,
+    accessType: "manual",
+    isPlayable: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  test("slow add with fast update converges to both writes", async () => {
+    const user = userEvent.setup();
+    const store = new Map<number, ManualEntry>([[1, entry(1, "Game One")]]);
+    const addGate = deferred<ManualEntry>();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi.fn(async () => [...store.values()].map((game) => ({ ...game }))),
+      addManualCollection: vi.fn(() => addGate.promise),
+      updateManualCollection: vi.fn(async (appId: number, patch: object) => {
+        const next = { ...(store.get(appId) as ManualEntry), ...patch };
+        store.set(appId, next);
+        return { ...next };
+      }),
+      removeManualCollection: vi.fn(),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.type(screen.getByLabelText("URL de Steam o AppID"), "413150");
+    await user.click(screen.getByRole("button", { name: "Agregar" }));
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }));
+    await waitFor(() => expect(api.updateManualCollection).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      const created = entry(413150, "Game 413150");
+      store.set(413150, created);
+      addGate.resolve({ ...created });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Game 413150")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" })).toBeChecked();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("slow manual add with fast sync keeps the added game", async () => {
+    const user = userEvent.setup();
+    const store = new Map<number, ManualEntry>([[1, entry(1, "Game One")]]);
+    const addGate = deferred<ManualEntry>();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn().mockResolvedValue(library),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi.fn(async () => [...store.values()].map((game) => ({ ...game }))),
+      addManualCollection: vi.fn(() => addGate.promise),
+      updateManualCollection: vi.fn(),
+      removeManualCollection: vi.fn(),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.type(screen.getByLabelText("URL de Steam o AppID"), "413150");
+    await user.click(screen.getByRole("button", { name: "Agregar" }));
+    await openDashboardView("library");
+    await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
+    await waitFor(() => expect(api.syncLibrary).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      const created = entry(413150, "Game 413150");
+      store.set(413150, created);
+      addGate.resolve({ ...created });
+    });
+
+    await openDashboardView("manual");
+    await waitFor(() => {
+      expect(screen.getByText("Game 413150")).toBeInTheDocument();
+    });
+  });
+
+  test("old success with newer failure shows the relevant error and keeps the success", async () => {
+    const user = userEvent.setup();
+    const store = new Map<number, ManualEntry>([
+      [1, entry(1, "Game One")],
+      [2, entry(2, "Game Two")],
+    ]);
+    const successGate = deferred<ManualEntry>();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi.fn(async () => [...store.values()].map((game) => ({ ...game }))),
+      addManualCollection: vi.fn(),
+      updateManualCollection: vi
+        .fn()
+        .mockImplementationOnce(() => successGate.promise)
+        .mockImplementationOnce(async () => {
+          throw new Error("newer failure");
+        }),
+      removeManualCollection: vi.fn(),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await screen.findByText("Game One");
+
+    await user.click(screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Acceso de Game Two" }),
+      "family",
+    );
+    await waitFor(() => expect(api.updateManualCollection).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      const committed = { ...(store.get(1) as ManualEntry), isPlayable: true };
+      store.set(1, committed);
+      successGate.resolve({ ...committed });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("checkbox", { name: "Disponible para jugar: Game One" }),
+      ).toBeChecked();
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
