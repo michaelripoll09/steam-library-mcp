@@ -104,7 +104,7 @@ describe("MCP server composition", () => {
       clock: { now: () => 0 },
       gamingTrackerService: createGamingTrackerService(),
     });
-    const client = new Client({ name: "test-client", version: "1.0.0" });
+    const client = new Client({ name: "test-client", version: "2.0.0" });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 
     await server.connect(serverTransport);
@@ -112,7 +112,7 @@ describe("MCP server composition", () => {
 
     expect(client.getServerVersion()).toMatchObject({
       name: "steam-library-mcp",
-      version: "1.0.0",
+      version: "2.0.0",
     });
 
     const listedTools = await client.listTools();
@@ -226,7 +226,7 @@ describe("MCP server composition", () => {
       gamingTrackerService: createGamingTrackerService(),
       achievementService,
     });
-    const client = new Client({ name: "test-client", version: "1.0.0" });
+    const client = new Client({ name: "test-client", version: "2.0.0" });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 
     await server.connect(serverTransport);
@@ -287,7 +287,7 @@ describe("MCP server composition", () => {
       clock: { now: () => 0 },
       gamingTrackerService: createGamingTrackerService(),
     });
-    const client = new Client({ name: "test-client", version: "1.0.0" });
+    const client = new Client({ name: "test-client", version: "2.0.0" });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 
     await server.connect(serverTransport);
