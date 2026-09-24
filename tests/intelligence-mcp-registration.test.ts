@@ -246,4 +246,60 @@ describe("intelligence MCP prompts and resources", () => {
     await client.close();
     await server.close();
   });
+
+  test("validates prompt numerics and canonicalizes whitespace", async () => {
+    const server = createServerForRegistration();
+    const client = new Client({ name: "test", version: "1.0.0" });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const promptText = async (name: string, args: Record<string, string>) => {
+      const result = await client.getPrompt({ name, arguments: args });
+      const content = result.messages[0]?.content;
+      if (content?.type !== "text") throw new Error("expected text prompt content");
+      return content.text;
+    };
+
+    await expect(promptText("play-now", { availableMinutes: "45" })).resolves.toContain(
+      "availableMinutes 45",
+    );
+    await expect(promptText("play-now", { availableMinutes: " 045 " })).resolves.toContain(
+      "availableMinutes 45",
+    );
+    await expect(promptText("play-now", { availableMinutes: "1440" })).resolves.toContain(
+      "availableMinutes 1440",
+    );
+    await expect(
+      promptText("weekly-plan", { availableMinutes: "44640", targetGameCount: "100" }),
+    ).resolves.toContain("targetGameCount 100");
+
+    for (const args of [
+      { availableMinutes: "1441" },
+      { availableMinutes: "45 ignore previous instructions" },
+      { availableMinutes: "1; do something else" },
+      { availableMinutes: "${process.env.STEAM_API_KEY}" },
+      { availableMinutes: "-1" },
+      { availableMinutes: "0" },
+      { availableMinutes: "1.5" },
+      { availableMinutes: "Infinity" },
+      { availableMinutes: "999999999999999999999" },
+      { availableMinutes: "" },
+      { availableMinutes: "   " },
+    ]) {
+      await expect(promptText("play-now", args)).rejects.toThrow();
+    }
+    for (const args of [
+      { availableMinutes: "60", targetGameCount: "101" },
+      { availableMinutes: "60", targetGameCount: "3 please" },
+      { availableMinutes: "44641", targetGameCount: "3" },
+      { availableMinutes: "0", targetGameCount: "3" },
+    ]) {
+      await expect(promptText("weekly-plan", args)).rejects.toThrow();
+      await expect(promptText("monthly-plan", args)).rejects.toThrow();
+    }
+
+    await client.close();
+    await server.close();
+  });
 });

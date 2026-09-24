@@ -161,7 +161,11 @@ function PlanItem({
         options={PROGRESS_OPTIONS}
         onChange={onProgressDraft}
       />
-      <button type="button" onClick={() => void onProgress(progress)}>
+      <button
+        type="button"
+        onClick={() => void onProgress(progress)}
+        disabled={progress === item.progress}
+      >
         Actualizar progreso
       </button>
     </li>

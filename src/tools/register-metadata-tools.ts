@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { MetadataService } from "../services/metadata-service.js";
 import {
   InputError,
@@ -47,6 +48,12 @@ export function registerMetadataTools(server: ToolRegistrar, service: MetadataSe
     {
       description: "Get normalized metadata for one accessible Steam game.",
       inputSchema: steamGameInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      } satisfies ToolAnnotations,
     },
     handler(steamGameInputSchema, ({ appId }) => service.getOwnedGameMetadata(appId)) as never,
   );
@@ -55,6 +62,12 @@ export function registerMetadataTools(server: ToolRegistrar, service: MetadataSe
     {
       description: "Query normalized metadata for accessible Steam games.",
       inputSchema: metadataQueryInputSchema.shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      } satisfies ToolAnnotations,
     },
     handler(metadataQueryInputSchema, (query) => service.queryOwnedMetadata(query)) as never,
   );

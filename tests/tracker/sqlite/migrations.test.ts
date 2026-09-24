@@ -211,6 +211,37 @@ describe("tracker SQLite migrations", () => {
     }
   });
 
+  test("accepts the legacy v9 checksum from pre-2.0.0 development databases", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database);
+      database
+        .prepare("UPDATE schema_migrations SET checksum = ? WHERE version = 9")
+        .run("3bdcf047763a4d03a6b49cde50b8c19d095d1a6abd527fd0bcd2b03033017ab7");
+
+      expect(() => migrateDatabase(database)).not.toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
+  test("rejects an unknown checksum for migration 9", () => {
+    const database = new Database(":memory:");
+
+    try {
+      migrateDatabase(database);
+      database
+        .prepare("UPDATE schema_migrations SET checksum = ? WHERE version = 9")
+        .run("unknown-v9-checksum");
+
+      expect(() => migrateDatabase(database)).toThrow(MigrationError);
+      expect(() => migrateDatabase(database)).toThrow("checksum does not match");
+    } finally {
+      database.close();
+    }
+  });
+
   test("rejects an edited migration history without applying pending migrations", () => {
     const database = new Database(":memory:");
     migrateDatabase(database);

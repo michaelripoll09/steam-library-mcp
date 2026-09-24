@@ -14,6 +14,7 @@ import { registerMetadataTools } from "./tools/register-metadata-tools.js";
 import { registerSteamTools, type ToolRegistrar } from "./tools/register-steam-tools.js";
 import { registerIntelligencePromptsAndResources } from "./intelligence-mcp-registration.js";
 import { registerTaskResources, registerTaskTools } from "./tools/register-task-tools.js";
+import { PACKAGE_METADATA } from "./package-metadata.js";
 
 export type ServerOverrides = CoreServiceOverrides;
 
@@ -49,7 +50,7 @@ function createMcpServerFromServices(services: CoreServices): McpServer {
     backlogPlanService,
     taskRunner,
   } = services;
-  const server = new McpServer({ name: "steam-library-mcp", version: "2.0.0" });
+  const server = new McpServer({ name: PACKAGE_METADATA.name, version: PACKAGE_METADATA.version });
 
   registerSteamTools(server as unknown as ToolRegistrar, steamService);
   registerAchievementTools(server as unknown as ToolRegistrar, achievementService);

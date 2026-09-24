@@ -1,5 +1,9 @@
 import type { GameDurationService } from "../durations/game-duration-service.js";
 import type { GameDurationEstimate } from "../domain/game-duration.js";
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+} from "../domain/input-limits.js";
 import type { SteamGame, SteamLibrary } from "../domain/models.js";
 import {
   DEFAULT_RECOMMENDATION_PREFERENCE,
@@ -8,6 +12,10 @@ import {
 } from "../domain/recommendation-preferences.js";
 import type { TrackerEntry, TrackerRepository } from "../domain/tracker.js";
 import { InputError } from "../errors.js";
+import {
+  mapWithConcurrency,
+  MAX_DURATION_CONCURRENCY,
+} from "../concurrency/map-with-concurrency.js";
 
 export type BacklogSelectionRequest = Readonly<{
   availableMinutes: number;
@@ -102,8 +110,10 @@ export function createBacklogSelectionService({
         }
         return [{ game, preference, status: statusesByAppId.get(game.appId) }];
       });
-      const candidates = await Promise.all(
-        eligible.map(async (candidate): Promise<Candidate | undefined> => {
+      const candidates = await mapWithConcurrency(
+        eligible,
+        MAX_DURATION_CONCURRENCY,
+        async (candidate): Promise<Candidate | undefined> => {
           const durationEstimateMinutes = getNormallyMinutes(
             await gameDurationService.getEstimate(candidate.game),
           );
@@ -121,7 +131,7 @@ export function createBacklogSelectionService({
             durationEstimateMinutes,
             estimatedRemainingMinutes,
           };
-        }),
+        },
       );
 
       let remainingBudget = request.availableMinutes;
@@ -160,6 +170,14 @@ function assertRequest(request: unknown): asserts request is BacklogSelectionReq
     !isPositiveSafeInteger(candidate?.targetGameCount)
   ) {
     throw new InputError("Available minutes and target game count must be positive safe integers.");
+  }
+  if (
+    candidate.availableMinutes > BACKLOG_MAX_AVAILABLE_MINUTES ||
+    candidate.targetGameCount > BACKLOG_MAX_TARGET_GAME_COUNT
+  ) {
+    throw new InputError(
+      `Available minutes must not exceed ${BACKLOG_MAX_AVAILABLE_MINUTES} and target game count must not exceed ${BACKLOG_MAX_TARGET_GAME_COUNT}.`,
+    );
   }
 }
 

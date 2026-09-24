@@ -15,6 +15,11 @@ export function openTrackerDatabase(databasePath: string): TrackerDatabase {
   const database = new Database(databasePath);
 
   try {
+    if (databasePath !== ":memory:") {
+      database.pragma("journal_mode = WAL");
+    }
+    database.pragma("busy_timeout = 5000");
+    database.pragma("synchronous = NORMAL");
     database.pragma("foreign_keys = ON");
     migrateDatabase(database);
     return database;

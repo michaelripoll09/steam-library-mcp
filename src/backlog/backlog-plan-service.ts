@@ -9,6 +9,10 @@ import {
   type BacklogPlanItem,
   type BacklogPlanItemProgress,
 } from "../domain/backlog-plan.js";
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+} from "../domain/input-limits.js";
 import { InputError } from "../errors.js";
 import type { BacklogSelectionService } from "./backlog-selection-service.js";
 
@@ -54,15 +58,6 @@ export type BacklogPlanService = Readonly<{
   listActive(): readonly BacklogPlan[];
   setItemProgress(planId: unknown, itemId: unknown, progress: unknown): Promise<BacklogPlanItem>;
 }>;
-
-const allowedTransitions: Readonly<
-  Record<BacklogPlanItemProgress, readonly BacklogPlanItemProgress[]>
-> = Object.freeze({
-  not_started: Object.freeze(["in_progress", "done", "skipped"] as const),
-  in_progress: Object.freeze(["done", "skipped"] as const),
-  done: Object.freeze([] as const),
-  skipped: Object.freeze([] as const),
-});
 
 export function createBacklogPlanService({
   selectionService,
@@ -129,8 +124,8 @@ export function createBacklogPlanService({
       if (plan.lifecycle !== "active") {
         throw new InputError("Archived plan items cannot be updated.");
       }
-      if (!allowedTransitions[item.progress].includes(progress)) {
-        throw new InputError("The requested plan-item progress transition is not allowed.");
+      if (item.progress === progress) {
+        return item;
       }
 
       const updatedAt = toTimestamp(clock);
@@ -210,6 +205,14 @@ function assertCreateRequest(request: unknown): asserts request is CreateBacklog
   ) {
     throw new InputError(
       "Cadence, available minutes, and target game count must be valid positive values.",
+    );
+  }
+  if (
+    candidate.availableMinutes > BACKLOG_MAX_AVAILABLE_MINUTES ||
+    candidate.targetGameCount > BACKLOG_MAX_TARGET_GAME_COUNT
+  ) {
+    throw new InputError(
+      `Available minutes must not exceed ${BACKLOG_MAX_AVAILABLE_MINUTES} and target game count must not exceed ${BACKLOG_MAX_TARGET_GAME_COUNT}.`,
     );
   }
 }

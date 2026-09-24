@@ -59,6 +59,17 @@ describe("Steam API client", () => {
     vi.useRealTimers();
   });
 
+  test("rejects redirects instead of following them to an untrusted location", async () => {
+    const fetchLike = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () => ownedGamesResponse());
+    const client = createSteamApiClient({ config, fetch: fetchLike as unknown as typeof fetch });
+
+    await client.getOwnedGames(config.steamId);
+
+    expect(fetchLike.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
+  });
+
   test.each([
     [
       "an unsuccessful HTTP response",

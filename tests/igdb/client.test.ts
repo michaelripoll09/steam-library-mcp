@@ -261,6 +261,22 @@ describe("IGDB client", () => {
     expect(requestSignal).toBeInstanceOf(AbortSignal);
   });
 
+  test("rejects redirects on IGDB lookups instead of following them", async () => {
+    let requestInit: RequestInit | undefined;
+    const fetchLike = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockImplementationOnce(async (_url: string | URL | Request, init?: RequestInit) => {
+        requestInit = init;
+        return new Response(JSON.stringify([]), { status: 200 });
+      });
+    const client = createIgdbClient({ credentials, fetch: fetchLike as typeof fetch });
+
+    await expect(client.findGamesForSteamApp(620)).resolves.toEqual([]);
+
+    expect(requestInit).toMatchObject({ redirect: "error" });
+  });
+
   test("retries a 429 response exactly once before returning a safe unavailable envelope", async () => {
     const fetchLike = vi
       .fn()

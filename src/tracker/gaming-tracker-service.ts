@@ -77,7 +77,10 @@ export function createGamingTrackerService({
             const status = entriesByAppId.get(game.appId)?.status;
             return status === undefined || status === "backlog" || status === "paused";
           })
-          .map((game) => toTrackerGame(game, entriesByAppId.get(game.appId), "backlog"))
+          .map((game) => {
+            const entry = entriesByAppId.get(game.appId);
+            return toTrackerGame(game, entry, entry?.status ?? "backlog");
+          })
           .sort(compareTrackerGames),
       );
     },

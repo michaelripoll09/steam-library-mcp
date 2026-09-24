@@ -91,9 +91,17 @@ export function useIntelligenceState({
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const preferenceRequestRef = useRef(0);
+  const selectedAppIdRef = useRef<number | undefined>(games[0]?.appId);
+  const recommendationsGenerationRef = useRef(0);
+  const plansGenerationRef = useRef(0);
+  const snapshotGenerationRef = useRef(0);
 
   useEffect(() => {
-    setSelectedAppId((current) => current ?? games[0]?.appId);
+    setSelectedAppId((current) => {
+      const next = current ?? games[0]?.appId;
+      selectedAppIdRef.current = next;
+      return next;
+    });
   }, [games]);
 
   const loadPreference = async (appId: number): Promise<void> => {
@@ -122,29 +130,34 @@ export function useIntelligenceState({
       setError("Ingresa minutos disponibles válidos.");
       return;
     }
+    const generation = ++recommendationsGenerationRef.current;
 
     try {
       setError(undefined);
       const nextRecommendations = await api.getRecommendations(validAvailableMinutes, sessionMode);
+      if (generation !== recommendationsGenerationRef.current) return;
       setRecommendations(
         Array.isArray(nextRecommendations?.recommendations) ? nextRecommendations : undefined,
       );
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (generation === recommendationsGenerationRef.current) setError(errorMessage(cause));
     }
   };
 
   const refreshPlans = async () => {
+    const generation = ++plansGenerationRef.current;
     try {
       setError(undefined);
       const nextPlans = await api.getPlans();
+      if (generation !== plansGenerationRef.current) return;
       setPlans(Array.isArray(nextPlans) ? nextPlans : []);
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (generation === plansGenerationRef.current) setError(errorMessage(cause));
     }
   };
 
   const selectGame = (appId: number) => {
+    selectedAppIdRef.current = appId;
     setSelectedAppId(appId);
     void loadPreference(appId);
   };
@@ -155,6 +168,9 @@ export function useIntelligenceState({
       setError("Ingresa minutos disponibles válidos.");
       return;
     }
+    const recommendationsGeneration = ++recommendationsGenerationRef.current;
+    const plansGeneration = ++plansGenerationRef.current;
+    const snapshotGeneration = ++snapshotGenerationRef.current;
 
     try {
       const preferencePromise =
@@ -165,25 +181,40 @@ export function useIntelligenceState({
         api.getPlans(),
       ]);
       await preferencePromise;
-      setSnapshot(nextSnapshot?.library === undefined ? undefined : nextSnapshot);
-      setRecommendations(
-        Array.isArray(nextRecommendations?.recommendations) ? nextRecommendations : undefined,
-      );
-      setPlans(Array.isArray(nextPlans) ? nextPlans : []);
+      if (snapshotGeneration === snapshotGenerationRef.current) {
+        setSnapshot(nextSnapshot?.library === undefined ? undefined : nextSnapshot);
+      }
+      if (recommendationsGeneration === recommendationsGenerationRef.current) {
+        setRecommendations(
+          Array.isArray(nextRecommendations?.recommendations) ? nextRecommendations : undefined,
+        );
+      }
+      if (plansGeneration === plansGenerationRef.current) {
+        setPlans(Array.isArray(nextPlans) ? nextPlans : []);
+      }
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (
+        recommendationsGeneration === recommendationsGenerationRef.current ||
+        plansGeneration === plansGenerationRef.current ||
+        snapshotGeneration === snapshotGenerationRef.current
+      ) {
+        setError(errorMessage(cause));
+      }
     }
   };
 
   const savePreference = async () => {
     if (selectedAppId === undefined) return;
+    const requestAppId = selectedAppId;
+    const requestPreference = preference;
     try {
       setError(undefined);
-      await api.savePreference(selectedAppId, preference);
+      await api.savePreference(requestAppId, requestPreference);
+      if (selectedAppIdRef.current !== requestAppId) return;
       setMessage("Preferencias guardadas.");
       await refreshRecommendations();
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (selectedAppIdRef.current === requestAppId) setError(errorMessage(cause));
     }
   };
 
@@ -198,6 +229,7 @@ export function useIntelligenceState({
       setError("Ingresa una cantidad válida de juegos.");
       return;
     }
+    let generation = ++plansGenerationRef.current;
 
     try {
       setError(undefined);
@@ -206,14 +238,17 @@ export function useIntelligenceState({
         availableMinutes: validPlanAvailableMinutes,
         targetGameCount: validTargetGameCount,
       });
-      setPlans(await api.getPlans());
+      generation = ++plansGenerationRef.current;
+      const nextPlans = await api.getPlans();
+      if (generation !== plansGenerationRef.current) return;
+      setPlans(nextPlans);
       setMessage(
         result.shortfall
           ? `Plan creado con ${result.shortfall.selectedGameCount} de ${result.shortfall.requestedGameCount} juegos: no hay suficientes candidatos disponibles.`
           : "Plan creado.",
       );
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (generation === plansGenerationRef.current) setError(errorMessage(cause));
     }
   };
 
@@ -222,6 +257,7 @@ export function useIntelligenceState({
     itemId: string,
     progress: DashboardPlanItemProgress,
   ) => {
+    let generation = ++plansGenerationRef.current;
     try {
       setError(undefined);
       await api.updatePlanItemProgress(planId, itemId, progress);
@@ -232,10 +268,13 @@ export function useIntelligenceState({
         next.delete(key);
         return next;
       });
-      setPlans(await api.getPlans());
+      generation = ++plansGenerationRef.current;
+      const nextPlans = await api.getPlans();
+      if (generation !== plansGenerationRef.current) return;
+      setPlans(nextPlans);
       setMessage("Progreso actualizado.");
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (generation === plansGenerationRef.current) setError(errorMessage(cause));
     }
   };
 

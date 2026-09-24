@@ -61,4 +61,38 @@ describe("README release guidance", () => {
     expect(content).toContain("npm run lint");
     expect(content).toContain("npm run build");
   });
+
+  test("has no literal escaped-newline artifacts and matches the env-file surface", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const content = readme();
+    const envExample = await readFile(join(process.cwd(), ".env.example"), "utf8");
+
+    expect(content).not.toContain("\\n");
+    for (const variable of [
+      "STEAM_API_KEY",
+      "STEAM_ID",
+      "STEAMGRIDDB_API_KEY",
+      "TRACKER_DATABASE_PATH",
+      "DASHBOARD_PORT",
+      "DASHBOARD_UI_PORT",
+      "IGDB_CLIENT_ID",
+      "IGDB_CLIENT_SECRET",
+    ]) {
+      expect(content).toContain(variable);
+      expect(envExample).toContain(variable);
+    }
+    expect(envExample).toContain("DASHBOARD_PORT=4173");
+    expect(envExample).toContain("DASHBOARD_UI_PORT=5173");
+    expect(envExample).not.toMatch(/sk-(live|test)-[A-Za-z0-9]+/);
+    expect(envExample).not.toMatch(/\b[0-9a-f]{32,}\b/i);
+  });
+
+  test("documents current duration, backlog, and audit-gate behavior", () => {
+    const content = readme();
+
+    expect(content).toMatch(/24 hour/i);
+    expect(content).toMatch(/correct/i);
+    expect(content).toMatch(/WAL/i);
+    expect(content).toContain("npm audit --audit-level moderate");
+  });
 });

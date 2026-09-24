@@ -207,4 +207,56 @@ describe("intelligence MCP tools", () => {
       content: [{ text: expect.stringContaining("The requested plan item does not exist.") }],
     });
   });
+
+  test("rejects out-of-bound numerics and oversized identifiers", async () => {
+    const { plans, recommendations, tools } = setup();
+
+    await expect(
+      tools.get("recommendation_get_play_now")?.({ availableMinutes: 1441, maxResults: 3 }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("recommendation_get_play_now")?.({ availableMinutes: 60, maxResults: 51 }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("recommendation_get_play_now")?.({
+        availableMinutes: Number.MAX_SAFE_INTEGER + 1,
+        maxResults: 3,
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("backlog_create_plan")?.({
+        cadence: "weekly",
+        availableMinutes: 44641,
+        targetGameCount: 1,
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("backlog_create_plan")?.({
+        cadence: "weekly",
+        availableMinutes: 60,
+        targetGameCount: 101,
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("backlog_update_plan_item_progress")?.({
+        planId: "p".repeat(256),
+        itemId: "i",
+        progress: "done",
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("backlog_update_plan_item_progress")?.({
+        planId: "p",
+        itemId: "i".repeat(256),
+        progress: "done",
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      tools.get("recommendation_get_play_now")?.({ availableMinutes: 1440, maxResults: 50 }),
+    ).resolves.not.toMatchObject({ isError: true });
+
+    expect(recommendations.recommend).toHaveBeenCalledTimes(1);
+    expect(plans.create).not.toHaveBeenCalled();
+    expect(plans.setItemProgress).not.toHaveBeenCalled();
+  });
 });

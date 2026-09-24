@@ -86,6 +86,7 @@ async function requestSteam<T>(
 
   try {
     const response = await fetchLike(createSteamUrl(path, config.steamApiKey, query), {
+      redirect: "error",
       signal: controller.signal,
     });
 

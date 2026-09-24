@@ -12,6 +12,10 @@ export type Migration = Readonly<{
 type MigrationDefinition = Omit<Migration, "checksum">;
 type AppliedMigration = Readonly<{ version: number; checksum: string }>;
 
+const LEGACY_MIGRATION_CHECKSUMS = new Map<number, ReadonlySet<string>>([
+  [9, new Set(["3bdcf047763a4d03a6b49cde50b8c19d095d1a6abd527fd0bcd2b03033017ab7"])],
+]);
+
 export class MigrationError extends Error {
   constructor(message: string) {
     super(message);
@@ -198,7 +202,11 @@ function verifyAppliedMigrations(
     if (expected === undefined) {
       throw new MigrationError("Tracker database is newer than this tracker supports.");
     }
-    if (applied.checksum !== expected.checksum) {
+    const legacyChecksums = LEGACY_MIGRATION_CHECKSUMS.get(applied.version);
+    if (
+      applied.checksum !== expected.checksum &&
+      (legacyChecksums === undefined || !legacyChecksums.has(applied.checksum))
+    ) {
       throw new MigrationError("Tracker migration checksum does not match the recorded history.");
     }
   }

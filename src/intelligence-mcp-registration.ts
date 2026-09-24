@@ -3,7 +3,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 import type { BacklogPlanService } from "./backlog/backlog-plan-service.js";
-import { AppError, SteamUnavailableError } from "./errors.js";
+import {
+  BACKLOG_MAX_AVAILABLE_MINUTES,
+  BACKLOG_MAX_TARGET_GAME_COUNT,
+  PLAY_NOW_MAX_AVAILABLE_MINUTES,
+} from "./domain/input-limits.js";
+import { AppError, InputError, SteamUnavailableError } from "./errors.js";
 import type { RecommendationPreferencesService } from "./recommendations/recommendation-preferences-service.js";
 import type { SteamService } from "./services/steam-service.js";
 
@@ -27,10 +32,16 @@ export function registerIntelligencePromptsAndResources(
       description: "Compose a user request for a time-boxed play-now recommendation.",
       argsSchema: { availableMinutes: z.string().trim().min(1) },
     },
-    ({ availableMinutes }) =>
-      prompt(
-        `Use recommendation_get_play_now with availableMinutes ${availableMinutes} for this play session; treat duration as a secondary finishability signal rather than requiring the entire game to fit. Include a suitable maxResults, explain the ranked choices, and note any unknown durations.`,
-      ),
+    ({ availableMinutes }) => {
+      const minutes = parseBoundedPositiveIntegerPromptArgument(
+        availableMinutes,
+        PLAY_NOW_MAX_AVAILABLE_MINUTES,
+        "availableMinutes",
+      );
+      return prompt(
+        `Use recommendation_get_play_now with availableMinutes ${minutes} for this play session; treat duration as a secondary finishability signal rather than requiring the entire game to fit. Include a suitable maxResults, explain the ranked choices, and note any unknown durations.`,
+      );
+    },
   );
   server.registerPrompt(
     "weekly-plan",
@@ -43,7 +54,7 @@ export function registerIntelligencePromptsAndResources(
     },
     ({ availableMinutes, targetGameCount }) =>
       prompt(
-        `Use backlog_create_plan with cadence weekly, availableMinutes ${availableMinutes} as the total weekly time budget, and targetGameCount ${targetGameCount}. Summarize the selected games and any shortfall.`,
+        `Use backlog_create_plan with cadence weekly, availableMinutes ${parseBoundedPositiveIntegerPromptArgument(availableMinutes, BACKLOG_MAX_AVAILABLE_MINUTES, "availableMinutes")} as the total weekly time budget, and targetGameCount ${parseBoundedPositiveIntegerPromptArgument(targetGameCount, BACKLOG_MAX_TARGET_GAME_COUNT, "targetGameCount")}. Summarize the selected games and any shortfall.`,
       ),
   );
   server.registerPrompt(
@@ -57,7 +68,7 @@ export function registerIntelligencePromptsAndResources(
     },
     ({ availableMinutes, targetGameCount }) =>
       prompt(
-        `Use backlog_create_plan with cadence monthly, availableMinutes ${availableMinutes} as the total monthly time budget, and targetGameCount ${targetGameCount}. Summarize the selected games and any shortfall.`,
+        `Use backlog_create_plan with cadence monthly, availableMinutes ${parseBoundedPositiveIntegerPromptArgument(availableMinutes, BACKLOG_MAX_AVAILABLE_MINUTES, "availableMinutes")} as the total monthly time budget, and targetGameCount ${parseBoundedPositiveIntegerPromptArgument(targetGameCount, BACKLOG_MAX_TARGET_GAME_COUNT, "targetGameCount")}. Summarize the selected games and any shortfall.`,
       ),
   );
   server.registerPrompt(
@@ -118,6 +129,25 @@ function registerJsonResource(
 
 function prompt(text: string): GetPromptResult {
   return { messages: [{ role: "user", content: { type: "text", text } }] };
+}
+
+export function parseBoundedPositiveIntegerPromptArgument(
+  value: unknown,
+  max: number,
+  label: string,
+): number {
+  if (typeof value !== "string") {
+    throw new InputError(`${label} must be a positive integer within the supported range.`);
+  }
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new InputError(`${label} must be a positive integer within the supported range.`);
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > max) {
+    throw new InputError(`${label} must be a positive integer within the supported range.`);
+  }
+  return parsed;
 }
 
 function safeError(error: unknown): object {

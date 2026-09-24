@@ -1,5 +1,6 @@
 import type { GameDurationService } from "../durations/game-duration-service.js";
 import type { GameDurationEstimate } from "../domain/game-duration.js";
+import { PLAY_NOW_MAX_AVAILABLE_MINUTES, PLAY_NOW_MAX_RESULTS } from "../domain/input-limits.js";
 import type { SteamGame, SteamLibrary } from "../domain/models.js";
 import {
   DEFAULT_RECOMMENDATION_PREFERENCE,
@@ -8,6 +9,10 @@ import {
 } from "../domain/recommendation-preferences.js";
 import type { TrackerEntry, TrackerRepository } from "../domain/tracker.js";
 import { InputError } from "../errors.js";
+import {
+  mapWithConcurrency,
+  MAX_DURATION_CONCURRENCY,
+} from "../concurrency/map-with-concurrency.js";
 
 export type PlayNowSessionMode = "solo" | "with_friends" | "any";
 
@@ -110,8 +115,10 @@ export function createPlayNowRecommendationService({
         }
         return [{ game, preference, status: statusesByAppId.get(game.appId) }];
       });
-      const candidates = await Promise.all(
-        eligible.map(async (candidate): Promise<Candidate> => {
+      const candidates = await mapWithConcurrency(
+        eligible,
+        MAX_DURATION_CONCURRENCY,
+        async (candidate): Promise<Candidate> => {
           const durationEstimateMinutes = getNormallyMinutes(
             await gameDurationService.getEstimate(candidate.game),
           );
@@ -123,7 +130,7 @@ export function createPlayNowRecommendationService({
               durationEstimateMinutes,
             ),
           };
-        }),
+        },
       );
       const recommendations = candidates
         .sort((left, right) => compareCandidates(left, right, request.availableMinutes))
@@ -159,6 +166,14 @@ function assertRequest(request: unknown): asserts request is PlayNowRecommendati
   ) {
     throw new InputError(
       "Available minutes and max results must be positive safe integers and session mode must be valid.",
+    );
+  }
+  if (
+    candidate.availableMinutes > PLAY_NOW_MAX_AVAILABLE_MINUTES ||
+    candidate.maxResults > PLAY_NOW_MAX_RESULTS
+  ) {
+    throw new InputError(
+      `Available minutes must not exceed ${PLAY_NOW_MAX_AVAILABLE_MINUTES} and max results must not exceed ${PLAY_NOW_MAX_RESULTS}.`,
     );
   }
 }

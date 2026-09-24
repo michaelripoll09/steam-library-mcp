@@ -27,51 +27,83 @@ function unavailable(
   return createDurationUnavailableEnvelope({ message, retryable });
 }
 
+const DURATION_CACHE_TTL_MS = 86_400_000;
+
+function isFreshEstimate(
+  estimate: GameDurationEstimate | undefined,
+  now: number,
+): estimate is GameDurationEstimate {
+  if (estimate === undefined) return false;
+  const refreshedAt = Date.parse(estimate.refreshedAt);
+  return !Number.isNaN(refreshedAt) && now - refreshedAt < DURATION_CACHE_TTL_MS;
+}
+
 export function createGameDurationService({
   clock,
   igdbClient,
   repository,
 }: GameDurationServiceDependencies): GameDurationService {
+  const inFlight = new Map<number, Promise<GameDurationEstimate | DurationUnavailableEnvelope>>();
   return Object.freeze({
     async getEstimate(
       game: SteamGame,
     ): Promise<GameDurationEstimate | DurationUnavailableEnvelope> {
-      const games = await igdbClient.findGamesForSteamApp(game.appId);
-      if (isMetadataUnavailable(games)) {
-        return repository.get(game.appId) ?? unavailable(games.error.retryable);
+      const cached = repository.get(game.appId);
+      if (isFreshEstimate(cached, clock.now())) {
+        return cached;
       }
-
-      const matchedGame = selectSteamMatch(games, game.appId);
-      if (matchedGame === undefined) {
-        return unavailable(false, "No duration estimate is available for this game.");
+      const ongoing = inFlight.get(game.appId);
+      if (ongoing !== undefined) {
+        return ongoing;
       }
-
-      const records = await igdbClient.findGameTimeToBeat(matchedGame.id);
-      if (isMetadataUnavailable(records)) {
-        return repository.get(game.appId) ?? unavailable(records.error.retryable);
+      const pending = fetchAndStoreEstimate(game);
+      inFlight.set(game.appId, pending);
+      try {
+        return await pending;
+      } finally {
+        inFlight.delete(game.appId);
       }
-
-      const duration = records.find((record) => record.game_id === matchedGame.id);
-      const estimate =
-        duration === undefined
-          ? undefined
-          : normalizeIgdbDuration({
-              appId: game.appId,
-              igdbGameId: matchedGame.id,
-              ...(matchedGame.name === undefined ? {} : { igdbGameName: matchedGame.name }),
-              hastilySeconds: duration.hastily,
-              normallySeconds: duration.normally,
-              completelySeconds: duration.completely,
-              refreshedAt: new Date(clock.now()).toISOString(),
-            });
-      if (estimate === undefined) {
-        return unavailable(false, "No duration estimate is available for this game.");
-      }
-
-      repository.save(estimate);
-      return estimate;
     },
   });
+
+  async function fetchAndStoreEstimate(
+    game: SteamGame,
+  ): Promise<GameDurationEstimate | DurationUnavailableEnvelope> {
+    const games = await igdbClient.findGamesForSteamApp(game.appId);
+    if (isMetadataUnavailable(games)) {
+      return repository.get(game.appId) ?? unavailable(games.error.retryable);
+    }
+
+    const matchedGame = selectSteamMatch(games, game.appId);
+    if (matchedGame === undefined) {
+      return unavailable(false, "No duration estimate is available for this game.");
+    }
+
+    const records = await igdbClient.findGameTimeToBeat(matchedGame.id);
+    if (isMetadataUnavailable(records)) {
+      return repository.get(game.appId) ?? unavailable(records.error.retryable);
+    }
+
+    const duration = records.find((record) => record.game_id === matchedGame.id);
+    const estimate =
+      duration === undefined
+        ? undefined
+        : normalizeIgdbDuration({
+            appId: game.appId,
+            igdbGameId: matchedGame.id,
+            ...(matchedGame.name === undefined ? {} : { igdbGameName: matchedGame.name }),
+            hastilySeconds: duration.hastily,
+            normallySeconds: duration.normally,
+            completelySeconds: duration.completely,
+            refreshedAt: new Date(clock.now()).toISOString(),
+          });
+    if (estimate === undefined) {
+      return unavailable(false, "No duration estimate is available for this game.");
+    }
+
+    repository.save(estimate);
+    return estimate;
+  }
 }
 
 export function createUnavailableGameDurationService({

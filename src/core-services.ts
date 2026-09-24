@@ -1,4 +1,8 @@
 import { TtlCache, type Cache, type Clock } from "./cache/ttl-cache.js";
+import {
+  mapWithConcurrency,
+  MAX_DURATION_CONCURRENCY,
+} from "./concurrency/map-with-concurrency.js";
 import { loadConfig, loadIgdbConfig, type AppConfig } from "./config.js";
 import {
   createMetadataUnavailableEnvelope,
@@ -237,11 +241,15 @@ function createDefaultTaskRunner(
         async enrich_durations(_request, context) {
           const library = await steamService.getLibrary();
           context.reportProgress(0, library.games.length);
-          for (const [index, game] of library.games.entries()) {
-            if (context.signal.aborted) return;
+          let completed = 0;
+          await mapWithConcurrency(library.games, MAX_DURATION_CONCURRENCY, async (game) => {
+            if (context.signal.aborted) {
+              throw new Error("Duration enrichment was cancelled.");
+            }
             await gameDurationService.getEstimate(game);
-            context.reportProgress(index + 1);
-          }
+            completed += 1;
+            context.reportProgress(completed, library.games.length);
+          });
         },
         async recalculate_plan(request, context) {
           const plan = backlogPlanService.get(request.planId);

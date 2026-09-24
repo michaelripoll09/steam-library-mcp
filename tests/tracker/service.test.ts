@@ -186,6 +186,33 @@ describe("GamingTrackerService lifecycle", () => {
     }
   });
 
+  test("preserves paused status when listing backlog games", async () => {
+    const repository: TrackerRepository = {
+      list: vi.fn(() => [
+        {
+          appId: 20,
+          status: "paused" as const,
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-02T00:00:00.000Z",
+        },
+      ]),
+      transaction: vi.fn(),
+    };
+    const service = createGamingTrackerService({
+      clock: { now: () => 1_700_000_000_000 },
+      ownershipLookup: createOwnershipLookup([
+        { appId: 10, name: "Untracked", playtimeMinutes: 0 },
+        { appId: 20, name: "Paused", playtimeMinutes: 0 },
+      ]),
+      repository,
+    });
+
+    await expect(service.getBacklog()).resolves.toEqual([
+      expect.objectContaining({ appId: 20, status: "paused" }),
+      expect.objectContaining({ appId: 10, status: "backlog" }),
+    ]);
+  });
+
   test("orders derived backlog games by update time descending and app ID when timestamps are null", async () => {
     const service = createGamingTrackerService({
       clock: { now: () => 1_700_000_000_000 },

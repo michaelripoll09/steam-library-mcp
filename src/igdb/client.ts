@@ -63,7 +63,7 @@ async function fetchWithTimeout(
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    return await fetchLike(input, { ...init, signal: controller.signal });
+    return await fetchLike(input, { ...init, redirect: "error", signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
