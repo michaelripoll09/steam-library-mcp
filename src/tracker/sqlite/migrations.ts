@@ -13,12 +13,7 @@ type MigrationDefinition = Omit<Migration, "checksum">;
 type AppliedMigration = Readonly<{ version: number; checksum: string }>;
 
 const LEGACY_MIGRATION_CHECKSUMS = new Map<number, ReadonlySet<string>>([
-  [
-    9,
-    new Set([
-      "3bdcf047763a4d03a6b49cde50b8c19d095d1a6abd527fd0bcd2b03033017ab7",
-    ]),
-  ],
+  [9, new Set(["3bdcf047763a4d03a6b49cde50b8c19d095d1a6abd527fd0bcd2b03033017ab7"])],
 ]);
 
 export class MigrationError extends Error {
