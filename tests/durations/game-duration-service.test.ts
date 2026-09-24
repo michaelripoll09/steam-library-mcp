@@ -61,6 +61,63 @@ describe("game duration service", () => {
     expect(igdbClient.findGameTimeToBeat).toHaveBeenCalledWith(3);
   });
 
+  test("returns a fresh cached estimate without calling IGDB", async () => {
+    const cached = {
+      appId: 620,
+      igdbGameId: 3,
+      igdbGameName: "Portal 2",
+      source: "igdb" as const,
+      refreshedAt: "1970-01-01T01:00:00.000Z",
+      normally: { minutes: 120, hours: 2 },
+    };
+    const repository = createRepository(cached);
+    const igdbClient = {
+      findGamesForSteamApp: vi.fn(async () => [
+        { id: 3, name: "Portal 2", external_games: [{ category: 1, uid: "620" }] },
+      ]),
+      findGameTimeToBeat: vi.fn(async () => [
+        { game_id: 3, hastily: 5_400, normally: 7_200, completely: 9_000 },
+      ]),
+    } as unknown as IgdbClient;
+    const service = createGameDurationService({
+      clock: { now: () => 3_600_000 },
+      igdbClient,
+      repository,
+    });
+
+    await expect(service.getEstimate(portal)).resolves.toEqual(cached);
+    expect(igdbClient.findGamesForSteamApp).not.toHaveBeenCalled();
+    expect(igdbClient.findGameTimeToBeat).not.toHaveBeenCalled();
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  test("deduplicates concurrent estimate requests for the same game", async () => {
+    const repository = createRepository();
+    let releaseGames!: (value: unknown) => void;
+    const gamesGate = new Promise<unknown>((resolve) => {
+      releaseGames = resolve;
+    });
+    const igdbClient = {
+      findGamesForSteamApp: vi.fn(() => gamesGate),
+      findGameTimeToBeat: vi.fn(async () => [
+        { game_id: 3, hastily: 5_400, normally: 7_200, completely: 9_000 },
+      ]),
+    } as unknown as IgdbClient;
+    const service = createGameDurationService({
+      clock: { now: () => 0 },
+      igdbClient,
+      repository,
+    });
+
+    const first = service.getEstimate(portal);
+    const second = service.getEstimate(portal);
+    releaseGames([{ id: 3, name: "Portal 2", external_games: [{ category: 1, uid: "620" }] }]);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toEqual(secondResult);
+    expect(igdbClient.findGamesForSteamApp).toHaveBeenCalledTimes(1);
+  });
+
   test("returns a verified cached estimate when the provider is unavailable", async () => {
     const cached = {
       appId: 620,
