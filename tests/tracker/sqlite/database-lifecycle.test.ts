@@ -15,6 +15,32 @@ import type { SteamService } from "../../../src/services/steam-service.js";
 import { openTrackerDatabase } from "../../../src/tracker/sqlite/database.js";
 import type { TaskRunner } from "../../../src/tasks/task-runner.js";
 
+describe("tracker database concurrency hardening", () => {
+  test("uses WAL with a busy timeout so MCP and dashboard can share one file", () => {
+    const directory = mkdtempSync(join(tmpdir(), "steam-library-sqlite-wal-"));
+    const databasePath = join(directory, "tracker.sqlite");
+    const database = openTrackerDatabase(databasePath);
+    try {
+      expect(database.pragma("journal_mode", { simple: true })).toBe("wal");
+      expect(database.pragma("busy_timeout", { simple: true })).toBe(5000);
+      expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps in-memory databases usable without file-only pragmas", () => {
+    const database = openTrackerDatabase(":memory:");
+    try {
+      expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
+      expect(database.open).toBe(true);
+    } finally {
+      database.close();
+    }
+  });
+});
+
 describe("core service database lifecycle", () => {
   test("does not close an injected database", async () => {
     const database = openTrackerDatabase(":memory:");
