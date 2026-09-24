@@ -324,6 +324,91 @@ describe("BacklogPlanService", () => {
     }
   });
 
+  test("allows correcting any progress state to any other valid progress state", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const repository = new SqliteBacklogPlanRepository(database);
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "weekly-1",
+      selectionService: createSelectionService([selection(620, "Portal 2", 480, 180)]),
+      repository,
+    });
+
+    try {
+      const { plan } = await service.create({
+        cadence: "weekly",
+        availableMinutes: 60,
+        targetGameCount: 1,
+      });
+      const itemId = plan.items[0].id;
+      const states = [
+        "in_progress",
+        "done",
+        "not_started",
+        "skipped",
+        "in_progress",
+        "skipped",
+        "done",
+        "in_progress",
+        "not_started",
+        "done",
+        "skipped",
+        "not_started",
+      ] as const;
+      for (const progress of states) {
+        await expect(service.setItemProgress(plan.id, itemId, progress)).resolves.toEqual(
+          expect.objectContaining({ progress }),
+        );
+      }
+      expect(repository.getById(plan.id)?.items[0]).toMatchObject({ progress: "not_started" });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("treats same-state progress updates as idempotent without repository writes", async () => {
+    const stored = Object.freeze({
+      id: "item-1",
+      rank: 1,
+      appId: 620,
+      name: "Portal 2",
+      durationEstimateMinutes: 180,
+      explanation: "Selection for Portal 2.",
+      progress: "done" as const,
+      createdAt: now,
+      updatedAt: "2026-08-28T11:00:00.000Z",
+    });
+    const storedPlan = Object.freeze({
+      id: "plan-1",
+      cadence: "weekly" as const,
+      availableMinutes: 60,
+      targetGameCount: 1,
+      lifecycle: "active" as const,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+      items: Object.freeze([stored]),
+    });
+    const setItemProgress = vi.fn(() => true);
+    const repository: BacklogPlanRepository = {
+      replaceActive: vi.fn(),
+      getById: vi.fn(() => storedPlan),
+      listActive: vi.fn(() => []),
+      setItemProgress,
+    };
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "unused",
+      selectionService: createSelectionService(),
+      repository,
+    });
+
+    await expect(service.setItemProgress("plan-1", "item-1", "done")).resolves.toEqual(
+      expect.objectContaining({ progress: "done", updatedAt: "2026-08-28T11:00:00.000Z" }),
+    );
+    expect(repository.setItemProgress).not.toHaveBeenCalled();
+  });
+
   test("persists manual plan-item progress without writing tracker state", async () => {
     const database = openTrackerDatabase(":memory:");
     const repository = new SqliteBacklogPlanRepository(database);
@@ -348,11 +433,11 @@ describe("BacklogPlanService", () => {
       );
       await expect(
         service.setItemProgress(plan.id, plan.items[0].id, "not_started"),
-      ).rejects.toBeInstanceOf(InputError);
+      ).resolves.toEqual(expect.objectContaining({ progress: "not_started" }));
       expect(database.prepare("SELECT COUNT(*) AS count FROM tracker_entries").get()).toEqual({
         count: 0,
       });
-      expect(repository.getById(plan.id)?.items[0]).toMatchObject({ progress: "done" });
+      expect(repository.getById(plan.id)?.items[0]).toMatchObject({ progress: "not_started" });
     } finally {
       database.close();
     }

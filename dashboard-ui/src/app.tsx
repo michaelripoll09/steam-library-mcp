@@ -66,16 +66,59 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   const [isSavingManual, setIsSavingManual] = useState(false);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const libraryGenerationRef = useRef(0);
+  const lastAppliedLibraryGenerationRef = useRef(0);
+  const pendingLibraryOperationsRef = useRef(0);
+  const libraryRef = useRef<DashboardLibrary | undefined>(undefined);
+  const syncGenerationRef = useRef(0);
+  const manualGenerationRef = useRef(0);
+  const statusGenerationRef = useRef(0);
+  const selectedGameAppIdRef = useRef<number | undefined>(undefined);
+  const achievementInflightRef = useRef<ReadonlySet<number>>(new Set());
+
+  const claimLibraryGeneration = () => {
+    pendingLibraryOperationsRef.current += 1;
+    return ++libraryGenerationRef.current;
+  };
+
+  const settleLibraryOperation = () => {
+    pendingLibraryOperationsRef.current = Math.max(0, pendingLibraryOperationsRef.current - 1);
+  };
+
+  const applyAuthoritativeLibrary = (nextLibrary: DashboardLibrary, generation: number) => {
+    if (generation !== libraryGenerationRef.current) {
+      const newerApplied = generation <= lastAppliedLibraryGenerationRef.current;
+      const newerInflight = pendingLibraryOperationsRef.current > 1;
+      if (newerApplied || newerInflight) {
+        return false;
+      }
+    }
+    lastAppliedLibraryGenerationRef.current = Math.max(
+      lastAppliedLibraryGenerationRef.current,
+      generation,
+    );
+    libraryRef.current = nextLibrary;
+    setLibrary(nextLibrary);
+    setIsLoading(false);
+    setInitialError(undefined);
+    return true;
+  };
 
   const loadLibrary = async () => {
-    setIsLoading(true);
-    setInitialError(undefined);
+    const generation = claimLibraryGeneration();
     try {
-      setLibrary(await api.getLibrary());
-    } catch (error) {
-      setInitialError(errorMessage(error));
+      setIsLoading(true);
+      setInitialError(undefined);
+      try {
+        const nextLibrary = await api.getLibrary();
+        applyAuthoritativeLibrary(nextLibrary, generation);
+      } catch (error) {
+        if (generation === libraryGenerationRef.current) setInitialError(errorMessage(error));
+      } finally {
+        if (generation === libraryGenerationRef.current) setIsLoading(false);
+      }
     } finally {
-      setIsLoading(false);
+      settleLibraryOperation();
     }
   };
 
@@ -85,7 +128,15 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
 
   useEffect(() => {
     if (!manualCollectionApi) return;
-    void api.getManualCollection().then(setManualCollection, () => setManualCollection([]));
+    const generation = ++manualGenerationRef.current;
+    void api.getManualCollection().then(
+      (collection) => {
+        if (generation === manualGenerationRef.current) setManualCollection(collection);
+      },
+      () => {
+        if (generation === manualGenerationRef.current) setManualCollection([]);
+      },
+    );
   }, [api, manualCollectionApi]);
 
   useEffect(() => {
@@ -95,17 +146,27 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
 
   const addManual = async () => {
     if (!manualCollectionApi) return;
-    setIsSavingManual(true);
-    setManualError(undefined);
+    const libraryGeneration = claimLibraryGeneration();
+    const manualGeneration = ++manualGenerationRef.current;
     try {
-      await api.addManualCollection(manualSteam);
-      setManualSteam("");
-      setManualCollection(await api.getManualCollection());
-      setLibrary(await api.getLibrary());
-    } catch (error) {
-      setManualError(errorMessage(error));
+      setIsSavingManual(true);
+      setManualError(undefined);
+      try {
+        await api.addManualCollection(manualSteam);
+        if (manualGeneration !== manualGenerationRef.current) return;
+        setManualSteam("");
+        const nextCollection = await api.getManualCollection();
+        if (manualGeneration !== manualGenerationRef.current) return;
+        setManualCollection(nextCollection);
+        const nextLibrary = await api.getLibrary();
+        applyAuthoritativeLibrary(nextLibrary, libraryGeneration);
+      } catch (error) {
+        if (manualGeneration === manualGenerationRef.current) setManualError(errorMessage(error));
+      } finally {
+        if (manualGeneration === manualGenerationRef.current) setIsSavingManual(false);
+      }
     } finally {
-      setIsSavingManual(false);
+      settleLibraryOperation();
     }
   };
   const updateManual = async (
@@ -113,26 +174,44 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     patch: { accessType?: "manual" | "family"; isPlayable?: boolean },
   ) => {
     if (!manualCollectionApi) return;
-    setManualError(undefined);
+    const libraryGeneration = claimLibraryGeneration();
+    const manualGeneration = ++manualGenerationRef.current;
     try {
-      const updated = await api.updateManualCollection(appId, patch);
-      setManualCollection((collection) =>
-        collection.map((game) => (game.appId === appId ? updated : game)),
-      );
-      setLibrary(await api.getLibrary());
-    } catch (error) {
-      setManualError(errorMessage(error));
+      setManualError(undefined);
+      try {
+        const updated = await api.updateManualCollection(appId, patch);
+        if (manualGeneration !== manualGenerationRef.current) return;
+        setManualCollection((collection) =>
+          collection.map((game) => (game.appId === appId ? updated : game)),
+        );
+        const nextLibrary = await api.getLibrary();
+        applyAuthoritativeLibrary(nextLibrary, libraryGeneration);
+      } catch (error) {
+        if (manualGeneration === manualGenerationRef.current) setManualError(errorMessage(error));
+      }
+    } finally {
+      settleLibraryOperation();
     }
   };
   const removeManual = async (appId: number) => {
     if (!manualCollectionApi) return;
-    setManualError(undefined);
+    const libraryGeneration = claimLibraryGeneration();
+    const manualGeneration = ++manualGenerationRef.current;
     try {
-      await api.removeManualCollection(appId);
-      setManualCollection(await api.getManualCollection());
-      setLibrary(await api.getLibrary());
-    } catch (error) {
-      setManualError(errorMessage(error));
+      setManualError(undefined);
+      try {
+        await api.removeManualCollection(appId);
+        if (manualGeneration !== manualGenerationRef.current) return;
+        const nextCollection = await api.getManualCollection();
+        if (manualGeneration !== manualGenerationRef.current) return;
+        setManualCollection(nextCollection);
+        const nextLibrary = await api.getLibrary();
+        applyAuthoritativeLibrary(nextLibrary, libraryGeneration);
+      } catch (error) {
+        if (manualGeneration === manualGenerationRef.current) setManualError(errorMessage(error));
+      }
+    } finally {
+      settleLibraryOperation();
     }
   };
 
@@ -142,6 +221,7 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
 
   const openGame = (game: DashboardGame, opener: HTMLButtonElement) => {
     openerRef.current = opener;
+    selectedGameAppIdRef.current = game.appId;
     setStatusError(undefined);
     setStatusMessage(undefined);
     setAchievementErrors((errors) => {
@@ -153,43 +233,68 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
   };
 
   const closeGame = () => {
+    selectedGameAppIdRef.current = undefined;
     setSelectedGame(undefined);
     openerRef.current?.focus();
   };
 
   const syncLibrary = async () => {
-    setIsSyncing(true);
-    setSyncError(undefined);
+    const libraryGeneration = claimLibraryGeneration();
+    const syncGeneration = ++syncGenerationRef.current;
     try {
-      setLibrary(await api.syncLibrary());
-    } catch (error) {
-      setSyncError(errorMessage(error));
+      setIsSyncing(true);
+      setSyncError(undefined);
+      try {
+        const nextLibrary = await api.syncLibrary();
+        applyAuthoritativeLibrary(nextLibrary, libraryGeneration);
+      } catch (error) {
+        if (syncGeneration === syncGenerationRef.current) setSyncError(errorMessage(error));
+      } finally {
+        if (syncGeneration === syncGenerationRef.current) setIsSyncing(false);
+      }
     } finally {
-      setIsSyncing(false);
+      settleLibraryOperation();
     }
   };
 
   const updateStatus = async (status: DashboardMutableStatus) => {
     if (selectedGame === undefined) return;
-    setIsUpdatingStatus(true);
-    setStatusError(undefined);
-    setStatusMessage(undefined);
+    const requestAppId = selectedGame.appId;
+    const statusGeneration = ++statusGenerationRef.current;
+    const libraryGeneration = claimLibraryGeneration();
     try {
-      const update = await api.updateGameStatus(selectedGame.appId, status);
-      setLibrary(update.library);
-      setSelectedGame(update.library.games.find((game) => game.appId === selectedGame.appId));
-      setStatusMessage("Estado guardado.");
-    } catch (error) {
-      setStatusError(errorMessage(error));
+      setIsUpdatingStatus(true);
+      setStatusError(undefined);
+      setStatusMessage(undefined);
+      try {
+        const update = await api.updateGameStatus(requestAppId, status);
+        applyAuthoritativeLibrary(update.library, libraryGeneration);
+        if (
+          statusGeneration !== statusGenerationRef.current ||
+          selectedGameAppIdRef.current !== requestAppId
+        )
+          return;
+        setSelectedGame(update.library.games.find((game) => game.appId === requestAppId));
+        setStatusMessage("Estado guardado.");
+      } catch (error) {
+        if (
+          statusGeneration === statusGenerationRef.current &&
+          selectedGameAppIdRef.current === requestAppId
+        )
+          setStatusError(errorMessage(error));
+      } finally {
+        if (statusGeneration === statusGenerationRef.current) setIsUpdatingStatus(false);
+      }
     } finally {
-      setIsUpdatingStatus(false);
+      settleLibraryOperation();
     }
   };
 
   const loadAchievements = async () => {
     if (selectedGame === undefined || !isAchievementsApi(api)) return;
     const appId = selectedGame.appId;
-    if (achievementCache.has(appId)) return;
+    if (achievementCache.has(appId) || achievementInflightRef.current.has(appId)) return;
+    achievementInflightRef.current = new Set(achievementInflightRef.current).add(appId);
     setLoadingAchievementAppIds((appIds) => new Set(appIds).add(appId));
     setAchievementErrors((errors) => {
       const nextErrors = new Map(errors);
@@ -202,6 +307,11 @@ export function DashboardApp({ api: suppliedApi }: DashboardAppProps) {
     } catch (error) {
       setAchievementErrors((errors) => new Map(errors).set(appId, errorMessage(error)));
     } finally {
+      achievementInflightRef.current = ((): ReadonlySet<number> => {
+        const next = new Set(achievementInflightRef.current);
+        next.delete(appId);
+        return next;
+      })();
       setLoadingAchievementAppIds((appIds) => {
         const nextAppIds = new Set(appIds);
         nextAppIds.delete(appId);

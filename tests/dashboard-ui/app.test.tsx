@@ -1731,3 +1731,263 @@ test("preserves an unsaved backlog progress draft across navigation without savi
     expect(api.updatePlanItemProgress).toHaveBeenCalledWith("weekly-1", "item-1", "done"),
   );
 });
+
+describe("DashboardApp request isolation", () => {
+  test("a slow initial load cannot overwrite a later fast sync", async () => {
+    const user = userEvent.setup();
+    const initialLibrary = deferred<DashboardLibrary>();
+    const syncedLibrary: DashboardLibrary = {
+      ...library,
+      games: [
+        {
+          appId: 99,
+          name: "Synced Game",
+          status: "backlog",
+          coverUrl: "",
+          accessType: "owned",
+          isPlayable: true,
+          playtimeMinutes: 0,
+        },
+      ],
+    };
+    const api = {
+      getLibrary: vi.fn(() => initialLibrary.promise),
+      syncLibrary: vi.fn().mockResolvedValue(syncedLibrary),
+      updateGameStatus: vi.fn(),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
+    await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
+    await waitFor(() => expect(api.syncLibrary).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      initialLibrary.resolve(library);
+    });
+
+    expect(await screen.findByRole("article", { name: "Synced Game" })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: "Celeste" })).not.toBeInTheDocument();
+  });
+
+  test("a slow sync cannot overwrite a later status mutation", async () => {
+    const user = userEvent.setup();
+    const pendingSync = deferred<DashboardLibrary>();
+    const updatedLibrary: DashboardLibrary = {
+      ...library,
+      games: library.games.map((game) =>
+        game.appId === 20 ? { ...game, status: "completed" as const } : game,
+      ),
+    };
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(() => pendingSync.promise),
+      updateGameStatus: vi
+        .fn()
+        .mockResolvedValue({ library: updatedLibrary, mark: { outcome: "updated" } }),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
+    await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
+    const dialog = screen.getByRole("dialog", { name: "Detalles de Hades" });
+    fireEvent.change(within(dialog).getByLabelText("Estado"), { target: { value: "completed" } });
+    await waitFor(() => expect(api.updateGameStatus).toHaveBeenCalledWith(20, "completed"));
+
+    await act(async () => {
+      pendingSync.resolve(library);
+    });
+
+    await waitFor(() => expect(within(dialog).getByLabelText("Estado")).toHaveValue("completed"));
+  });
+
+  test("a status update for game A does not replace a drawer showing game B", async () => {
+    const user = userEvent.setup();
+    const pendingUpdate = deferred<unknown>();
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(() => pendingUpdate.promise),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const dialogA = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    fireEvent.change(within(dialogA).getByLabelText("Estado"), {
+      target: { value: "completed" },
+    });
+    await waitFor(() => expect(api.updateGameStatus).toHaveBeenCalledWith(10, "completed"));
+
+    await user.click(screen.getByRole("button", { name: "Cerrar detalles" }));
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
+    expect(screen.getByRole("dialog", { name: "Detalles de Hades" })).toBeInTheDocument();
+
+    await act(async () => {
+      pendingUpdate.resolve({
+        library,
+        mark: { outcome: "updated" as const },
+      });
+    });
+
+    expect(screen.getByRole("dialog", { name: "Detalles de Hades" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Detalles de Celeste" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Estado guardado.")).not.toBeInTheDocument();
+  });
+
+  test("a slow initial manual load cannot overwrite a fast add", async () => {
+    const user = userEvent.setup();
+    const initialCollection = deferred<readonly never[]>();
+    const addedEntry = {
+      appId: 413150,
+      name: "Stardew Valley",
+      accessType: "manual" as const,
+      isPlayable: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getManualCollection: vi
+        .fn()
+        .mockImplementationOnce(() => initialCollection.promise)
+        .mockImplementation(async () => [addedEntry]),
+      addManualCollection: vi.fn().mockResolvedValue(addedEntry),
+      updateManualCollection: vi.fn(),
+      removeManualCollection: vi.fn(),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("manual");
+    await user.type(screen.getByLabelText("URL de Steam o AppID"), "413150");
+    await user.click(screen.getByRole("button", { name: "Agregar" }));
+    await waitFor(() => expect(api.addManualCollection).toHaveBeenCalledWith("413150"));
+    expect(await screen.findByText("Stardew Valley")).toBeInTheDocument();
+
+    await act(async () => {
+      initialCollection.resolve([]);
+    });
+
+    expect(screen.getByText("Stardew Valley")).toBeInTheDocument();
+    expect(screen.queryByText("Aún no tienes juegos agregados")).not.toBeInTheDocument();
+  });
+
+  test("an achievement failure for game A does not surface while viewing game B", async () => {
+    const user = userEvent.setup();
+    let rejectAchievements: ((reason?: unknown) => void) | undefined;
+    const api = {
+      getLibrary: vi.fn().mockResolvedValue(library),
+      syncLibrary: vi.fn(),
+      updateGameStatus: vi.fn(),
+      getAchievements: vi.fn(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectAchievements = reject;
+          }),
+      ),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Celeste" }));
+    const dialogA = screen.getByRole("dialog", { name: "Detalles de Celeste" });
+    await user.click(within(dialogA).getByRole("button", { name: "Cargar logros" }));
+    expect(api.getAchievements).toHaveBeenCalledWith(10);
+
+    await user.click(screen.getByRole("button", { name: "Cerrar detalles" }));
+    await user.click(await screen.findByRole("button", { name: "Ver detalles de Hades" }));
+    const dialogB = screen.getByRole("dialog", { name: "Detalles de Hades" });
+
+    await act(async () => {
+      rejectAchievements?.(new Error("achievements boom"));
+    });
+
+    expect(within(dialogB).queryByRole("alert")).not.toBeInTheDocument();
+    expect(api.getAchievements).toHaveBeenCalledTimes(1);
+  });
+
+  test("a stale initial completion keeps loading state while a newer sync is pending", async () => {
+    const user = userEvent.setup();
+    const initialLibrary = deferred<DashboardLibrary>();
+    const pendingSync = deferred<DashboardLibrary>();
+    const api = {
+      getLibrary: vi.fn(() => initialLibrary.promise),
+      syncLibrary: vi.fn(() => pendingSync.promise),
+      updateGameStatus: vi.fn(),
+    };
+
+    render(<DashboardApp api={api as never} />);
+    await openDashboardView("library");
+    await user.click(screen.getByRole("button", { name: "Sincronizar biblioteca" }));
+
+    await act(async () => {
+      initialLibrary.resolve(library);
+    });
+
+    expect(screen.getByText("Cargando biblioteca…")).toBeInTheDocument();
+
+    await act(async () => {
+      pendingSync.resolve(library);
+    });
+
+    expect(await screen.findByRole("article", { name: "Celeste" })).toBeInTheDocument();
+  });
+});
+
+describe("BacklogView progress updates", () => {
+  test("disables the update button while the draft matches persisted progress", async () => {
+    const user = userEvent.setup();
+    const api = intelligenceApiFixture();
+    render(<DashboardApp api={api as never} />);
+
+    await user.click(screen.getByRole("button", { name: "Backlog" }));
+    await screen.findByRole("heading", { name: "Plan semanal" });
+
+    const updateButton = screen.getByRole("button", { name: "Actualizar progreso" });
+    expect(updateButton).toBeDisabled();
+
+    await chooseCustomOption(user, "Progreso", "En progreso");
+    expect(screen.getByRole("button", { name: "Actualizar progreso" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Actualizar progreso" }));
+    await waitFor(() =>
+      expect(api.updatePlanItemProgress).toHaveBeenCalledWith("weekly-1", "item-1", "in_progress"),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Actualizar progreso" })).toBeDisabled(),
+    );
+  });
+
+  test("an older update completion keeps the newer draft selected", async () => {
+    const user = userEvent.setup();
+    let resolveUpdate: ((value: unknown) => void) | undefined;
+    const api = intelligenceApiFixture();
+    api.updatePlanItemProgress.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveUpdate = resolve;
+        }),
+    );
+    render(<DashboardApp api={api as never} />);
+
+    await user.click(screen.getByRole("button", { name: "Backlog" }));
+    await screen.findByRole("heading", { name: "Plan semanal" });
+
+    await chooseCustomOption(user, "Progreso", "En progreso");
+    await user.click(screen.getByRole("button", { name: "Actualizar progreso" }));
+    await waitFor(() => expect(api.updatePlanItemProgress).toHaveBeenCalledTimes(1));
+
+    await chooseCustomOption(user, "Progreso", "Hecho");
+    await act(async () => {
+      resolveUpdate?.(undefined);
+    });
+
+    expect(screen.getByRole("combobox", { name: "Progreso" })).toHaveTextContent("Hecho");
+    await user.click(screen.getByRole("button", { name: "Actualizar progreso" }));
+    await waitFor(() =>
+      expect(api.updatePlanItemProgress).toHaveBeenCalledWith("weekly-1", "item-1", "done"),
+    );
+  });
+});

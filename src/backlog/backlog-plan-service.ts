@@ -55,15 +55,6 @@ export type BacklogPlanService = Readonly<{
   setItemProgress(planId: unknown, itemId: unknown, progress: unknown): Promise<BacklogPlanItem>;
 }>;
 
-const allowedTransitions: Readonly<
-  Record<BacklogPlanItemProgress, readonly BacklogPlanItemProgress[]>
-> = Object.freeze({
-  not_started: Object.freeze(["in_progress", "done", "skipped"] as const),
-  in_progress: Object.freeze(["done", "skipped"] as const),
-  done: Object.freeze([] as const),
-  skipped: Object.freeze([] as const),
-});
-
 export function createBacklogPlanService({
   selectionService,
   repository,
@@ -129,8 +120,8 @@ export function createBacklogPlanService({
       if (plan.lifecycle !== "active") {
         throw new InputError("Archived plan items cannot be updated.");
       }
-      if (!allowedTransitions[item.progress].includes(progress)) {
-        throw new InputError("The requested plan-item progress transition is not allowed.");
+      if (item.progress === progress) {
+        return item;
       }
 
       const updatedAt = toTimestamp(clock);
