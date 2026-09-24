@@ -239,7 +239,7 @@ describe("released stdio entrypoint", () => {
         params: {
           protocolVersion: "2025-11-25",
           capabilities: {},
-          clientInfo: { name: "release-e2e", version: "1.0.0" },
+          clientInfo: { name: "release-e2e", version: "2.0.0" },
         },
       })}\n`,
     );
@@ -248,7 +248,7 @@ describe("released stdio entrypoint", () => {
     expect(JSON.parse(result.stdout)).toMatchObject({
       jsonrpc: "2.0",
       id: 1,
-      result: { serverInfo: { name: "steam-library-mcp", version: "1.0.0" } },
+      result: { serverInfo: { name: "steam-library-mcp", version: "2.0.0" } },
     });
   });
 
@@ -263,7 +263,7 @@ describe("released stdio entrypoint", () => {
           params: {
             protocolVersion: "2025-11-25",
             capabilities: {},
-            clientInfo: { name: "release-e2e", version: "1.0.0" },
+            clientInfo: { name: "release-e2e", version: "2.0.0" },
           },
         },
         { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
