@@ -15,6 +15,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 
+import { PACKAGE_METADATA } from "../src/package-metadata.js";
+
 import { beforeAll, describe, expect, test } from "vitest";
 
 const apiKey = "super-secret-steam-api-key";
@@ -248,8 +250,9 @@ describe("released stdio entrypoint", () => {
     expect(JSON.parse(result.stdout)).toMatchObject({
       jsonrpc: "2.0",
       id: 1,
-      result: { serverInfo: { name: "steam-library-mcp", version: "2.0.0" } },
+      result: { serverInfo: { name: PACKAGE_METADATA.name, version: PACKAGE_METADATA.version } },
     });
+    expect(PACKAGE_METADATA.version).toBe("2.0.1");
   });
 
   test("publishes the read-only achievement tool from the compiled entrypoint", async () => {

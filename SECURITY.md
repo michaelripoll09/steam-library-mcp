@@ -5,7 +5,7 @@
 The latest published stable release is supported with security fixes.
 Older releases may not receive security fixes.
 
-At the time of writing, the latest published stable release is v2.0.0.
+Check GitHub Releases for the current stable release.
 
 ## Reporting a Vulnerability
 

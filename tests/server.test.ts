@@ -7,6 +7,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { TtlCache } from "../src/cache/ttl-cache.js";
 import { loadConfig } from "../src/config.js";
+import { PACKAGE_METADATA } from "../src/package-metadata.js";
 import {
   createServer,
   createServerRuntime,
@@ -111,8 +112,8 @@ describe("MCP server composition", () => {
     await client.connect(clientTransport);
 
     expect(client.getServerVersion()).toMatchObject({
-      name: "steam-library-mcp",
-      version: "2.0.0",
+      name: PACKAGE_METADATA.name,
+      version: PACKAGE_METADATA.version,
     });
 
     const listedTools = await client.listTools();

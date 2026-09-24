@@ -1,0 +1,13 @@
+# Local-only and private state that must never ship in a package surface.
+# Runtime assets (dist via build, src, dashboard-ui, README, LICENSE,
+# package.json, .env.example) are intentionally NOT excluded here.
+.codegraph/
+odd/
+images/
+.superpowers/
+.atl/
+.worktrees/
+.steam-library/
+*.sqlite*
+*.sqlite-*
+.env

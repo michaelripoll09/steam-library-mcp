@@ -1,6 +1,6 @@
 {
   "name": "steam-library-mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Local Steam library Model Context Protocol server with tracking, recommendations, planning, and dashboard.",
   "type": "module",

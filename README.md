@@ -88,7 +88,9 @@ Manual collection supports add, update, and remove using a positive Steam AppID 
 
 **Play Now** (`recommendation_get_play_now`) answers “what should I play in this session?” from tracker state, preferences, and `sessionMode`; duration is only a secondary finishability signal. The **Backlog Planner** answers “what fits in my weekly or monthly total time budget?” using estimated remaining duration and a target game count. Play Now `sessionMode` is `solo` by default; use `with_friends` to prioritize games marked for friends or `any` to consider both play modes.
 
-`gaming_get_current_game` returns all accessible games currently marked as `playing`; multiple games can be active at the same time.\n\nThe server also exposes read-only task resources (steam-library://tasks and steam-library://tasks/{taskId}), intelligence resources, and prompts for play-now recommendations, weekly/monthly plans, and backlog review. Background task types include library sync, duration enrichment, and plan recalculation.
+`gaming_get_current_game` returns all accessible games currently marked as `playing`; multiple games can be active at the same time.
+
+The server also exposes read-only task resources (steam-library://tasks and steam-library://tasks/{taskId}), intelligence resources, and prompts for play-now recommendations, weekly/monthly plans, and backlog review. Background task types include library sync, duration enrichment, and plan recalculation.
 
 ## Dashboard capabilities
 
@@ -101,16 +103,16 @@ The dashboard is a local view over the configured library and tracker. It suppor
 - On-demand dashboard achievement progress from the game details view.
 - Local “play now” recommendations based on available minutes, tracker status, preferences, and duration estimates.
 - Per-game recommendation preferences (priority, excluded, solo/with-friends).
-- Weekly or monthly backlog plans, shortfall reporting, and item progress updates.
+- Weekly or monthly backlog plans, shortfall reporting, and item progress updates. Backlog item progress is user-editable local state: any state can be corrected to any other state (including repeating the current state), and archived plans stay read-only.
 - Local task state/progress polling and cancellation.
 
 The API and UI bind to loopback (127.0.0.1); this is intended for local use, not public hosting.
 
 ## Limitations and data ownership
 
-- The tracker, preferences, backlog plans, duration cache, and manual collection are local SQLite state. They never write game status back to Steam. Back up the database before upgrades or manual recovery. If a migration or storage failure occurs, stop the server and restore a known-good backup instead of deleting the database.
+- The tracker, preferences, backlog plans, duration cache, and manual collection are local SQLite state (WAL mode, so the MCP server and dashboard can share one database file). They never write game status back to Steam. Back up the database before upgrades or manual recovery. If a migration or storage failure occurs, stop the server and restore a known-good backup instead of deleting the database.
 - Manual entries have no Steam ownership confirmation and start with zero playtime because Steam does not confirm their history through `GetOwnedGames`. They default to `manual` and non-playable unless explicitly configured otherwise. Entries marked playable — including user-declared `family` access — can participate in tracker, Play Now recommendations, and backlog planning.
-- Fresh duration estimates require both IGDB credentials and successful upstream responses. Each duration request first attempts a verified Steam-to-IGDB match and time-to-beat lookup; a successful result is saved to SQLite and replaces the previous estimate. If IGDB is disabled or unavailable, an existing cached estimate is returned unchanged; if no cached estimate exists, the result is unavailable. A valid response with no verified match or time-to-beat record also produces no estimate.
+- Fresh duration estimates require both IGDB credentials and successful upstream responses. Each duration request first attempts a verified Steam-to-IGDB match and time-to-beat lookup; a successful result is saved to SQLite and replaces the previous estimate. Fresh cached estimates (24 hours) are returned without new IGDB calls, concurrent lookups for the same game share one upstream request, and duration enrichment processes up to four games concurrently. If IGDB is disabled or unavailable, an existing cached estimate is returned unchanged; if no cached estimate exists, the result is unavailable. A valid response with no verified match or time-to-beat record also produces no estimate.
 - Artwork uses local cache plus public Steam artwork, with optional SteamGridDB/IGDB fallbacks. Artwork availability varies by game and provider.
 - This project does not automatically import or synchronize Steam Families libraries.
 
@@ -121,9 +123,10 @@ npm test -- --run
 npm run typecheck
 npm run lint
 npm run format:check
+npm audit --audit-level moderate
 ```
 
-CI verifies the same release checks. Before submitting changes, run:
+CI verifies the same release checks, including the moderate dependency-audit gate. Before submitting changes, run:
 
 ```sh
 npm test -- --run tests/readme.test.ts
