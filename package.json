@@ -5,7 +5,7 @@
   "description": "Local Steam library Model Context Protocol server with tracking, recommendations, planning, and dashboard.",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "npm run build:server && npm run dashboard:build",
