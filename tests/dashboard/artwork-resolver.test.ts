@@ -27,6 +27,35 @@ async function withDirectory(run: (directory: string) => Promise<void>): Promise
   }
 }
 
+function parsedTestUrl(value: string): URL | undefined {
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function isStoreAppDetailsUrl(value: string): boolean {
+  const parsed = parsedTestUrl(value);
+  return parsed?.hostname === "store.steampowered.com" && parsed.pathname === "/api/appdetails";
+}
+
+function isSteamGridDbGridsUrl(value: string, appId?: number): boolean {
+  const parsed = parsedTestUrl(value);
+  if (parsed?.hostname !== "www.steamgriddb.com") return false;
+  if (appId === undefined) return parsed.pathname.startsWith("/api/v2/grids");
+  return parsed.pathname === `/api/v2/grids/steam/${appId}`;
+}
+
+function isCdn2SteamGridDbUrl(value: string): boolean {
+  return parsedTestUrl(value)?.hostname === "cdn2.steamgriddb.com";
+}
+
+function isLegacySteamGridDbAssetUrl(value: string): boolean {
+  const parsed = parsedTestUrl(value);
+  return parsed?.hostname === "s3.amazonaws.com" && parsed.pathname.startsWith("/steamgriddb/");
+}
+
 describe("artwork resolver", () => {
   test("caches a direct official portrait cover before requesting landscape metadata", async () => {
     await withDirectory(async (directory) => {
@@ -57,7 +86,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        if (isStoreAppDetailsUrl(url)) return appDetails(858460);
         if (url.endsWith("/header.jpg")) return image([8, 5, 8]);
         return new Response(null, { status: 404 });
       });
@@ -78,7 +107,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/858460")) {
+        if (isSteamGridDbGridsUrl(url, 858460)) {
           return new Response(JSON.stringify({ success: true, data: [] }));
         }
         if (url === "https://id.twitch.tv/oauth2/token") {
@@ -91,7 +120,7 @@ describe("artwork resolver", () => {
           );
         }
         if (url === "https://api.igdb.com/v4/games") return new Response(JSON.stringify([]));
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        if (isStoreAppDetailsUrl(url)) return appDetails(858460);
         if (url.endsWith("/header.jpg")) return image([8, 5, 8]);
         return new Response(null, { status: 404 });
       });
@@ -108,7 +137,7 @@ describe("artwork resolver", () => {
 
       const calls = fetch.mock.calls.map(([input]) => String(input));
       expect(calls.indexOf("https://api.igdb.com/v4/games")).toBeLessThan(
-        calls.findIndex((url) => url.includes("store.steampowered.com/api/appdetails")),
+        calls.findIndex((url) => isStoreAppDetailsUrl(url)),
       );
       expect(calls.indexOf("https://api.igdb.com/v4/games")).toBeLessThan(
         calls.findIndex((url) => url.endsWith("/header.jpg")),
@@ -123,7 +152,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes(`steamgriddb.com/api/v2/grids/steam/${appId}`)) {
+        if (isSteamGridDbGridsUrl(url, appId)) {
           return new Response(
             JSON.stringify({
               success: true,
@@ -131,8 +160,8 @@ describe("artwork resolver", () => {
             }),
           );
         }
-        if (url.includes("cdn2.steamgriddb.com")) return image([4, 8, 0]);
-        if (url.includes("store.steampowered.com/api/appdetails")) {
+        if (isCdn2SteamGridDbUrl(url)) return image([4, 8, 0]);
+        if (isStoreAppDetailsUrl(url)) {
           return appDetails(
             appId,
             true,
@@ -166,7 +195,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/2149010")) {
+        if (isSteamGridDbGridsUrl(url, 2149010)) {
           return new Response(
             JSON.stringify({
               success: true,
@@ -195,7 +224,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/3")) {
+        if (isSteamGridDbGridsUrl(url, 3)) {
           return new Response(
             JSON.stringify({
               success: true,
@@ -230,7 +259,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/1")) {
+        if (isSteamGridDbGridsUrl(url, 1)) {
           return new Response(
             JSON.stringify({
               success: true,
@@ -238,7 +267,7 @@ describe("artwork resolver", () => {
             }),
           );
         }
-        if (url.includes("s3.amazonaws.com/steamgriddb")) return image([4]);
+        if (isLegacySteamGridDbAssetUrl(url)) return image([4]);
         return new Response(null, { status: 404 });
       });
       const resolver = createArtworkResolver({
@@ -260,12 +289,12 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/2")) {
+        if (isSteamGridDbGridsUrl(url, 2)) {
           return new Response(
             JSON.stringify({ success: true, data: [{ url: "https://example.com/unsafe.jpg" }] }),
           );
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(2);
+        if (isStoreAppDetailsUrl(url)) return appDetails(2);
         if (url.endsWith("/header.jpg")) return image();
         return new Response(null, { status: 404 });
       });
@@ -399,7 +428,7 @@ describe("artwork resolver", () => {
       const firstFetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+        if (isStoreAppDetailsUrl(url)) return appDetails(4513840);
         if (url.endsWith("/header.jpg")) return image([9, 9, 9]);
         return new Response(null, { status: 404 });
       });
@@ -606,7 +635,7 @@ describe("artwork resolver", () => {
             ]),
           );
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (isStoreAppDetailsUrl(url)) return appDetails(appId);
         if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg")) {
           return new Response(null, { status: 404 });
         }
@@ -668,7 +697,7 @@ describe("artwork resolver", () => {
             ]),
           );
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (isStoreAppDetailsUrl(url)) return appDetails(appId);
         if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg")) {
           return new Response(null, { status: 404 });
         }
@@ -766,10 +795,10 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/4513840")) {
+        if (isSteamGridDbGridsUrl(url, 4513840)) {
           return new Response(JSON.stringify({ success: true, data: [] }));
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+        if (isStoreAppDetailsUrl(url)) return appDetails(4513840);
         if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg")) {
           return new Response(null, { status: 404 });
         }
@@ -841,7 +870,7 @@ describe("artwork resolver", () => {
         const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
           const url = String(input);
           if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-          if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+          if (isStoreAppDetailsUrl(url)) return appDetails(4513840);
           if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg"))
             return new Response(null, { status: 404 });
           if (url === "https://id.twitch.tv/oauth2/token") {
@@ -880,7 +909,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(4513840);
+        if (isStoreAppDetailsUrl(url)) return appDetails(4513840);
         if (url.endsWith("/header.jpg") || url.endsWith("/capsule_616x353.jpg"))
           return new Response(null, { status: 404 });
         if (url === "https://id.twitch.tv/oauth2/token") {
@@ -1079,7 +1108,7 @@ describe("artwork resolver", () => {
           expect(String(init?.body)).not.toContain("where id = ");
           return new Response(JSON.stringify([]));
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (isStoreAppDetailsUrl(url)) return appDetails(appId);
         return new Response(null, { status: 404 });
       });
       const resolver = createArtworkResolver({
@@ -1124,7 +1153,7 @@ describe("artwork resolver", () => {
           }
           return new Response(JSON.stringify([]));
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (isStoreAppDetailsUrl(url)) return appDetails(appId);
         return new Response(null, { status: 404 });
       });
       const resolver = createArtworkResolver({
@@ -1176,7 +1205,7 @@ describe("artwork resolver", () => {
           }
           return new Response(JSON.stringify([]));
         }
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(appId);
+        if (isStoreAppDetailsUrl(url)) return appDetails(appId);
         return new Response(null, { status: 404 });
       });
       const resolver = createArtworkResolver({
@@ -1464,7 +1493,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return oversizedImage;
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(2);
+        if (isStoreAppDetailsUrl(url)) return appDetails(2);
         return new Response(null, { status: 404 });
       });
       const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
@@ -1632,7 +1661,7 @@ describe("artwork resolver", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
         const url = String(input);
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        if (isStoreAppDetailsUrl(url)) return appDetails(858460);
         throw new Error(`unexpected artwork fetch: ${url}`);
       });
       const resolver = createArtworkResolver({ cacheDirectory: directory, fetch });
@@ -1651,7 +1680,7 @@ describe("artwork resolver", () => {
         const url = String(input);
         seen.push({ url, init });
         if (url.endsWith("/library_600x900.jpg")) return new Response(null, { status: 404 });
-        if (url.includes("steamgriddb.com/api/v2/grids/steam/858460")) {
+        if (isSteamGridDbGridsUrl(url, 858460)) {
           return new Response(JSON.stringify({ success: true, data: [] }));
         }
         if (url === "https://id.twitch.tv/oauth2/token") {
@@ -1664,7 +1693,7 @@ describe("artwork resolver", () => {
           );
         }
         if (url === "https://api.igdb.com/v4/games") return new Response(JSON.stringify([]));
-        if (url.includes("store.steampowered.com/api/appdetails")) return appDetails(858460);
+        if (isStoreAppDetailsUrl(url)) return appDetails(858460);
         return new Response(null, { status: 404 });
       });
       const resolver = createArtworkResolver({
@@ -1678,8 +1707,8 @@ describe("artwork resolver", () => {
 
       const metadataCalls = seen.filter(
         ({ url }) =>
-          url.includes("steamgriddb.com/api/v2/grids") ||
-          url.includes("store.steampowered.com/api/appdetails") ||
+          isSteamGridDbGridsUrl(url) ||
+          isStoreAppDetailsUrl(url) ||
           url === "https://api.igdb.com/v4/games",
       );
       expect(metadataCalls.length).toBeGreaterThan(0);
@@ -1687,9 +1716,9 @@ describe("artwork resolver", () => {
         expect(init).toMatchObject({ redirect: "error" });
         expect(init?.signal).toBeInstanceOf(AbortSignal);
       }
-      expect(
-        seen.find(({ url }) => url.includes("steamgriddb.com/api/v2/grids"))?.init,
-      ).toMatchObject({ headers: { Authorization: "Bearer grid-key" } });
+      expect(seen.find(({ url }) => isSteamGridDbGridsUrl(url))?.init).toMatchObject({
+        headers: { Authorization: "Bearer grid-key" },
+      });
     });
   });
 
