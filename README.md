@@ -6,7 +6,7 @@ Steam Library MCP is a local [Model Context Protocol (MCP)](https://modelcontext
 
 ## Quick start
 
-Requirements: Node.js 22.12.0 or newer.
+Requirements: Node.js 22.22.2 or newer on 22.x, 24.15.0 or newer on 24.x, or 26.0.0 or newer. Node.js 23.x and 25.x are not supported.
 
 ```sh
 npm install
