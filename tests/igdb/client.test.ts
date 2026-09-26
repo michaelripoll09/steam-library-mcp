@@ -261,6 +261,85 @@ describe("IGDB client", () => {
     expect(requestSignal).toBeInstanceOf(AbortSignal);
   });
 
+  test("cancels an in-flight Twitch token exchange when the caller aborts", async () => {
+    const controller = new AbortController();
+    let resolveTokenResponse!: (response: Response) => void;
+    let captureSignal!: (signal: AbortSignal) => void;
+    const tokenSignalCaptured = new Promise<AbortSignal>((resolve) => {
+      captureSignal = resolve;
+    });
+    const fetchLike = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      captureSignal(init?.signal as AbortSignal);
+      return new Promise<Response>((resolve) => {
+        resolveTokenResponse = resolve;
+      });
+    });
+    const client = createIgdbClient({ credentials, fetch: fetchLike as typeof fetch });
+
+    const lookup = client.findGamesForSteamApp(620, { signal: controller.signal });
+    const tokenSignal = await tokenSignalCaptured;
+    controller.abort();
+    resolveTokenResponse(tokenResponse());
+
+    await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
+    expect(tokenSignal.aborted).toBe(true);
+    expect(fetchLike).toHaveBeenCalledTimes(1);
+  });
+
+  test("cancels an in-flight IGDB API request when the caller aborts", async () => {
+    const controller = new AbortController();
+    let resolveApiResponse!: (response: Response) => void;
+    let captureSignal!: (signal: AbortSignal) => void;
+    const apiSignalCaptured = new Promise<AbortSignal>((resolve) => {
+      captureSignal = resolve;
+    });
+    const fetchLike = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockImplementationOnce((_url: string | URL | Request, init?: RequestInit) => {
+        captureSignal(init?.signal as AbortSignal);
+        return new Promise<Response>((resolve) => {
+          resolveApiResponse = resolve;
+        });
+      });
+    const client = createIgdbClient({ credentials, fetch: fetchLike as typeof fetch });
+
+    const lookup = client.findGamesForSteamApp(620, { signal: controller.signal });
+    const apiSignal = await apiSignalCaptured;
+    controller.abort();
+    resolveApiResponse(new Response(JSON.stringify([]), { status: 200 }));
+
+    await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
+    expect(apiSignal.aborted).toBe(true);
+    expect(fetchLike).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not retry a 429 when cancellation occurs during retry sleep", async () => {
+    const controller = new AbortController();
+    const fetchLike = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(
+        new Response("rate limited", { status: 429, headers: { "retry-after": "0" } }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    const sleep = vi.fn(async () => {
+      controller.abort();
+    });
+    const client = createIgdbClient({ credentials, fetch: fetchLike as typeof fetch, sleep });
+
+    const [lookupResult] = await Promise.allSettled([
+      client.findGamesForSteamApp(620, { signal: controller.signal }),
+    ]);
+
+    expect.soft(lookupResult).toMatchObject({
+      status: "rejected",
+      reason: { name: "AbortError" },
+    });
+    expect.soft(fetchLike).toHaveBeenCalledTimes(2);
+    expect.soft(sleep).toHaveBeenCalledTimes(1);
+  });
+
   test("rejects redirects on IGDB lookups instead of following them", async () => {
     let requestInit: RequestInit | undefined;
     const fetchLike = vi

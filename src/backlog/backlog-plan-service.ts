@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import type { AbortOptions } from "../abort-options.js";
+import { throwIfAborted } from "../abort-options.js";
 import type { Clock } from "../cache/ttl-cache.js";
 import {
   BACKLOG_PLAN_CADENCES,
@@ -53,7 +55,7 @@ type BacklogPlanServiceDependencies = Readonly<{
 }>;
 
 export type BacklogPlanService = Readonly<{
-  create(request: unknown): Promise<CreateBacklogPlanResult>;
+  create(request: unknown, options?: AbortOptions): Promise<CreateBacklogPlanResult>;
   get(id: unknown): BacklogPlan | undefined;
   listActive(): readonly BacklogPlan[];
   setItemProgress(planId: unknown, itemId: unknown, progress: unknown): Promise<BacklogPlanItem>;
@@ -66,13 +68,19 @@ export function createBacklogPlanService({
   createId = randomUUID,
 }: BacklogPlanServiceDependencies): BacklogPlanService {
   return Object.freeze({
-    async create(request: unknown): Promise<CreateBacklogPlanResult> {
+    async create(request: unknown, options?: AbortOptions): Promise<CreateBacklogPlanResult> {
+      throwIfAborted(options);
       assertCreateRequest(request);
 
-      const selectionResult = await selectionService.select({
+      const selectionRequest = {
         availableMinutes: request.availableMinutes,
         targetGameCount: request.targetGameCount,
-      });
+      };
+      const selectionResult = await selectionService.select(
+        selectionRequest,
+        ...(options === undefined ? [] : [options]),
+      );
+      throwIfAborted(options);
       const createdAt = toTimestamp(clock);
       const id = createId();
       assertId(id, "plan ID");
@@ -83,6 +91,7 @@ export function createBacklogPlanService({
         selections: selectionResult.selections.slice(0, request.targetGameCount),
       });
 
+      throwIfAborted(options);
       repository.replaceActive(plan);
       const selectedGameCount = plan.items.length;
       return Object.freeze({

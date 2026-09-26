@@ -1,3 +1,5 @@
+import type { AbortOptions } from "../abort-options.js";
+import { throwIfAborted } from "../abort-options.js";
 import type { Cache, Clock } from "../cache/ttl-cache.js";
 import type { AppConfig } from "../config.js";
 import {
@@ -19,8 +21,8 @@ import {
 } from "../manual-library/manual-library.js";
 
 export interface SteamService {
-  getLibrary(): Promise<SteamLibrary>;
-  refreshLibrary(): Promise<SteamLibrary>;
+  getLibrary(options?: AbortOptions): Promise<SteamLibrary>;
+  refreshLibrary(options?: AbortOptions): Promise<SteamLibrary>;
   searchLibrary(query: string): Promise<readonly SteamGame[]>;
   getGame(appId: number): Promise<SteamGame>;
   getRecentGames(count?: number): Promise<readonly SteamGame[]>;
@@ -62,24 +64,29 @@ export function createSteamService({
   manualRepository,
   publicGameLookup,
 }: SteamServiceDependencies): SteamService {
-  async function getLibrary(): Promise<SteamLibrary> {
+  async function getLibrary(options?: AbortOptions): Promise<SteamLibrary> {
+    throwIfAborted(options);
     const key = libraryCacheKey(config.steamId);
     const cached = cache.get(key);
     if (cached !== undefined) {
+      throwIfAborted(options);
       return mergeManualCollection(cached, manualRepository?.list() ?? []);
     }
 
-    return refreshLibrary();
+    return refreshLibrary(options);
   }
 
-  async function refreshLibrary(): Promise<SteamLibrary> {
+  async function refreshLibrary(options?: AbortOptions): Promise<SteamLibrary> {
+    throwIfAborted(options);
     const key = libraryCacheKey(config.steamId);
-    const response = await steamClient.getOwnedGames(config.steamId);
+    const response = await steamClient.getOwnedGames(config.steamId, options);
+    throwIfAborted(options);
     const baseLibrary = createSteamLibrary({
       steamId: config.steamId,
       games: response.response.games.map(normalizeOwnedGame),
       fetchedAt: new Date(clock.now()).toISOString(),
     });
+    throwIfAborted(options);
     cache.set(key, baseLibrary, config.libraryCacheTtlMs);
     return mergeManualCollection(baseLibrary, manualRepository?.list() ?? []);
   }

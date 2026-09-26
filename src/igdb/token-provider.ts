@@ -1,3 +1,5 @@
+import type { AbortOptions } from "../abort-options.js";
+import { throwIfAborted } from "../abort-options.js";
 import type { IgdbCredentials } from "../config.js";
 import { createMetadataUnavailableEnvelope, type MetadataUnavailableEnvelope } from "../errors.js";
 import { twitchTokenSchema } from "./schemas.js";
@@ -32,13 +34,22 @@ export class IgdbTokenProvider {
     this.now = now;
   }
 
-  async getAccessToken(): Promise<string> {
+  async getAccessToken(options?: AbortOptions): Promise<string> {
+    throwIfAborted(options);
     if (this.cachedToken !== undefined && this.cachedToken.expiresAt > this.now()) {
       return this.cachedToken.value;
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const requestSignal =
+      options?.signal === undefined
+        ? controller.signal
+        : AbortSignal.any([options.signal, controller.signal]);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
 
     try {
       const response = await this.fetchLike(TWITCH_TOKEN_URL, {
@@ -49,19 +60,24 @@ export class IgdbTokenProvider {
           client_secret: this.credentials.clientSecret,
           grant_type: "client_credentials",
         }),
-        signal: controller.signal,
+        signal: requestSignal,
       });
+      throwIfAborted(options);
+      if (timedOut) throw new Error("Twitch token request timed out.");
       if (!response.ok) {
         throw new Error("Twitch token request failed");
       }
 
       const token = twitchTokenSchema.parse(await response.json());
+      throwIfAborted(options);
+      if (timedOut) throw new Error("Twitch token request timed out.");
       this.cachedToken = {
         value: token.access_token,
         expiresAt: this.now() + Math.max(0, token.expires_in * 1_000 - TOKEN_REFRESH_SAFETY_MS),
       };
       return token.access_token;
     } catch (cause) {
+      if (options?.signal?.aborted) throw options.signal.reason ?? cause;
       throw createMetadataUnavailableEnvelope({
         message: "Game metadata is temporarily unavailable.",
         retryable: true,

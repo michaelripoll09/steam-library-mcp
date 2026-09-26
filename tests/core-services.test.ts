@@ -210,6 +210,58 @@ describe("core services", () => {
     }
   });
 
+  test("cancels default sync fetch before the refreshed library can update cache", async () => {
+    const database = openTrackerDatabase(":memory:");
+    let markFetchStarted!: () => void;
+    let markAbortObserved!: () => void;
+    let rejectFirstFetch!: (error: Error) => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const abortObserved = new Promise<void>((resolve) => {
+      markAbortObserved = resolve;
+    });
+    const firstFetch = new Promise<Response>((_resolve, reject) => {
+      rejectFirstFetch = reject;
+    });
+    const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      if (fetch.mock.calls.length === 1) {
+        markFetchStarted();
+        const signal = init?.signal;
+        const rejectOnAbort = () => {
+          markAbortObserved();
+          rejectFirstFetch(new DOMException("The operation was aborted.", "AbortError"));
+        };
+        if (signal?.aborted) rejectOnAbort();
+        else signal?.addEventListener("abort", rejectOnAbort, { once: true });
+        return firstFetch;
+      }
+      return new Response(JSON.stringify({ response: { games: [] } }), { status: 200 });
+    });
+    const services = createCoreServices({
+      config: loadConfig({ STEAM_API_KEY: "test-key", STEAM_ID: "test-steam-id" }),
+      database,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      clock: { now: () => 0 },
+    });
+
+    try {
+      const task = services.taskRunner.enqueue({ type: "sync_library" });
+      await fetchStarted;
+      const signal = fetch.mock.calls[0]?.[1]?.signal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      services.taskRunner.cancel(task.id);
+
+      expect(services.taskRunner.get(task.id)).toMatchObject({ state: "cancelled", error: null });
+      expect(signal?.aborted).toBe(true);
+      await abortObserved;
+    } finally {
+      rejectFirstFetch(new DOMException("Test cleanup.", "AbortError"));
+      await firstFetch.catch(() => undefined);
+      services.close();
+    }
+  });
+
   test("reuses injected services without reading environment or opening tracker storage", () => {
     const steamService = {} as SteamService;
     const achievementService = {} as AchievementService;

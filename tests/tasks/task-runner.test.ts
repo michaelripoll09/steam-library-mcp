@@ -150,6 +150,7 @@ describe("task runner", () => {
       });
       await waitForTask(runner, "task-3", "cancelled");
 
+      expect(runner.get("task-3")).toMatchObject({ state: "cancelled", error: null });
       expect(
         database
           .prepare(
@@ -157,6 +158,73 @@ describe("task runner", () => {
           )
           .get("task-3"),
       ).toEqual({ state: "cancelled", cancellation_requested: 1, error_message: null });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("keeps a task cancelled when its handler rejects after abort", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const started = deferred<void>();
+    const rejectWork = deferred<void>();
+    const runner = createTaskRunner({
+      database,
+      handlers: {
+        sync_library: async () => {
+          started.resolve();
+          await rejectWork.promise;
+          throw new Error("late private failure");
+        },
+        enrich_durations: async () => undefined,
+        recalculate_plan: async () => undefined,
+      },
+      createId: () => "task-reject-after-abort",
+    });
+
+    try {
+      runner.enqueue({ type: "sync_library" });
+      await started.promise;
+      runner.cancel("task-reject-after-abort");
+      rejectWork.resolve();
+      await waitForTask(runner, "task-reject-after-abort", "cancelled");
+
+      expect(runner.get("task-reject-after-abort")).toMatchObject({
+        state: "cancelled",
+        error: null,
+      });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("keeps near-completion work cancelled when cancellation wins the completion race", async () => {
+    const database = openTrackerDatabase(":memory:");
+    const started = deferred<void>();
+    const finishWork = deferred<void>();
+    const runner = createTaskRunner({
+      database,
+      handlers: {
+        sync_library: async () => {
+          started.resolve();
+          await finishWork.promise;
+        },
+        enrich_durations: async () => undefined,
+        recalculate_plan: async () => undefined,
+      },
+      createId: () => "task-near-completion",
+    });
+
+    try {
+      runner.enqueue({ type: "sync_library" });
+      await started.promise;
+      expect(runner.cancel("task-near-completion")).toMatchObject({ state: "cancelled" });
+      finishWork.resolve();
+      await waitForTask(runner, "task-near-completion", "cancelled");
+
+      expect(runner.get("task-near-completion")).toMatchObject({
+        state: "cancelled",
+        error: null,
+      });
     } finally {
       database.close();
     }

@@ -59,6 +59,35 @@ describe("Steam API client", () => {
     vi.useRealTimers();
   });
 
+  test("propagates caller abort without classifying it as the internal timeout", async () => {
+    const controller = new AbortController();
+    let rejectFetch!: (error: unknown) => void;
+    let requestedUrl: string | URL | Request | undefined;
+    const fetchLike = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      requestedUrl = input;
+      init?.signal?.addEventListener("abort", () => {
+        rejectFetch(new DOMException("aborted", "AbortError"));
+      });
+      return new Promise<Response>((_resolve, reject) => {
+        rejectFetch = reject;
+      });
+    });
+    const client = createSteamApiClient({ config, fetch: fetchLike as unknown as typeof fetch });
+    const request = client.getOwnedGames(config.steamId, { signal: controller.signal });
+    const requestResult = Promise.allSettled([request]);
+    controller.abort();
+    const [result] = await requestResult;
+    const observedSignal = fetchLike.mock.calls[0]?.[1]?.signal;
+
+    expect.soft(result.status).toBe("rejected");
+    if (result.status === "rejected") {
+      expect.soft(result.reason).not.toBeInstanceOf(SteamTimeoutError);
+    }
+    expect.soft(observedSignal).toBeInstanceOf(AbortSignal);
+    expect.soft(observedSignal?.aborted).toBe(true);
+    expect(new URL(String(requestedUrl)).pathname).toContain("GetOwnedGames");
+  });
+
   test("rejects redirects instead of following them to an untrusted location", async () => {
     const fetchLike = vi.fn<
       (input: string | URL | Request, init?: RequestInit) => Promise<Response>

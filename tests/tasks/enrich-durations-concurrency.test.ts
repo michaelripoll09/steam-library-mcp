@@ -23,7 +23,7 @@ function createServices({
   getEstimate,
 }: {
   library: SteamGame[];
-  getEstimate: (game: SteamGame) => Promise<unknown>;
+  getEstimate: (game: SteamGame, options?: { signal?: AbortSignal }) => Promise<unknown>;
 }) {
   const database = openTrackerDatabase(":memory:");
   const steamService = {
@@ -100,12 +100,16 @@ describe("enrich_durations bounded concurrency", () => {
       releaseEstimates = resolve;
     });
     const seenAppIds: number[] = [];
+    const receivedSignals: (AbortSignal | undefined)[] = [];
+    const estimatePromises: Promise<unknown>[] = [];
     const { services, database } = createServices({
       library,
-      getEstimate: async (game) => {
+      getEstimate: (game, options) => {
         seenAppIds.push(game.appId);
-        await gate;
-        return undefined;
+        receivedSignals.push(options?.signal);
+        const estimate = gate.then(() => undefined);
+        estimatePromises.push(estimate);
+        return estimate;
       },
     });
 
@@ -117,11 +121,18 @@ describe("enrich_durations bounded concurrency", () => {
       expect(seenAppIds).toHaveLength(4);
       services.taskRunner.cancel(task.id);
       releaseEstimates();
+      const estimateResults = await Promise.allSettled(estimatePromises);
       await waitForState(services, task.id, "cancelled");
 
+      expect(estimateResults).toHaveLength(4);
+      expect(estimateResults.every((result) => result.status === "fulfilled")).toBe(true);
       expect(seenAppIds).toHaveLength(4);
       expect(new Set(seenAppIds).size).toBe(4);
-      expect(services.taskRunner.get(task.id)?.state).toBe("cancelled");
+      expect(receivedSignals).toHaveLength(4);
+      expect.soft(receivedSignals.every((signal) => signal?.aborted === true)).toBe(true);
+      expect
+        .soft(services.taskRunner.get(task.id))
+        .toMatchObject({ state: "cancelled", error: null });
       services.close();
     } finally {
       database.close();

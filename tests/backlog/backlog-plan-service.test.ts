@@ -110,6 +110,63 @@ describe("BacklogPlanService", () => {
     expect(repository.replaceActive).toHaveBeenCalledWith(result.plan);
   });
 
+  test("cancellation after selection leaves the active plan and repository untouched", async () => {
+    const existingPlan = {
+      id: "active-before-cancel",
+      cadence: "weekly" as const,
+      availableMinutes: 60,
+      targetGameCount: 1,
+      lifecycle: "active" as const,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+      items: [],
+    };
+    const controller = new AbortController();
+    let releaseSelection!: (value: Awaited<ReturnType<BacklogSelectionService["select"]>>) => void;
+    const selectionResult = new Promise<Awaited<ReturnType<BacklogSelectionService["select"]>>>(
+      (resolve) => {
+        releaseSelection = resolve;
+      },
+    );
+    const selectionService = {
+      select: vi.fn(() => selectionResult),
+    };
+    const repository: BacklogPlanRepository = {
+      replaceActive: vi.fn(),
+      getById: vi.fn((id) => (id === existingPlan.id ? existingPlan : undefined)),
+      listActive: vi.fn(() => [existingPlan]),
+      setItemProgress: vi.fn(() => true),
+    };
+    const service = createBacklogPlanService({
+      clock,
+      createId: () => "cancelled-replacement",
+      selectionService,
+      repository,
+    });
+    const creation = service.create(
+      { cadence: "weekly", availableMinutes: 120, targetGameCount: 1 },
+      { signal: controller.signal },
+    );
+    await Promise.resolve();
+    controller.abort();
+    releaseSelection({
+      selections: [selection(620, "Portal 2", 480, 180)],
+      allocatedMinutes: 180,
+      unallocatedMinutes: 0,
+      exclusions: [],
+    });
+
+    const [creationResult] = await Promise.allSettled([creation]);
+
+    expect.soft(creationResult).toMatchObject({
+      status: "rejected",
+      reason: { name: "AbortError" },
+    });
+    expect.soft(repository.listActive()).toEqual([existingPlan]);
+    expect.soft(repository.replaceActive).not.toHaveBeenCalled();
+  });
+
   test("excludes fully played games before persisting a SQLite plan", async () => {
     const database = openTrackerDatabase(":memory:");
     const repository = new SqliteBacklogPlanRepository(database);
