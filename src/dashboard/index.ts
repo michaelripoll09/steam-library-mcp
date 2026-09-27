@@ -6,13 +6,7 @@ import {
   type CoreServiceOverrides,
   type CoreServices,
 } from "../core-services.js";
-import {
-  DEFAULT_TRACKER_DATABASE_PATH,
-  loadConfig,
-  loadIgdbConfig,
-  type AppConfig,
-  type IgdbConfig,
-} from "../config.js";
+import { DEFAULT_TRACKER_DATABASE_PATH, loadConfig, loadIgdbConfig } from "../config.js";
 import { createDashboardService, type DashboardService } from "./dashboard-service.js";
 import { createArtworkResolver, type ArtworkResolver } from "./artwork-resolver.js";
 import {
@@ -23,8 +17,6 @@ import {
 
 export type DashboardStartOptions = CoreServiceOverrides &
   Readonly<{
-    config?: AppConfig;
-    igdbConfig?: IgdbConfig;
     dashboardService?: DashboardService;
     artworkResolver?: ArtworkResolver;
     staticRoot?: string;
@@ -39,7 +31,7 @@ export async function startDashboardServer(options: DashboardStartOptions = {}):
   const dashboardService =
     options.dashboardService ??
     (() => {
-      coreServices = createCoreServices({ ...options, config });
+      coreServices = createCoreServices({ ...options, config, igdbConfig });
       return createDashboardService(coreServices);
     })();
   const server = createDashboardHttpServer({

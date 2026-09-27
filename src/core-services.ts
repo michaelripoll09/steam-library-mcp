@@ -4,7 +4,7 @@ import {
   mapWithConcurrency,
   MAX_DURATION_CONCURRENCY,
 } from "./concurrency/map-with-concurrency.js";
-import { loadConfig, loadIgdbConfig, type AppConfig } from "./config.js";
+import { loadConfig, loadIgdbConfig, type AppConfig, type IgdbConfig } from "./config.js";
 import {
   createMetadataUnavailableEnvelope,
   InputError,
@@ -57,6 +57,7 @@ import {
 
 export type CoreServiceOverrides = Readonly<{
   config?: AppConfig;
+  igdbConfig?: IgdbConfig;
   database?: TrackerDatabase;
   fetch?: FetchLike;
   clock?: Clock;
@@ -93,6 +94,11 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
   const config = (): AppConfig => {
     resolvedConfig ??= overrides.config ?? loadConfig();
     return resolvedConfig;
+  };
+  let resolvedIgdbConfig: IgdbConfig | undefined;
+  const igdbConfig = (): IgdbConfig => {
+    resolvedIgdbConfig ??= overrides.igdbConfig ?? loadIgdbConfig();
+    return resolvedIgdbConfig;
   };
   let resolvedSteamClient: SteamApiClient | undefined;
   const steamClient = (): SteamApiClient => {
@@ -143,10 +149,11 @@ export function createCoreServices(overrides: CoreServiceOverrides = {}): CoreSe
     overrides.recommendationPreferencesService ??
     createDefaultRecommendationPreferencesService(database());
   const metadataService =
-    overrides.metadataService ?? createDefaultMetadataService(steamService, clock, overrides.fetch);
+    overrides.metadataService ??
+    createDefaultMetadataService(steamService, clock, overrides.fetch, igdbConfig());
   const gameDurationService =
     overrides.gameDurationService ??
-    createDefaultGameDurationService(database(), clock, overrides.fetch);
+    createDefaultGameDurationService(database(), clock, overrides.fetch, igdbConfig());
   const playNowRecommendationService =
     overrides.playNowRecommendationService ??
     createDefaultPlayNowRecommendationService(database(), steamService, gameDurationService);
@@ -282,8 +289,8 @@ function createDefaultMetadataService(
   steamService: SteamService,
   clock: Clock,
   fetch: FetchLike | undefined,
+  metadataConfig: IgdbConfig,
 ): MetadataService {
-  const metadataConfig = loadIgdbConfig();
   return metadataConfig.enabled
     ? createMetadataService({
         steamService,
@@ -309,8 +316,8 @@ function createDefaultGameDurationService(
   database: TrackerDatabase,
   clock: Clock,
   fetch: FetchLike | undefined,
+  metadataConfig: IgdbConfig,
 ): GameDurationService {
-  const metadataConfig = loadIgdbConfig();
   try {
     const repository = new SqliteGameDurationRepository(database);
     return metadataConfig.enabled
