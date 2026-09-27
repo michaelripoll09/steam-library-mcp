@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { vi } from "vitest";
 
 import { TtlCache } from "../src/cache/ttl-cache.js";
-import { loadConfig } from "../src/config.js";
+import { loadConfig, type IgdbConfig } from "../src/config.js";
 import { createCoreServices } from "../src/core-services.js";
 import { registerSteamTools, type ToolRegistrar } from "../src/tools/register-steam-tools.js";
 import type { GameDurationService } from "../src/durations/game-duration-service.js";
@@ -19,6 +19,53 @@ import type { AchievementService } from "../src/services/achievement-service.js"
 import type { GamingTrackerService } from "../src/tracker/gaming-tracker-service.js";
 import type { SteamApiClient } from "../src/steam/client.js";
 import { openTrackerDatabase } from "../src/tracker/sqlite/database.js";
+
+function withIgdbEnvironment<T>(run: () => Promise<T>): Promise<T> {
+  const previousClientId = process.env.IGDB_CLIENT_ID;
+  const previousClientSecret = process.env.IGDB_CLIENT_SECRET;
+  process.env.IGDB_CLIENT_ID = "environment-client";
+  process.env.IGDB_CLIENT_SECRET = "environment-secret";
+  return run().finally(() => {
+    if (previousClientId === undefined) delete process.env.IGDB_CLIENT_ID;
+    else process.env.IGDB_CLIENT_ID = previousClientId;
+    if (previousClientSecret === undefined) delete process.env.IGDB_CLIENT_SECRET;
+    else process.env.IGDB_CLIENT_SECRET = previousClientSecret;
+  });
+}
+
+function createIgdbFetch() {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "https://id.twitch.tv/oauth2/token") {
+      return new Response(
+        JSON.stringify({ access_token: "test-token", token_type: "bearer", expires_in: 3600 }),
+        { status: 200 },
+      );
+    }
+    if (url === "https://api.igdb.com/v4/games") {
+      return new Response(
+        JSON.stringify([
+          {
+            id: 3,
+            external_games: [{ category: 1, uid: "620" }],
+            genres: [{ name: "Puzzle" }],
+            keywords: [{ name: "Portal" }],
+            themes: [{ name: "Science fiction" }],
+            first_release_date: 1_300_000_000,
+          },
+        ]),
+        { status: 200 },
+      );
+    }
+    if (url === "https://api.igdb.com/v4/game_time_to_beats") {
+      return new Response(
+        JSON.stringify([{ game_id: 3, hastily: 5_400, normally: 7_200, completely: 9_000 }]),
+        { status: 200 },
+      );
+    }
+    throw new Error(`Unexpected request: ${url}; ${String(init?.method)}`);
+  });
+}
 
 describe("core services", () => {
   test("opens one shared database for all default repositories", async () => {
@@ -259,6 +306,114 @@ describe("core services", () => {
       rejectFirstFetch(new DOMException("Test cleanup.", "AbortError"));
       await firstFetch.catch(() => undefined);
       services.close();
+    }
+  });
+
+  test("explicitly disabled IGDB configuration beats valid environment credentials for metadata and duration", async () => {
+    await withIgdbEnvironment(async () => {
+      const fetch = vi.fn(async () => {
+        throw new Error("IGDB fetch must not run when explicitly disabled");
+      });
+      const database = openTrackerDatabase(":memory:");
+      const steamService = {
+        getGame: vi.fn(async (appId: number) => ({
+          appId,
+          name: "Portal 2",
+          playtimeMinutes: 0,
+        })),
+      } as unknown as SteamService;
+      const igdbConfig: IgdbConfig = { enabled: false };
+      const services = createCoreServices({
+        config: loadConfig({ STEAM_API_KEY: "test-key", STEAM_ID: "test-id" }),
+        database,
+        steamService,
+        fetch: fetch as unknown as typeof globalThis.fetch,
+        igdbConfig,
+      });
+
+      try {
+        await expect(services.metadataService.getOwnedGameMetadata(620)).resolves.toMatchObject({
+          isError: true,
+          error: { code: "METADATA_UNAVAILABLE" },
+        });
+        await expect(
+          services.gameDurationService.getEstimate({
+            appId: 620,
+            name: "Portal 2",
+            playtimeMinutes: 0,
+          }),
+        ).resolves.toMatchObject({
+          isError: true,
+          error: { code: "DURATION_UNAVAILABLE" },
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        services.close();
+        database.close();
+      }
+    });
+  });
+
+  test("uses enabled injected IGDB credentials for metadata and duration without environment credentials", async () => {
+    const previousClientId = process.env.IGDB_CLIENT_ID;
+    const previousClientSecret = process.env.IGDB_CLIENT_SECRET;
+    try {
+      delete process.env.IGDB_CLIENT_ID;
+      delete process.env.IGDB_CLIENT_SECRET;
+      const fetch = createIgdbFetch();
+      const database = openTrackerDatabase(":memory:");
+      const steamService = {
+        getGame: vi.fn(async (appId: number) => ({
+          appId,
+          name: "Portal 2",
+          playtimeMinutes: 0,
+        })),
+      } as unknown as SteamService;
+      const igdbConfig: IgdbConfig = {
+        enabled: true,
+        clientId: "injected-client",
+        clientSecret: "injected-secret",
+      };
+      const services = createCoreServices({
+        config: loadConfig({ STEAM_API_KEY: "test-key", STEAM_ID: "test-id" }),
+        database,
+        steamService,
+        fetch: fetch as unknown as typeof globalThis.fetch,
+        igdbConfig,
+      });
+
+      try {
+        const [metadata, duration] = await Promise.all([
+          services.metadataService.getOwnedGameMetadata(620),
+          services.gameDurationService.getEstimate({
+            appId: 620,
+            name: "Portal 2",
+            playtimeMinutes: 0,
+          }),
+        ]);
+        expect.soft(metadata).toMatchObject({ metadataStatus: "complete" });
+        expect.soft(duration).toMatchObject({ appId: 620, source: "igdb" });
+        const tokenRequest = fetch.mock.calls.find(
+          ([input]) => String(input) === "https://id.twitch.tv/oauth2/token",
+        );
+        expect.soft(String(tokenRequest?.[1]?.body)).toContain("client_id=injected-client");
+        expect.soft(String(tokenRequest?.[1]?.body)).toContain("client_secret=injected-secret");
+        const igdbRequests = fetch.mock.calls.filter(([input]) =>
+          String(input).startsWith("https://api.igdb.com/"),
+        );
+        expect.soft(igdbRequests.length).toBeGreaterThan(0);
+        for (const [, init] of igdbRequests) {
+          expect(new Headers(init?.headers).get("Client-ID")).toBe("injected-client");
+        }
+      } finally {
+        services.close();
+        database.close();
+      }
+    } finally {
+      if (previousClientId === undefined) delete process.env.IGDB_CLIENT_ID;
+      else process.env.IGDB_CLIENT_ID = previousClientId;
+      if (previousClientSecret === undefined) delete process.env.IGDB_CLIENT_SECRET;
+      else process.env.IGDB_CLIENT_SECRET = previousClientSecret;
     }
   });
 
