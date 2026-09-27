@@ -1,3 +1,4 @@
+import { throwIfAborted } from "./abort-options.js";
 import { TtlCache, type Cache, type Clock } from "./cache/ttl-cache.js";
 import {
   mapWithConcurrency,
@@ -235,31 +236,39 @@ function createDefaultTaskRunner(
       database,
       handlers: {
         async sync_library(_request, context) {
-          await steamService.refreshLibrary();
+          throwIfAborted({ signal: context.signal });
+          await steamService.refreshLibrary({ signal: context.signal });
+          throwIfAborted({ signal: context.signal });
           context.reportProgress(1, 1);
         },
         async enrich_durations(_request, context) {
-          const library = await steamService.getLibrary();
+          throwIfAborted({ signal: context.signal });
+          const library = await steamService.getLibrary({ signal: context.signal });
+          throwIfAborted({ signal: context.signal });
           context.reportProgress(0, library.games.length);
           let completed = 0;
           await mapWithConcurrency(library.games, MAX_DURATION_CONCURRENCY, async (game) => {
-            if (context.signal.aborted) {
-              throw new Error("Duration enrichment was cancelled.");
-            }
-            await gameDurationService.getEstimate(game);
+            throwIfAborted({ signal: context.signal });
+            await gameDurationService.getEstimate(game, { signal: context.signal });
+            throwIfAborted({ signal: context.signal });
             completed += 1;
             context.reportProgress(completed, library.games.length);
           });
         },
         async recalculate_plan(request, context) {
+          throwIfAborted({ signal: context.signal });
           const plan = backlogPlanService.get(request.planId);
           if (plan === undefined)
             throw new InputError("The requested backlog plan does not exist.");
-          await backlogPlanService.create({
-            cadence: plan.cadence,
-            availableMinutes: plan.availableMinutes,
-            targetGameCount: plan.targetGameCount,
-          });
+          await backlogPlanService.create(
+            {
+              cadence: plan.cadence,
+              availableMinutes: plan.availableMinutes,
+              targetGameCount: plan.targetGameCount,
+            },
+            { signal: context.signal },
+          );
+          throwIfAborted({ signal: context.signal });
           context.reportProgress(1, 1);
         },
       },

@@ -1,3 +1,5 @@
+import type { AbortOptions } from "../abort-options.js";
+import { throwIfAborted } from "../abort-options.js";
 import type { Clock } from "../cache/ttl-cache.js";
 import {
   normalizeIgdbDuration,
@@ -17,7 +19,10 @@ type GameDurationServiceDependencies = Readonly<{
 }>;
 
 export type GameDurationService = Readonly<{
-  getEstimate(game: SteamGame): Promise<GameDurationEstimate | DurationUnavailableEnvelope>;
+  getEstimate(
+    game: SteamGame,
+    options?: AbortOptions,
+  ): Promise<GameDurationEstimate | DurationUnavailableEnvelope>;
 }>;
 
 function unavailable(
@@ -47,11 +52,14 @@ export function createGameDurationService({
   return Object.freeze({
     async getEstimate(
       game: SteamGame,
+      options?: AbortOptions,
     ): Promise<GameDurationEstimate | DurationUnavailableEnvelope> {
+      throwIfAborted(options);
       const cached = repository.get(game.appId);
       if (isFreshEstimate(cached, clock.now())) {
         return cached;
       }
+      if (options?.signal !== undefined) return fetchAndStoreEstimate(game, options);
       const ongoing = inFlight.get(game.appId);
       if (ongoing !== undefined) {
         return ongoing;
@@ -68,8 +76,14 @@ export function createGameDurationService({
 
   async function fetchAndStoreEstimate(
     game: SteamGame,
+    options?: AbortOptions,
   ): Promise<GameDurationEstimate | DurationUnavailableEnvelope> {
-    const games = await igdbClient.findGamesForSteamApp(game.appId);
+    throwIfAborted(options);
+    const games = await igdbClient.findGamesForSteamApp(
+      game.appId,
+      ...(options === undefined ? [] : [options]),
+    );
+    throwIfAborted(options);
     if (isMetadataUnavailable(games)) {
       return repository.get(game.appId) ?? unavailable(games.error.retryable);
     }
@@ -79,7 +93,11 @@ export function createGameDurationService({
       return unavailable(false, "No duration estimate is available for this game.");
     }
 
-    const records = await igdbClient.findGameTimeToBeat(matchedGame.id);
+    const records = await igdbClient.findGameTimeToBeat(
+      matchedGame.id,
+      ...(options === undefined ? [] : [options]),
+    );
+    throwIfAborted(options);
     if (isMetadataUnavailable(records)) {
       return repository.get(game.appId) ?? unavailable(records.error.retryable);
     }
@@ -101,6 +119,7 @@ export function createGameDurationService({
       return unavailable(false, "No duration estimate is available for this game.");
     }
 
+    throwIfAborted(options);
     repository.save(estimate);
     return estimate;
   }
@@ -112,7 +131,9 @@ export function createUnavailableGameDurationService({
   return Object.freeze({
     async getEstimate(
       game: SteamGame,
+      options?: AbortOptions,
     ): Promise<GameDurationEstimate | DurationUnavailableEnvelope> {
+      throwIfAborted(options);
       return (
         repository.get(game.appId) ??
         unavailable(

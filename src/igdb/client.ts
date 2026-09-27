@@ -1,3 +1,5 @@
+import type { AbortOptions } from "../abort-options.js";
+import { throwIfAborted } from "../abort-options.js";
 import type { IgdbCredentials } from "../config.js";
 import { createMetadataUnavailableEnvelope, type MetadataUnavailableEnvelope } from "../errors.js";
 import {
@@ -26,13 +28,17 @@ type IgdbClientDependencies = Readonly<{
 }>;
 
 export type IgdbGamesClient = Readonly<{
-  findGamesForSteamApp(appId: number): Promise<readonly IgdbGame[] | MetadataUnavailableEnvelope>;
+  findGamesForSteamApp(
+    appId: number,
+    options?: AbortOptions,
+  ): Promise<readonly IgdbGame[] | MetadataUnavailableEnvelope>;
 }>;
 
 export type IgdbClient = IgdbGamesClient &
   Readonly<{
     findGameTimeToBeat(
       gameId: number,
+      options?: AbortOptions,
     ): Promise<readonly IgdbGameTimeToBeat[] | MetadataUnavailableEnvelope>;
   }>;
 
@@ -58,12 +64,29 @@ async function fetchWithTimeout(
   fetchLike: FetchLike,
   input: string,
   init: Omit<RequestInit, "signal">,
+  options?: AbortOptions,
 ): Promise<Response> {
+  throwIfAborted(options);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const requestSignal =
+    options?.signal === undefined
+      ? controller.signal
+      : AbortSignal.any([options.signal, controller.signal]);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
 
   try {
-    return await fetchLike(input, { ...init, redirect: "error", signal: controller.signal });
+    const response = await fetchLike(input, { ...init, redirect: "error", signal: requestSignal });
+    throwIfAborted(options);
+    if (timedOut) throw new Error("IGDB request timed out.");
+    return response;
+  } catch (error) {
+    if (options?.signal?.aborted) throw options.signal.reason ?? error;
+    if (timedOut) throw new Error("IGDB request timed out.", { cause: error });
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -78,21 +101,31 @@ export function createIgdbClient({
   return Object.freeze({
     async findGamesForSteamApp(
       appId: number,
+      options?: AbortOptions,
     ): Promise<readonly IgdbGame[] | MetadataUnavailableEnvelope> {
       try {
-        const accessToken = await tokenProvider.getAccessToken();
+        throwIfAborted(options);
+        const accessToken = await tokenProvider.getAccessToken(options);
+        throwIfAborted(options);
         for (let attempt = 0; attempt < 2; attempt += 1) {
-          const response = await fetchWithTimeout(fetchLike, IGDB_GAMES_URL, {
-            method: "POST",
-            headers: {
-              "Client-ID": credentials.clientId,
-              Authorization: `Bearer ${accessToken}`,
+          const response = await fetchWithTimeout(
+            fetchLike,
+            IGDB_GAMES_URL,
+            {
+              method: "POST",
+              headers: {
+                "Client-ID": credentials.clientId,
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: `fields ${IGDB_GAME_FIELDS}; where external_games.uid = "${appId}";`,
             },
-            body: `fields ${IGDB_GAME_FIELDS}; where external_games.uid = "${appId}";`,
-          });
+            options,
+          );
 
           if (response.status === 429 && attempt === 0) {
+            throwIfAborted(options);
             await sleep(retryDelay(response));
+            throwIfAborted(options);
             continue;
           }
           if (!response.ok) {
@@ -103,6 +136,7 @@ export function createIgdbClient({
         }
         return unavailable();
       } catch (cause) {
+        if (options?.signal?.aborted) throw options.signal.reason ?? cause;
         if (isMetadataUnavailable(cause)) {
           return cause;
         }
@@ -111,21 +145,31 @@ export function createIgdbClient({
     },
     async findGameTimeToBeat(
       gameId: number,
+      options?: AbortOptions,
     ): Promise<readonly IgdbGameTimeToBeat[] | MetadataUnavailableEnvelope> {
       try {
-        const accessToken = await tokenProvider.getAccessToken();
+        throwIfAborted(options);
+        const accessToken = await tokenProvider.getAccessToken(options);
+        throwIfAborted(options);
         for (let attempt = 0; attempt < 2; attempt += 1) {
-          const response = await fetchWithTimeout(fetchLike, IGDB_GAME_TIME_TO_BEATS_URL, {
-            method: "POST",
-            headers: {
-              "Client-ID": credentials.clientId,
-              Authorization: `Bearer ${accessToken}`,
+          const response = await fetchWithTimeout(
+            fetchLike,
+            IGDB_GAME_TIME_TO_BEATS_URL,
+            {
+              method: "POST",
+              headers: {
+                "Client-ID": credentials.clientId,
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: `fields game_id,hastily,normally,completely; where game_id = ${gameId};`,
             },
-            body: `fields game_id,hastily,normally,completely; where game_id = ${gameId};`,
-          });
+            options,
+          );
 
           if (response.status === 429 && attempt === 0) {
+            throwIfAborted(options);
             await sleep(retryDelay(response));
+            throwIfAborted(options);
             continue;
           }
           if (!response.ok) {
@@ -136,6 +180,7 @@ export function createIgdbClient({
         }
         return unavailable();
       } catch (cause) {
+        if (options?.signal?.aborted) throw options.signal.reason ?? cause;
         if (isMetadataUnavailable(cause)) {
           return cause;
         }

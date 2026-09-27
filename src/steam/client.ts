@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { AbortOptions } from "../abort-options.js";
+import { forwardAbortSignal, throwIfAborted } from "../abort-options.js";
 import type { AppConfig } from "../config.js";
 import {
   AppError,
@@ -21,7 +23,7 @@ import {
 export type FetchLike = typeof fetch;
 
 export interface SteamApiClient {
-  getOwnedGames(steamId: string): Promise<SteamOwnedGamesResponse>;
+  getOwnedGames(steamId: string, options?: AbortOptions): Promise<SteamOwnedGamesResponse>;
   getRecentGames(steamId: string, count?: number): Promise<SteamRecentGamesResponse>;
   getPlayerAchievements(steamId: string, appId: number): Promise<SteamPlayerAchievementsResponse>;
   getAchievementSchema(appId: number): Promise<SteamGameSchemaResponse>;
@@ -39,13 +41,14 @@ export function createSteamApiClient({
   fetch: fetchLike = globalThis.fetch,
 }: SteamApiClientDependencies): SteamApiClient {
   return {
-    getOwnedGames: (steamId) =>
+    getOwnedGames: (steamId, options) =>
       requestSteam(
         fetchLike,
         config,
         "/IPlayerService/GetOwnedGames/v0001/",
         { steamid: steamId, include_appinfo: "true", include_played_free_games: "true" },
         ownedGamesResponseSchema,
+        options,
       ),
     getRecentGames: (steamId, count) =>
       requestSteam(
@@ -80,15 +83,24 @@ async function requestSteam<T>(
   path: string,
   query: Readonly<Record<string, string>>,
   schema: z.ZodType<T>,
+  options?: AbortOptions,
 ): Promise<T> {
+  throwIfAborted(options);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const removeAbortListener = forwardAbortSignal(options?.signal, controller);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.requestTimeoutMs);
 
   try {
     const response = await fetchLike(createSteamUrl(path, config.steamApiKey, query), {
       redirect: "error",
       signal: controller.signal,
     });
+    throwIfAborted(options);
+    if (timedOut) throw new SteamTimeoutError();
 
     if (!response.ok) {
       throw new SteamUnavailableError();
@@ -96,21 +108,27 @@ async function requestSteam<T>(
 
     const body = await parseJson(response);
     const parsed = schema.safeParse(body);
+    throwIfAborted(options);
+    if (timedOut) throw new SteamTimeoutError();
     if (!parsed.success) {
       throw new SteamResponseError(parsed.error);
     }
 
     return parsed.data;
   } catch (error) {
+    if (options?.signal?.aborted) {
+      throw options.signal.reason ?? error;
+    }
     if (error instanceof AppError) {
       throw error;
     }
-    if (controller.signal.aborted) {
+    if (timedOut) {
       throw new SteamTimeoutError(error);
     }
     throw new SteamUnavailableError(error);
   } finally {
     clearTimeout(timeout);
+    removeAbortListener();
   }
 }
 

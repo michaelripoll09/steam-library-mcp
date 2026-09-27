@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createBacklogSelectionService } from "../../src/backlog/backlog-selection-service.js";
 import type { GameDurationEstimate } from "../../src/domain/game-duration.js";
@@ -78,6 +78,17 @@ function createService(games: readonly GameInput[]) {
       },
     },
   });
+}
+
+function deferred<T>(): Readonly<{
+  promise: Promise<T>;
+  resolve(value: T | PromiseLike<T>): void;
+}> {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function toSteamGame(game: GameInput): SteamGame {
@@ -260,6 +271,58 @@ describe("BacklogSelectionService", () => {
 
     expect(reversedAppIds).toEqual([2, 3, 1]);
     expect(inOrderAppIds).toEqual([2, 3, 1]);
+  });
+
+  it("forwards cancellation to duration lookups and stops at an awaited boundary", async () => {
+    const controller = new AbortController();
+    const lookupStarted = deferred<void>();
+    let releaseLookup!: (value: GameDurationEstimate) => void;
+    const lookupResult = new Promise<GameDurationEstimate>((resolve) => {
+      releaseLookup = resolve;
+    });
+    const getEstimate = vi.fn(
+      (game: SteamGame, options?: { signal?: AbortSignal }): Promise<GameDurationEstimate> => {
+        expect(game.appId).toBe(1);
+        expect(options?.signal).toBe(controller.signal);
+        lookupStarted.resolve();
+        return lookupResult;
+      },
+    );
+    const service = createBacklogSelectionService({
+      library: {
+        getLibrary: async () => ({
+          steamId: "test-steam-id",
+          games: [toSteamGame({ appId: 1 })],
+          fetchedAt: "2026-09-04T00:00:00.000Z",
+        }),
+      },
+      trackerRepository: { list: () => [] },
+      preferenceRepository: { get: () => undefined },
+      gameDurationService: { getEstimate },
+    });
+    const selection = service.select(
+      { availableMinutes: 30, targetGameCount: 1 },
+      { signal: controller.signal },
+    );
+    await lookupStarted.promise;
+    controller.abort();
+    releaseLookup({
+      appId: 1,
+      igdbGameId: 1,
+      source: "igdb",
+      refreshedAt: "2026-09-04T00:00:00.000Z",
+      normally: { minutes: 30, hours: 0.5 },
+    });
+
+    const [selectionResult] = await Promise.allSettled([selection]);
+
+    expect.soft(selectionResult).toMatchObject({
+      status: "rejected",
+      reason: { name: "AbortError" },
+    });
+    expect.soft(getEstimate).toHaveBeenCalledWith(toSteamGame({ appId: 1 }), {
+      signal: controller.signal,
+    });
   });
 
   it("rejects budgets beyond the supported backlog limits", async () => {

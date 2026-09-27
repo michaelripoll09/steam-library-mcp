@@ -1,3 +1,5 @@
+import type { AbortOptions } from "../abort-options.js";
+import { throwIfAborted } from "../abort-options.js";
 import type { GameDurationService } from "../durations/game-duration-service.js";
 import type { GameDurationEstimate } from "../domain/game-duration.js";
 import {
@@ -54,11 +56,11 @@ type BacklogSelectionDependencies = Readonly<{
 }>;
 
 interface SteamLibraryLookup {
-  getLibrary(): Promise<SteamLibrary>;
+  getLibrary(options?: AbortOptions): Promise<SteamLibrary>;
 }
 
 export type BacklogSelectionService = Readonly<{
-  select(request: unknown): Promise<BacklogSelectionResult>;
+  select(request: unknown, options?: AbortOptions): Promise<BacklogSelectionResult>;
 }>;
 
 type ExclusionReason = BacklogSelectionResult["exclusions"][number]["reason"];
@@ -87,13 +89,15 @@ export function createBacklogSelectionService({
   gameDurationService,
 }: BacklogSelectionDependencies): BacklogSelectionService {
   return Object.freeze({
-    async select(request: unknown): Promise<BacklogSelectionResult> {
+    async select(request: unknown, options?: AbortOptions): Promise<BacklogSelectionResult> {
+      throwIfAborted(options);
       assertRequest(request);
 
       const [steamLibrary, trackerEntries] = await Promise.all([
-        library.getLibrary(),
+        library.getLibrary(options),
         Promise.resolve(trackerRepository.list()),
       ]);
+      throwIfAborted(options);
       const statusesByAppId = new Map(trackerEntries.map((entry) => [entry.appId, entry.status]));
       const exclusionCounts = new Map<ExclusionReason, number>();
       const eligible = steamLibrary.games.flatMap((game) => {
@@ -114,9 +118,10 @@ export function createBacklogSelectionService({
         eligible,
         MAX_DURATION_CONCURRENCY,
         async (candidate): Promise<Candidate | undefined> => {
-          const durationEstimateMinutes = getNormallyMinutes(
-            await gameDurationService.getEstimate(candidate.game),
-          );
+          throwIfAborted(options);
+          const estimate = await gameDurationService.getEstimate(candidate.game, options);
+          throwIfAborted(options);
+          const durationEstimateMinutes = getNormallyMinutes(estimate);
           if (durationEstimateMinutes === undefined) {
             incrementExclusion(exclusionCounts, "duration_unknown");
             return undefined;
@@ -133,6 +138,7 @@ export function createBacklogSelectionService({
           };
         },
       );
+      throwIfAborted(options);
 
       let remainingBudget = request.availableMinutes;
       const selections: BacklogSelection[] = [];
@@ -146,6 +152,7 @@ export function createBacklogSelectionService({
         remainingBudget -= candidate.estimatedRemainingMinutes;
       }
 
+      throwIfAborted(options);
       return Object.freeze({
         selections: Object.freeze(selections),
         allocatedMinutes: request.availableMinutes - remainingBudget,

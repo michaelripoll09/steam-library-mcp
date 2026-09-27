@@ -215,6 +215,36 @@ describe("SteamService", () => {
     expect(steamClient.getOwnedGames).toHaveBeenCalledTimes(2);
   });
 
+  test("does not cache a library result returned after caller cancellation", async () => {
+    let releaseGames!: (value: { response: { games: [] } }) => void;
+    const pendingGames = new Promise<{ response: { games: [] } }>((resolve) => {
+      releaseGames = resolve;
+    });
+    const getOwnedGames = vi.fn(() => pendingGames);
+    const steamClient = createClient({ getOwnedGames });
+    const service = createSteamService({
+      config,
+      steamClient,
+      cache: new TtlCache(),
+      clock: { now: () => 0 },
+    });
+    const controller = new AbortController();
+    const refresh = service.refreshLibrary({ signal: controller.signal });
+    await Promise.resolve();
+    controller.abort();
+    releaseGames({ response: { games: [] } });
+
+    const [refreshResult] = await Promise.allSettled([refresh]);
+
+    expect.soft(refreshResult).toMatchObject({
+      status: "rejected",
+      reason: { name: "AbortError" },
+    });
+    expect.soft(getOwnedGames).toHaveBeenCalledWith(config.steamId, { signal: controller.signal });
+    await service.getLibrary();
+    expect.soft(getOwnedGames).toHaveBeenCalledTimes(2);
+  });
+
   test("does not cache a failed library refresh", async () => {
     const getOwnedGames = vi
       .fn<SteamApiClient["getOwnedGames"]>()
