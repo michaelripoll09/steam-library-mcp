@@ -116,11 +116,11 @@ async function requestSteam<T>(
 
     return parsed.data;
   } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
     if (options?.signal?.aborted) {
       throw options.signal.reason ?? error;
+    }
+    if (error instanceof AppError) {
+      throw error;
     }
     if (timedOut) {
       throw new SteamTimeoutError(error);

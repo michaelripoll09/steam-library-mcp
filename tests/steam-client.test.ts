@@ -59,6 +59,55 @@ describe("Steam API client", () => {
     vi.useRealTimers();
   });
 
+  test("preserves caller abort when response JSON is still pending", async () => {
+    const controller = new AbortController();
+    const abortReason = new DOMException("caller aborted request", "AbortError");
+    let requestSignal: AbortSignal | undefined;
+    let resolveJsonStarted!: () => void;
+    const jsonStarted = new Promise<void>((resolve) => {
+      resolveJsonStarted = resolve;
+    });
+    const fetchLike = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      const response = new Response(null, { status: 200 });
+      vi.spyOn(response, "json").mockImplementation(
+        () =>
+          new Promise<unknown>((_resolve, reject) => {
+            requestSignal?.addEventListener("abort", () => reject(requestSignal?.reason), {
+              once: true,
+            });
+            resolveJsonStarted();
+          }),
+      );
+      return Promise.resolve(response);
+    });
+    const client = createSteamApiClient({ config, fetch: fetchLike as typeof fetch });
+    const request = client.getOwnedGames(config.steamId, { signal: controller.signal });
+
+    await jsonStarted;
+    controller.abort(abortReason);
+
+    const [result] = await Promise.allSettled([request]);
+
+    expect(result.status).toBe("rejected");
+    const rejection = result.status === "rejected" ? result.reason : undefined;
+    const rejectionName =
+      rejection !== undefined && typeof rejection === "object" && "name" in rejection
+        ? String(rejection.name)
+        : undefined;
+    const rejectionCode =
+      rejection !== undefined && typeof rejection === "object" && "code" in rejection
+        ? String(rejection.code)
+        : undefined;
+    const isCallerAbortReason = rejection === abortReason;
+
+    expect(rejectionName).toBe("AbortError");
+    expect(rejectionName).not.toBe("SteamResponseError");
+    expect(rejectionCode).not.toBe("STEAM_RESPONSE_INVALID");
+    expect(isCallerAbortReason).toBe(true);
+    expect(requestSignal?.reason === abortReason).toBe(true);
+  });
+
   test("propagates caller abort without classifying it as the internal timeout", async () => {
     const controller = new AbortController();
     let rejectFetch!: (error: unknown) => void;
